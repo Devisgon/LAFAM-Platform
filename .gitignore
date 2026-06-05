@@ -55,3 +55,6 @@ supabase/.temp/
 Thumbs.db
 *.pem
 .sentryclirc
+
+# misc
+PLAN.md
