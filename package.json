@@ -1,0 +1,41 @@
+{
+  "name": "lafam-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LAFAM single-tenant admin dashboard and backend platform monorepo.",
+  "packageManager": "pnpm@10.19.0",
+  "engines": {
+    "node": ">=20.9.0",
+    "pnpm": ">=10.19.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "swagger:validate": "turbo run swagger:validate",
+    "check": "turbo run lint typecheck swagger:validate test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "security:audit": "pnpm audit --audit-level high",
+    "security:audit:prod": "pnpm audit --prod --audit-level high",
+    "supabase:version": "npx supabase@latest --version",
+    "supabase:login": "npx supabase@latest login",
+    "supabase:status": "npx supabase@latest status",
+    "supabase:start": "npx supabase@latest start",
+    "supabase:stop": "npx supabase@latest stop",
+    "supabase:db:pull": "npx supabase@latest db pull --linked",
+    "supabase:migration:list": "npx supabase@latest migration list",
+    "prepare": "husky"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "prettier": "^3.8.3",
+    "turbo": "^2.9.16"
+  }
+}
