@@ -1,0 +1,8 @@
+current_branch=$(git symbolic-ref --short HEAD)
+
+if [ "$current_branch" = "main" ]; then
+  echo "Direct push to main is blocked. Push to dev or a feature branch."
+  exit 1
+fi
+
+pnpm check
