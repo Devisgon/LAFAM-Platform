@@ -3,8 +3,13 @@ openapi: 3.0.3
 info:
   title: LAFAM API
   version: 0.1.0
-  description: LAFAM backend API contract for the single-tenant Pilates and ladies salon booking platform.
+  description:
+    'LAFAM backend API contract for the single-tenant Pilates and ladies salon booking platform.
+    This API is currently in early development and is subject to change. It provides endpoints for core API identity and health-check functionality, as well as foundational services like database connectivity checks. Future iterations will expand this contract to include booking management, user profiles, and more.
 
+    **OpenAPI JSON:** [openapi.json](/api/openapi.json)
+
+    '
 servers:
   - url: http://localhost:4000/api
     description: Local development API server
