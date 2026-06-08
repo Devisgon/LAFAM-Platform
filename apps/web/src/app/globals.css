@@ -1,26 +1,230 @@
 @import "tailwindcss";
 
 :root {
+  /* --- App / Base Light Mode --- */
   --background: #ffffff;
-  --foreground: #171717;
+  --background-primary: #f8fafc;           /* Light gray page wrapper */
+  --background-secondary: #f1f5f9;         /* Accent section gray */
+
+  /* Pilates Theme Default (Purple Side) */
+  --primary: #7c3aed;                      /* Primary Purple Accent */
+  --secondary: #64748b;                    /* Slate secondary */
+
+  --button-primary: #7c3aed;               /* Main action purple */
+  --button-secondary: #f5f3ff;             /* Soft purple light bg */
+
+  --card-background-primary: #ffffff;
+  --card-background-secondary: #f8fafc;
+
+  --text-primary: #0f172a;                 /* Deep slate primary text */
+  --text-secondary: #64748b;
+
+  --error: #ef4444;                        /* Cancelled red */
+  --warning: #f59e0b;                      /* Pending yellow */
+  --success: #10b981;                      /* Confirmed green */
+
+  --foreground: #0f172a;
+}
+
+/* --- Web Portal Dark Themes (Dashboard / Salon / Pilates Modes) --- */
+.dark {
+  /* Dashboard Admin / Sidebar Mode Colors */
+  --background: #0b1329;                   /* Deep Navy/Black Sidebar Base */
+  --background-primary: #111c44;           /* Dark inner component surfaces */
+  --background-secondary: #1d283c;         /* Selected dark states */
+
+  /* Salon Active Palette Override (Pink Side) */
+  --primary: #f43f5e;                      /* Branding Pink */
+  --secondary: #94a3b8;
+
+  --button-primary: #f43f5e;               /* Salon call-to-actions */
+  --button-secondary: #fff1f2;             /* Soft pink highlight */
+
+  --card-background-primary: #111c44;
+  --card-background-secondary: #16224f;
+
+  --text-primary: #f8fafc;                 /* Bright typography contrast */
+  --text-secondary: #94a3b8;
+
+  --error: #f43f5e;                        /* Pink/Red balance alert */
+  --warning: #f59e0b;
+  --success: #10b981;
+
+  --foreground: #f8fafc;
 }
 
 @theme inline {
+  /* Core Variable System Mapped Directly to Tailwind v4 Engine */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-background-primary: var(--background-primary);
+  --color-background-secondary: var(--background-secondary);
+
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-button-primary: var(--button-primary);
+  --color-button-secondary: var(--button-secondary);
+
+  --color-card-bg-primary: var(--card-background-primary);
+  --color-card-bg-secondary: var(--card-background-secondary);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+
+  --color-error: var(--error);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+.calendar-card .fc {
+  --fc-border-color: color-mix(in srgb, var(--text-secondary) 15%, transparent);
+  --fc-button-bg-color: var(--primary);
+  --fc-button-border-color: var(--primary);
+  --fc-button-hover-bg-color: var(--primary);
+  --fc-button-hover-border-color: var(--primary);
+  --fc-button-active-bg-color: var(--primary);
+  --fc-button-active-border-color: var(--primary);
+  --fc-event-border-color: transparent;
+  --fc-list-event-hover-bg-color: var(--card-background-secondary);
+  --fc-neutral-bg-color: color-mix(in srgb, var(--background-secondary) 70%, transparent);
+  --fc-non-business-color: color-mix(in srgb, var(--background-secondary) 42%, transparent);
+  --fc-now-indicator-color: var(--error);
+  --fc-page-bg-color: var(--card-background-primary);
+  --fc-today-bg-color: color-mix(in srgb, var(--primary) 8%, transparent);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  min-width: 720px;
+}
+
+.calendar-card > div {
+  overflow-x: auto;
+}
+
+.calendar-card .fc .fc-toolbar {
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.calendar-card .fc .fc-button {
+  border-radius: 0.6rem;
+  box-shadow: none;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.5rem 0.75rem;
+  text-transform: capitalize;
+}
+
+.calendar-card .fc .fc-button:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+.calendar-card .fc .fc-button-group {
+  gap: 0.2rem;
+}
+
+.calendar-card .fc .fc-button-group > .fc-button {
+  border-radius: 0.6rem;
+}
+
+.calendar-card .fc .fc-toolbar-title {
+  color: var(--text-primary);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.calendar-card .fc .fc-col-header-cell-cushion,
+.calendar-card .fc .fc-daygrid-day-number,
+.calendar-card .fc .fc-timegrid-axis-cushion,
+.calendar-card .fc .fc-timegrid-slot-label-cushion {
+  color: var(--text-secondary);
+}
+
+.calendar-card .fc .fc-col-header-cell {
+  background: var(--card-background-secondary);
+  border-bottom: 0;
+  padding: 0.55rem 0;
+}
+
+.calendar-card .fc .fc-col-header-cell-cushion {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.calendar-card .fc .fc-timegrid-slot {
+  height: 2.6rem;
+}
+
+.calendar-card .fc .fc-timegrid-slot-label-cushion {
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.calendar-card .fc .fc-timegrid-col.fc-day-today {
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+
+.calendar-card .fc .fc-timegrid-now-indicator-line {
+  border-width: 1.5px;
+}
+
+.calendar-card .fc .fc-timegrid-now-indicator-arrow {
+  border-width: 5px 0 5px 6px;
+}
+
+.calendar-card .fc .fc-event {
+  border: 0;
+  border-left: 3px solid color-mix(in srgb, #ffffff 60%, transparent);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 12px rgb(15 23 42 / 12%);
+  cursor: pointer;
+  padding: 0.2rem 0.3rem;
+  transition: filter 150ms ease, transform 150ms ease;
+}
+
+.calendar-card .fc .fc-event:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.calendar-card .fc .fc-event-time {
+  font-size: 0.62rem;
+  font-weight: 700;
+  opacity: 0.82;
+}
+
+.calendar-card .fc .fc-event-title {
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.calendar-card .fc .fc-scrollgrid {
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+@media (max-width: 720px) {
+  .calendar-card .fc .fc-toolbar {
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .calendar-card .fc .fc-toolbar,
+  .calendar-card .fc .fc-toolbar-chunk {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
 }
