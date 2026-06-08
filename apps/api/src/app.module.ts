@@ -6,7 +6,8 @@
  * - Acts as the top-level composition root for the backend.
  * - Wires global infrastructure modules.
  * - Registers global API throttling.
- * - Provides the place where approved feature modules will be attached.
+ * - Registers approved platform modules.
+ * - Provides the place where future approved feature modules will be attached.
  *
  * Important:
  * - This module must stay lightweight.
@@ -22,6 +23,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { LoggingModule } from './common/logging/logging.module';
 import { DatabaseModule } from './database/database.module';
+import { CoreModule } from './modules/core/core.module';
 
 const DEFAULT_THROTTLE_TTL_MS = 60_000;
 const DEFAULT_THROTTLE_LIMIT = 120;
@@ -36,6 +38,7 @@ const DEFAULT_THROTTLE_LIMIT = 120;
     ]),
     LoggingModule,
     DatabaseModule,
+    CoreModule,
   ],
   providers: [
     {

@@ -3,21 +3,28 @@
  * LAFAM API bootstrap entrypoint.
  *
  * Role:
+ * - Loads local environment variables before application modules are imported.
  * - Creates the NestJS application instance.
  * - Applies the shared HTTP app baseline.
  * - Loads Swagger/OpenAPI from docs/swagger.yaml.
  * - Serves Swagger UI and OpenAPI JSON.
+ * - Redirects / to /api.
+ * - Redirects /docs and /docs/ to the prefixed Swagger route.
  * - Starts the HTTP server.
  *
  * Important:
+ * - dotenv/config must stay as the first runtime import.
  * - HTTP concerns belong in apply-http-app-baseline.ts.
  * - Config values come from the approved common config layer.
  * - Swagger contract source remains docs/swagger.yaml.
  * - This file must stay thin.
  */
 
+import 'dotenv/config';
+
 import { existsSync, readFileSync } from 'node:fs';
 
+import type { NextFunction, Request, Response } from 'express';
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, type OpenAPIObject } from '@nestjs/swagger';
 import YAML from 'yaml';
@@ -77,6 +84,28 @@ function joinRouteSegments(...segments: readonly string[]): string {
     .join('/');
 }
 
+function createAbsoluteRoute(routePath: string): string {
+  const normalizedRoutePath = routePath.trim().replace(/^\/+|\/+$/g, '');
+
+  return normalizedRoutePath.length > 0 ? `/${normalizedRoutePath}` : '/';
+}
+
+function applyRootRedirect(
+  app: { use: (...args: unknown[]) => void },
+  targetPath: string,
+): void {
+  app.use((request: Request, response: Response, next: NextFunction) => {
+    const requestPath = request.originalUrl || request.url;
+
+    if (request.method === 'GET' && requestPath === '/') {
+      response.redirect(302, targetPath);
+      return;
+    }
+
+    next();
+  });
+}
+
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
@@ -100,11 +129,22 @@ async function bootstrap(): Promise<void> {
     currentDocsConfig.openApiJsonPath,
   );
 
+  const absoluteSwaggerRoutePath = createAbsoluteRoute(swaggerRoutePath);
+  const absoluteOpenApiJsonRoutePath =
+    createAbsoluteRoute(openApiJsonRoutePath);
+  const absoluteApiRootPath = createAbsoluteRoute(currentApiConfig.prefix);
+
+  applyRootRedirect(app, absoluteApiRootPath);
+
+  app.use(['/docs', '/docs/'], (_request: Request, response: Response) => {
+    response.redirect(302, absoluteSwaggerRoutePath);
+  });
+
   SwaggerModule.setup(swaggerRoutePath, app, swaggerDocument, {
     ui: true,
     raw: ['json'],
-    jsonDocumentUrl: openApiJsonRoutePath,
-    swaggerUrl: `/${openApiJsonRoutePath}`,
+    jsonDocumentUrl: absoluteOpenApiJsonRoutePath,
+    swaggerUrl: absoluteOpenApiJsonRoutePath,
     swaggerOptions: {
       persistAuthorization: true,
     },
@@ -119,6 +159,8 @@ async function bootstrap(): Promise<void> {
       host: currentApiConfig.host,
       port: currentApiConfig.port,
       apiPrefix: currentApiConfig.prefix,
+      rootRedirectFrom: '/',
+      rootRedirectTo: absoluteApiRootPath,
     },
   });
 
@@ -127,6 +169,8 @@ async function bootstrap(): Promise<void> {
     metadata: {
       swaggerUrl: currentDocsConfig.swaggerUrl,
       openApiJsonUrl: currentDocsConfig.openApiJsonUrl,
+      redirectFrom: '/docs',
+      redirectTo: absoluteSwaggerRoutePath,
     },
   });
 }
