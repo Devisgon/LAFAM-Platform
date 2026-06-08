@@ -1,17 +1,357 @@
 openapi: 3.0.3
+
 info:
   title: LAFAM API
   version: 0.1.0
-  description: LAFAM Admin Dashboard API contract.
+  description:
+    'LAFAM backend API contract for the single-tenant Pilates and ladies salon booking platform.
+    This API is currently in early development and is subject to change. It provides endpoints for core API identity and health-check functionality, as well as foundational services like database connectivity checks. Future iterations will expand this contract to include booking management, user profiles, and more.
+
+    **OpenAPI JSON:** [openapi.json](/api/openapi.json)
+
+    '
 servers:
-  - url: http://localhost:4000
-    description: Local development server
+  - url: http://localhost:4000/api
+    description: Local development API server
+
+tags:
+  - name: Core
+    description: API identity and health-check endpoints
+
 paths:
-  /health:
+  /:
     get:
-      summary: Health check
+      summary: API identity
+      description: Returns basic LAFAM API identity and runtime information.
+      operationId: getApiIdentity
       tags:
         - Core
       responses:
-        "200":
-          description: API is running
+        '200':
+          description: LAFAM API identity returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiIdentitySuccessResponse'
+              example:
+                status: 200
+                message: LAFAM API is running
+                data:
+                  service_name: lafam-api
+                  service_status: ok
+                  environment: development
+                  api_prefix: api
+                  base_url: http://localhost:4000/api
+                  uptime_seconds: 42
+                timestamp_ms: 1780918065292
+
+  /health:
+    get:
+      summary: Process health check
+      description: Returns process-level health information for the running API instance.
+      operationId: getProcessHealth
+      tags:
+        - Core
+      responses:
+        '200':
+          description: API process health returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessHealthSuccessResponse'
+              example:
+                status: 200
+                message: Health check successful
+                data:
+                  service_name: lafam-api
+                  service_status: ok
+                  environment: development
+                  uptime_seconds: 42
+                  memory:
+                    rss_bytes: 86507520
+                    heap_total_bytes: 35651584
+                    heap_used_bytes: 24329016
+                    external_bytes: 2413816
+                    array_buffers_bytes: 532815
+                timestamp_ms: 1780918065292
+
+  /health/foundation:
+    get:
+      summary: Foundation health check
+      description: Returns API foundation health, including Supabase/database connectivity status.
+      operationId: getFoundationHealth
+      tags:
+        - Core
+      responses:
+        '200':
+          description: API foundation health returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FoundationHealthSuccessResponse'
+              examples:
+                healthy:
+                  summary: Healthy foundation
+                  value:
+                    status: 200
+                    message: Foundation health check successful
+                    data:
+                      service_name: lafam-api
+                      service_status: ok
+                      environment: development
+                      uptime_seconds: 42
+                      api:
+                        service_status: ok
+                        base_url: http://localhost:4000/api
+                        prefix: api
+                      database:
+                        service_status: ok
+                        provider: supabase
+                        project_url: https://example.supabase.co
+                        project_ref: example
+                        latency_ms: 123
+                        checked_at: '2026-06-08T11:12:47.974Z'
+                    timestamp_ms: 1780918065292
+                degraded:
+                  summary: Degraded foundation
+                  value:
+                    status: 200
+                    message: Foundation health check successful
+                    data:
+                      service_name: lafam-api
+                      service_status: degraded
+                      environment: development
+                      uptime_seconds: 42
+                      api:
+                        service_status: ok
+                        base_url: http://localhost:4000/api
+                        prefix: api
+                      database:
+                        service_status: unavailable
+                        provider: supabase
+                        project_url: https://example.supabase.co
+                        project_ref: example
+                        latency_ms: 2500
+                        checked_at: '2026-06-08T11:12:47.974Z'
+                        error:
+                          code: DATABASE_HEALTH_CHECK_FAILED
+                          message: Supabase health check failed.
+                    timestamp_ms: 1780918065292
+
+components:
+  schemas:
+    ApiSuccessBase:
+      type: object
+      required:
+        - status
+        - message
+        - data
+        - timestamp_ms
+      properties:
+        status:
+          type: integer
+          example: 200
+        message:
+          type: string
+          example: Health check successful
+        timestamp_ms:
+          type: integer
+          format: int64
+          example: 1780918065292
+
+    CoreHealthStatus:
+      type: string
+      enum:
+        - ok
+        - degraded
+        - unavailable
+
+    ApiIdentityData:
+      type: object
+      required:
+        - service_name
+        - service_status
+        - environment
+        - api_prefix
+        - base_url
+        - uptime_seconds
+      properties:
+        service_name:
+          type: string
+          enum:
+            - lafam-api
+        service_status:
+          $ref: '#/components/schemas/CoreHealthStatus'
+        environment:
+          type: string
+          example: development
+        api_prefix:
+          type: string
+          example: api
+        base_url:
+          type: string
+          example: http://localhost:4000/api
+        uptime_seconds:
+          type: integer
+          example: 42
+
+    ProcessHealthData:
+      type: object
+      required:
+        - service_name
+        - service_status
+        - environment
+        - uptime_seconds
+        - memory
+      properties:
+        service_name:
+          type: string
+          enum:
+            - lafam-api
+        service_status:
+          $ref: '#/components/schemas/CoreHealthStatus'
+        environment:
+          type: string
+          example: development
+        uptime_seconds:
+          type: integer
+          example: 42
+        memory:
+          $ref: '#/components/schemas/ProcessMemory'
+
+    ProcessMemory:
+      type: object
+      required:
+        - rss_bytes
+        - heap_total_bytes
+        - heap_used_bytes
+        - external_bytes
+        - array_buffers_bytes
+      properties:
+        rss_bytes:
+          type: integer
+          example: 86507520
+        heap_total_bytes:
+          type: integer
+          example: 35651584
+        heap_used_bytes:
+          type: integer
+          example: 24329016
+        external_bytes:
+          type: integer
+          example: 2413816
+        array_buffers_bytes:
+          type: integer
+          example: 532815
+
+    FoundationHealthData:
+      type: object
+      required:
+        - service_name
+        - service_status
+        - environment
+        - uptime_seconds
+        - api
+        - database
+      properties:
+        service_name:
+          type: string
+          enum:
+            - lafam-api
+        service_status:
+          $ref: '#/components/schemas/CoreHealthStatus'
+        environment:
+          type: string
+          example: development
+        uptime_seconds:
+          type: integer
+          example: 42
+        api:
+          $ref: '#/components/schemas/FoundationApiHealth'
+        database:
+          $ref: '#/components/schemas/FoundationDatabaseHealth'
+
+    FoundationApiHealth:
+      type: object
+      required:
+        - service_status
+        - base_url
+        - prefix
+      properties:
+        service_status:
+          $ref: '#/components/schemas/CoreHealthStatus'
+        base_url:
+          type: string
+          example: http://localhost:4000/api
+        prefix:
+          type: string
+          example: api
+
+    FoundationDatabaseHealth:
+      type: object
+      required:
+        - service_status
+        - provider
+        - project_url
+        - project_ref
+        - latency_ms
+        - checked_at
+      properties:
+        service_status:
+          $ref: '#/components/schemas/CoreHealthStatus'
+        provider:
+          type: string
+          example: supabase
+        project_url:
+          type: string
+          example: https://example.supabase.co
+        project_ref:
+          type: string
+          nullable: true
+          example: example
+        latency_ms:
+          type: integer
+          example: 123
+        checked_at:
+          type: string
+          format: date-time
+          example: '2026-06-08T11:12:47.974Z'
+        error:
+          $ref: '#/components/schemas/FoundationHealthError'
+
+    FoundationHealthError:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: DATABASE_HEALTH_CHECK_FAILED
+        message:
+          type: string
+          example: Supabase health check failed.
+
+    ApiIdentitySuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ApiIdentityData'
+
+    ProcessHealthSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ProcessHealthData'
+
+    FoundationHealthSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/FoundationHealthData'
