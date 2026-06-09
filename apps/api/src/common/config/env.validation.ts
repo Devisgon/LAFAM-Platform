@@ -33,6 +33,20 @@ const DEFAULT_SENTRY_TRACES_SAMPLE_RATE = 0.1;
 const DEFAULT_JWT_CLOCK_TOLERANCE_SECONDS = 30;
 const DEFAULT_REQUEST_BODY_LIMIT = '1mb';
 
+const DEFAULT_AUTH_RESET_TOKEN_TTL_MINUTES = 15;
+const DEFAULT_AUTH_MAX_RESET_OTP_ATTEMPTS = 5;
+const DEFAULT_AUTH_AVATAR_BUCKET = 'avatars';
+const DEFAULT_AUTH_AVATAR_MAX_SIZE_BYTES = 2_097_152;
+const DEFAULT_AUTH_AVATAR_SIGNED_URL_TTL_SECONDS = 3600;
+const DEFAULT_AUTH_GUEST_SESSION_TTL_HOURS = 24;
+const DEFAULT_AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR = 20;
+const DEFAULT_AUTH_GUEST_REQUIRE_CAPTCHA = false;
+const DEFAULT_AUTH_GUEST_CLEANUP_ENABLED = true;
+
+const MIN_AUTH_ACCESS_TOKEN_HASH_PEPPER_LENGTH = 32;
+const MIN_AUTH_AVATAR_MAX_SIZE_BYTES = 1024;
+const MAX_AUTH_AVATAR_MAX_SIZE_BYTES = 10_485_760;
+
 const NODE_ENV_VALUE_SET = new Set<string>(NODE_ENV_VALUES);
 
 function readOptionalString(
@@ -206,6 +220,27 @@ function parseIntegerInRange(
   return parsedValue;
 }
 
+function parseBoolean(
+  value: string,
+  name: EnvironmentVariableName,
+  fallback: boolean,
+  errors: string[],
+): boolean {
+  const normalizedValue = value.trim().toLowerCase();
+
+  if (normalizedValue === 'true') {
+    return true;
+  }
+
+  if (normalizedValue === 'false') {
+    return false;
+  }
+
+  errors.push(`${name} must be either true or false.`);
+
+  return fallback;
+}
+
 function validateRequestBodyLimit(value: string, errors: string[]): string {
   const normalizedValue = value.toLowerCase();
 
@@ -230,6 +265,33 @@ function validateEmail(
   }
 
   return value;
+}
+
+function validateAuthAccessTokenHashPepper(
+  value: string,
+  errors: string[],
+): string {
+  if (value.length < MIN_AUTH_ACCESS_TOKEN_HASH_PEPPER_LENGTH) {
+    errors.push(
+      `AUTH_ACCESS_TOKEN_HASH_PEPPER must be at least ${MIN_AUTH_ACCESS_TOKEN_HASH_PEPPER_LENGTH} characters long.`,
+    );
+  }
+
+  return value;
+}
+
+function validateAuthAvatarBucket(value: string, errors: string[]): string {
+  const normalizedValue = value.trim();
+
+  if (!/^[a-z0-9][a-z0-9_-]{1,62}$/u.test(normalizedValue)) {
+    errors.push(
+      'AUTH_AVATAR_BUCKET must be 2 to 63 characters and may only contain lowercase letters, numbers, underscores, and hyphens.',
+    );
+
+    return DEFAULT_AUTH_AVATAR_BUCKET;
+  }
+
+  return normalizedValue;
 }
 
 function throwIfEnvironmentInvalid(errors: string[]): void {
@@ -346,6 +408,92 @@ export function validateEnvironment(
     errors,
   );
 
+  const accessTokenHashPepper = validateAuthAccessTokenHashPepper(
+    readRequiredString(environment, 'AUTH_ACCESS_TOKEN_HASH_PEPPER', errors),
+    errors,
+  );
+
+  const resetTokenTtlMinutes = parseIntegerInRange(
+    readRequiredString(environment, 'AUTH_RESET_TOKEN_TTL_MINUTES', errors),
+    'AUTH_RESET_TOKEN_TTL_MINUTES',
+    1,
+    1440,
+    DEFAULT_AUTH_RESET_TOKEN_TTL_MINUTES,
+    errors,
+  );
+
+  const maxResetOtpAttempts = parseIntegerInRange(
+    readRequiredString(environment, 'AUTH_MAX_RESET_OTP_ATTEMPTS', errors),
+    'AUTH_MAX_RESET_OTP_ATTEMPTS',
+    1,
+    20,
+    DEFAULT_AUTH_MAX_RESET_OTP_ATTEMPTS,
+    errors,
+  );
+
+  const avatarBucket = validateAuthAvatarBucket(
+    readRequiredString(environment, 'AUTH_AVATAR_BUCKET', errors),
+    errors,
+  );
+
+  const avatarMaxSizeBytes = parseIntegerInRange(
+    readRequiredString(environment, 'AUTH_AVATAR_MAX_SIZE_BYTES', errors),
+    'AUTH_AVATAR_MAX_SIZE_BYTES',
+    MIN_AUTH_AVATAR_MAX_SIZE_BYTES,
+    MAX_AUTH_AVATAR_MAX_SIZE_BYTES,
+    DEFAULT_AUTH_AVATAR_MAX_SIZE_BYTES,
+    errors,
+  );
+
+  const avatarSignedUrlTtlSeconds = parseIntegerInRange(
+    readRequiredString(
+      environment,
+      'AUTH_AVATAR_SIGNED_URL_TTL_SECONDS',
+      errors,
+    ),
+    'AUTH_AVATAR_SIGNED_URL_TTL_SECONDS',
+    60,
+    86_400,
+    DEFAULT_AUTH_AVATAR_SIGNED_URL_TTL_SECONDS,
+    errors,
+  );
+
+  const guestSessionTtlHours = parseIntegerInRange(
+    readRequiredString(environment, 'AUTH_GUEST_SESSION_TTL_HOURS', errors),
+    'AUTH_GUEST_SESSION_TTL_HOURS',
+    1,
+    168,
+    DEFAULT_AUTH_GUEST_SESSION_TTL_HOURS,
+    errors,
+  );
+
+  const guestMaxSessionsPerIpPerHour = parseIntegerInRange(
+    readRequiredString(
+      environment,
+      'AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR',
+      errors,
+    ),
+    'AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR',
+    1,
+    1000,
+    DEFAULT_AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR,
+    errors,
+  );
+
+  const guestRequireCaptcha = parseBoolean(
+    readRequiredString(environment, 'AUTH_GUEST_REQUIRE_CAPTCHA', errors),
+    'AUTH_GUEST_REQUIRE_CAPTCHA',
+    DEFAULT_AUTH_GUEST_REQUIRE_CAPTCHA,
+    errors,
+  );
+
+  const guestCleanupEnabled = parseBoolean(
+    readRequiredString(environment, 'AUTH_GUEST_CLEANUP_ENABLED', errors),
+    'AUTH_GUEST_CLEANUP_ENABLED',
+    DEFAULT_AUTH_GUEST_CLEANUP_ENABLED,
+    errors,
+  );
+
   throwIfEnvironmentInvalid(errors);
 
   return {
@@ -373,6 +521,18 @@ export function validateEnvironment(
     security: {
       jwtClockToleranceSeconds,
       requestBodyLimit,
+    },
+    auth: {
+      accessTokenHashPepper,
+      resetTokenTtlMinutes,
+      maxResetOtpAttempts,
+      avatarBucket,
+      avatarMaxSizeBytes,
+      avatarSignedUrlTtlSeconds,
+      guestSessionTtlHours,
+      guestMaxSessionsPerIpPerHour,
+      guestRequireCaptcha,
+      guestCleanupEnabled,
     },
   };
 }

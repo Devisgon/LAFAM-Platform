@@ -37,7 +37,17 @@ export type EnvironmentVariableName =
   | 'BREVO_SENDER_EMAIL'
   | 'BREVO_SENDER_NAME'
   | 'JWT_CLOCK_TOLERANCE_SECONDS'
-  | 'REQUEST_BODY_LIMIT';
+  | 'REQUEST_BODY_LIMIT'
+  | 'AUTH_ACCESS_TOKEN_HASH_PEPPER'
+  | 'AUTH_RESET_TOKEN_TTL_MINUTES'
+  | 'AUTH_MAX_RESET_OTP_ATTEMPTS'
+  | 'AUTH_AVATAR_BUCKET'
+  | 'AUTH_AVATAR_MAX_SIZE_BYTES'
+  | 'AUTH_AVATAR_SIGNED_URL_TTL_SECONDS'
+  | 'AUTH_GUEST_SESSION_TTL_HOURS'
+  | 'AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR'
+  | 'AUTH_GUEST_REQUIRE_CAPTCHA'
+  | 'AUTH_GUEST_CLEANUP_ENABLED';
 
 export type RawEnvironment = Partial<
   Record<EnvironmentVariableName, string | undefined>
@@ -73,12 +83,26 @@ export interface SecurityEnvironment {
   readonly requestBodyLimit: string;
 }
 
+export interface AuthEnvironment {
+  readonly accessTokenHashPepper: string;
+  readonly resetTokenTtlMinutes: number;
+  readonly maxResetOtpAttempts: number;
+  readonly avatarBucket: string;
+  readonly avatarMaxSizeBytes: number;
+  readonly avatarSignedUrlTtlSeconds: number;
+  readonly guestSessionTtlHours: number;
+  readonly guestMaxSessionsPerIpPerHour: number;
+  readonly guestRequireCaptcha: boolean;
+  readonly guestCleanupEnabled: boolean;
+}
+
 export interface ValidatedEnvironment {
   readonly app: AppEnvironment;
   readonly supabase: SupabaseEnvironment;
   readonly sentry: SentryEnvironment;
   readonly brevo: BrevoEnvironment;
   readonly security: SecurityEnvironment;
+  readonly auth: AuthEnvironment;
 }
 
 export const ENVIRONMENT_VARIABLE_NAMES = [
@@ -97,6 +121,16 @@ export const ENVIRONMENT_VARIABLE_NAMES = [
   'BREVO_SENDER_NAME',
   'JWT_CLOCK_TOLERANCE_SECONDS',
   'REQUEST_BODY_LIMIT',
+  'AUTH_ACCESS_TOKEN_HASH_PEPPER',
+  'AUTH_RESET_TOKEN_TTL_MINUTES',
+  'AUTH_MAX_RESET_OTP_ATTEMPTS',
+  'AUTH_AVATAR_BUCKET',
+  'AUTH_AVATAR_MAX_SIZE_BYTES',
+  'AUTH_AVATAR_SIGNED_URL_TTL_SECONDS',
+  'AUTH_GUEST_SESSION_TTL_HOURS',
+  'AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR',
+  'AUTH_GUEST_REQUIRE_CAPTCHA',
+  'AUTH_GUEST_CLEANUP_ENABLED',
 ] as const satisfies readonly EnvironmentVariableName[];
 
 export const REQUIRED_ENVIRONMENT_VARIABLE_NAMES = [
@@ -112,6 +146,16 @@ export const REQUIRED_ENVIRONMENT_VARIABLE_NAMES = [
   'BREVO_SENDER_NAME',
   'JWT_CLOCK_TOLERANCE_SECONDS',
   'REQUEST_BODY_LIMIT',
+  'AUTH_ACCESS_TOKEN_HASH_PEPPER',
+  'AUTH_RESET_TOKEN_TTL_MINUTES',
+  'AUTH_MAX_RESET_OTP_ATTEMPTS',
+  'AUTH_AVATAR_BUCKET',
+  'AUTH_AVATAR_MAX_SIZE_BYTES',
+  'AUTH_AVATAR_SIGNED_URL_TTL_SECONDS',
+  'AUTH_GUEST_SESSION_TTL_HOURS',
+  'AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR',
+  'AUTH_GUEST_REQUIRE_CAPTCHA',
+  'AUTH_GUEST_CLEANUP_ENABLED',
 ] as const satisfies readonly EnvironmentVariableName[];
 
 export const OPTIONAL_ENVIRONMENT_VARIABLE_NAMES = [
@@ -125,6 +169,7 @@ export const SENSITIVE_ENVIRONMENT_VARIABLE_NAMES = [
   'SUPABASE_SECRET_KEY',
   'SENTRY_DSN',
   'BREVO_API_KEY',
+  'AUTH_ACCESS_TOKEN_HASH_PEPPER',
 ] as const satisfies readonly EnvironmentVariableName[];
 
 export type SensitiveEnvironmentVariableName =

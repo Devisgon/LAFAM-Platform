@@ -39,7 +39,40 @@ export type AppErrorCode =
   | 'SUPABASE_UNAVAILABLE'
   | 'EMAIL_PROVIDER_UNAVAILABLE'
   | 'CONFIGURATION_INVALID'
-  | 'INTERNAL_ERROR';
+  | 'INTERNAL_ERROR'
+  | 'EMAIL_ALREADY_REGISTERED'
+  | 'EMAIL_NOT_VERIFIED'
+  | 'VERIFICATION_OTP_INVALID'
+  | 'VERIFICATION_OTP_EXPIRED'
+  | 'RESET_OTP_INVALID'
+  | 'RESET_OTP_EXPIRED'
+  | 'RESET_TOKEN_INVALID'
+  | 'RESET_TOKEN_EXPIRED'
+  | 'PASSWORD_POLICY_FAILED'
+  | 'PASSWORD_CONFIRMATION_MISMATCH'
+  | 'ACCOUNT_DEACTIVATED'
+  | 'ACCOUNT_DELETED'
+  | 'SESSION_REVOKED'
+  | 'SESSION_NOT_FOUND'
+  | 'USER_NOT_FOUND'
+  | 'USER_ALREADY_DEACTIVATED'
+  | 'USER_ALREADY_ACTIVE'
+  | 'CANNOT_DELETE_SELF'
+  | 'SUPER_ADMIN_REQUIRED'
+  | 'ADMIN_ACCESS_REQUIRED'
+  | 'AVATAR_INVALID_FILE_TYPE'
+  | 'AVATAR_FILE_TOO_LARGE'
+  | 'AVATAR_UPLOAD_FAILED'
+  | 'GUEST_SESSION_REQUIRED'
+  | 'GUEST_SESSION_EXPIRED'
+  | 'GUEST_SESSION_REVOKED'
+  | 'GUEST_CONVERSION_REQUIRED'
+  | 'GUEST_CONVERSION_FAILED'
+  | 'GUEST_ALREADY_CONVERTED'
+  | 'GUEST_CANNOT_ACCESS_RESOURCE'
+  | 'GUEST_CANNOT_CREATE_BOOKING'
+  | 'GUEST_CANNOT_ACCESS_BOOKING_HISTORY'
+  | 'GUEST_RATE_LIMITED';
 
 export type AppErrorDetails = Record<string, unknown>;
 
@@ -244,6 +277,391 @@ export class AppError extends Error {
       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
       publicMessage: 'An unexpected server error occurred.',
       cause,
+    });
+  }
+
+  static emailAlreadyRegistered(
+    publicMessage = 'An account with this email already exists.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'EMAIL_ALREADY_REGISTERED',
+      category: 'conflict',
+      statusCode: HttpStatus.CONFLICT,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static emailNotVerified(
+    publicMessage = 'Please verify your email before continuing.',
+  ): AppError {
+    return new AppError({
+      code: 'EMAIL_NOT_VERIFIED',
+      category: 'authorization',
+      statusCode: HttpStatus.FORBIDDEN,
+      publicMessage,
+    });
+  }
+
+  static verificationOtpInvalid(
+    publicMessage = 'The verification code is invalid.',
+  ): AppError {
+    return new AppError({
+      code: 'VERIFICATION_OTP_INVALID',
+      category: 'validation',
+      statusCode: HttpStatus.BAD_REQUEST,
+      publicMessage,
+    });
+  }
+
+  static verificationOtpExpired(
+    publicMessage = 'The verification code has expired.',
+  ): AppError {
+    return new AppError({
+      code: 'VERIFICATION_OTP_EXPIRED',
+      category: 'validation',
+      statusCode: HttpStatus.BAD_REQUEST,
+      publicMessage,
+    });
+  }
+
+  static resetOtpInvalid(
+    publicMessage = 'The password reset code is invalid.',
+  ): AppError {
+    return new AppError({
+      code: 'RESET_OTP_INVALID',
+      category: 'validation',
+      statusCode: HttpStatus.BAD_REQUEST,
+      publicMessage,
+    });
+  }
+
+  static resetOtpExpired(
+    publicMessage = 'The password reset code has expired.',
+  ): AppError {
+    return new AppError({
+      code: 'RESET_OTP_EXPIRED',
+      category: 'validation',
+      statusCode: HttpStatus.BAD_REQUEST,
+      publicMessage,
+    });
+  }
+
+  static resetTokenInvalid(
+    publicMessage = 'The password reset token is invalid.',
+  ): AppError {
+    return new AppError({
+      code: 'RESET_TOKEN_INVALID',
+      category: 'validation',
+      statusCode: HttpStatus.BAD_REQUEST,
+      publicMessage,
+    });
+  }
+
+  static resetTokenExpired(
+    publicMessage = 'The password reset token has expired.',
+  ): AppError {
+    return new AppError({
+      code: 'RESET_TOKEN_EXPIRED',
+      category: 'validation',
+      statusCode: HttpStatus.BAD_REQUEST,
+      publicMessage,
+    });
+  }
+
+  static passwordPolicyFailed(
+    publicMessage = 'The password does not meet security requirements.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'PASSWORD_POLICY_FAILED',
+      category: 'validation',
+      statusCode: HttpStatus.BAD_REQUEST,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static passwordConfirmationMismatch(
+    publicMessage = 'Password confirmation does not match.',
+  ): AppError {
+    return new AppError({
+      code: 'PASSWORD_CONFIRMATION_MISMATCH',
+      category: 'validation',
+      statusCode: HttpStatus.BAD_REQUEST,
+      publicMessage,
+    });
+  }
+
+  static accountDeactivated(
+    publicMessage = 'This account has been deactivated.',
+  ): AppError {
+    return new AppError({
+      code: 'ACCOUNT_DEACTIVATED',
+      category: 'authorization',
+      statusCode: HttpStatus.FORBIDDEN,
+      publicMessage,
+    });
+  }
+
+  static accountDeleted(
+    publicMessage = 'This account has been deleted.',
+  ): AppError {
+    return new AppError({
+      code: 'ACCOUNT_DELETED',
+      category: 'authorization',
+      statusCode: HttpStatus.FORBIDDEN,
+      publicMessage,
+    });
+  }
+
+  static sessionRevoked(
+    publicMessage = 'The session has been revoked.',
+  ): AppError {
+    return new AppError({
+      code: 'SESSION_REVOKED',
+      category: 'authentication',
+      statusCode: HttpStatus.UNAUTHORIZED,
+      publicMessage,
+    });
+  }
+
+  static sessionNotFound(
+    publicMessage = 'The requested session was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'SESSION_NOT_FOUND',
+      category: 'not_found',
+      statusCode: HttpStatus.NOT_FOUND,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static userNotFound(
+    publicMessage = 'The requested user was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'USER_NOT_FOUND',
+      category: 'not_found',
+      statusCode: HttpStatus.NOT_FOUND,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static userAlreadyDeactivated(
+    publicMessage = 'This user is already deactivated.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'USER_ALREADY_DEACTIVATED',
+      category: 'conflict',
+      statusCode: HttpStatus.CONFLICT,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static userAlreadyActive(
+    publicMessage = 'This user is already active.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'USER_ALREADY_ACTIVE',
+      category: 'conflict',
+      statusCode: HttpStatus.CONFLICT,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static cannotDeleteSelf(
+    publicMessage = 'You cannot perform this deletion action on your own account.',
+  ): AppError {
+    return new AppError({
+      code: 'CANNOT_DELETE_SELF',
+      category: 'conflict',
+      statusCode: HttpStatus.CONFLICT,
+      publicMessage,
+    });
+  }
+
+  static superAdminRequired(
+    publicMessage = 'Super admin access is required.',
+  ): AppError {
+    return new AppError({
+      code: 'SUPER_ADMIN_REQUIRED',
+      category: 'authorization',
+      statusCode: HttpStatus.FORBIDDEN,
+      publicMessage,
+    });
+  }
+
+  static adminAccessRequired(
+    publicMessage = 'Admin access is required.',
+  ): AppError {
+    return new AppError({
+      code: 'ADMIN_ACCESS_REQUIRED',
+      category: 'authorization',
+      statusCode: HttpStatus.FORBIDDEN,
+      publicMessage,
+    });
+  }
+
+  static avatarInvalidFileType(
+    publicMessage = 'The avatar file type is not supported.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'AVATAR_INVALID_FILE_TYPE',
+      category: 'validation',
+      statusCode: HttpStatus.BAD_REQUEST,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static avatarFileTooLarge(
+    publicMessage = 'The avatar file is too large.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'AVATAR_FILE_TOO_LARGE',
+      category: 'validation',
+      statusCode: HttpStatus.PAYLOAD_TOO_LARGE,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static avatarUploadFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'AVATAR_UPLOAD_FAILED',
+      category: 'external_provider',
+      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+      publicMessage: 'Avatar upload failed. Please try again later.',
+      cause,
+    });
+  }
+
+  static guestSessionRequired(
+    publicMessage = 'A guest session is required for this action.',
+  ): AppError {
+    return new AppError({
+      code: 'GUEST_SESSION_REQUIRED',
+      category: 'authentication',
+      statusCode: HttpStatus.UNAUTHORIZED,
+      publicMessage,
+    });
+  }
+
+  static guestSessionExpired(
+    publicMessage = 'The guest session has expired.',
+  ): AppError {
+    return new AppError({
+      code: 'GUEST_SESSION_EXPIRED',
+      category: 'authentication',
+      statusCode: HttpStatus.UNAUTHORIZED,
+      publicMessage,
+    });
+  }
+
+  static guestSessionRevoked(
+    publicMessage = 'The guest session has been revoked.',
+  ): AppError {
+    return new AppError({
+      code: 'GUEST_SESSION_REVOKED',
+      category: 'authentication',
+      statusCode: HttpStatus.UNAUTHORIZED,
+      publicMessage,
+    });
+  }
+
+  static guestConversionRequired(
+    publicMessage = 'Please create an account to continue.',
+  ): AppError {
+    return new AppError({
+      code: 'GUEST_CONVERSION_REQUIRED',
+      category: 'authorization',
+      statusCode: HttpStatus.FORBIDDEN,
+      publicMessage,
+    });
+  }
+
+  static guestConversionFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'GUEST_CONVERSION_FAILED',
+      category: 'external_provider',
+      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+      publicMessage: 'Guest account conversion failed. Please try again later.',
+      cause,
+    });
+  }
+
+  static guestAlreadyConverted(
+    publicMessage = 'This guest session has already been converted.',
+  ): AppError {
+    return new AppError({
+      code: 'GUEST_ALREADY_CONVERTED',
+      category: 'conflict',
+      statusCode: HttpStatus.CONFLICT,
+      publicMessage,
+    });
+  }
+
+  static guestCannotAccessResource(
+    publicMessage = 'Guest users cannot access this resource.',
+  ): AppError {
+    return new AppError({
+      code: 'GUEST_CANNOT_ACCESS_RESOURCE',
+      category: 'authorization',
+      statusCode: HttpStatus.FORBIDDEN,
+      publicMessage,
+    });
+  }
+
+  static guestCannotCreateBooking(
+    publicMessage = 'Guest users cannot create confirmed bookings.',
+  ): AppError {
+    return new AppError({
+      code: 'GUEST_CANNOT_CREATE_BOOKING',
+      category: 'authorization',
+      statusCode: HttpStatus.FORBIDDEN,
+      publicMessage,
+    });
+  }
+
+  static guestCannotAccessBookingHistory(
+    publicMessage = 'Guest users cannot access booking history.',
+  ): AppError {
+    return new AppError({
+      code: 'GUEST_CANNOT_ACCESS_BOOKING_HISTORY',
+      category: 'authorization',
+      statusCode: HttpStatus.FORBIDDEN,
+      publicMessage,
+    });
+  }
+
+  static guestRateLimited(
+    publicMessage = 'Too many guest sessions have been created from this network. Please try again later.',
+  ): AppError {
+    return new AppError({
+      code: 'GUEST_RATE_LIMITED',
+      category: 'rate_limit',
+      statusCode: HttpStatus.TOO_MANY_REQUESTS,
+      publicMessage,
     });
   }
 }
