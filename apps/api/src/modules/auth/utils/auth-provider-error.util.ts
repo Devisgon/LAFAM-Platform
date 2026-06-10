@@ -45,6 +45,7 @@ export type AuthProviderErrorFlow =
   | 'guest_session'
   | 'guest_conversion'
   | 'admin_user_operation'
+  | 'access_token_lookup'
   | 'unknown';
 
 export interface AuthProviderErrorShape {
@@ -235,7 +236,33 @@ export function isAuthProviderOtpExpiredError(
     searchText.includes('token expired')
   );
 }
+export function isAuthProviderAccessTokenRejectedError(
+  error: AuthProviderErrorShape,
+): boolean {
+  const searchText = getProviderErrorSearchText(error);
 
+  return (
+    error.status === 400 ||
+    error.status === 401 ||
+    error.status === 403 ||
+    error.statusCode === 400 ||
+    error.statusCode === 401 ||
+    error.statusCode === 403 ||
+    searchText.includes('invalid jwt') ||
+    searchText.includes('bad jwt') ||
+    searchText.includes('jwt expired') ||
+    searchText.includes('token expired') ||
+    searchText.includes('expired token') ||
+    searchText.includes('invalid token') ||
+    searchText.includes('token is invalid') ||
+    searchText.includes('token is expired') ||
+    searchText.includes('session not found') ||
+    searchText.includes('session expired') ||
+    searchText.includes('invalid claim') ||
+    searchText.includes('missing sub claim') ||
+    searchText.includes('unable to parse or verify signature')
+  );
+}
 export function isAuthProviderOtpInvalidError(
   error: AuthProviderErrorShape,
 ): boolean {
@@ -248,7 +275,33 @@ export function isAuthProviderOtpInvalidError(
     searchText.includes('otp is invalid')
   );
 }
+export function isAuthProviderAnonymousDisabledError(
+  error: AuthProviderErrorShape,
+): boolean {
+  const searchText = getProviderErrorSearchText(error);
 
+  return (
+    error.code === 'anonymous_provider_disabled' ||
+    searchText.includes('anonymous_provider_disabled') ||
+    searchText.includes('anonymous provider disabled') ||
+    searchText.includes('anonymous sign-ins are disabled') ||
+    searchText.includes('anonymous sign ins are disabled') ||
+    searchText.includes('anonymous signups are disabled') ||
+    searchText.includes('anonymous users are disabled')
+  );
+}
+
+export function isAuthProviderCaptchaRejectedError(
+  error: AuthProviderErrorShape,
+): boolean {
+  const searchText = getProviderErrorSearchText(error);
+
+  return (
+    searchText.includes('captcha') ||
+    searchText.includes('hcaptcha') ||
+    searchText.includes('turnstile')
+  );
+}
 function mapCommonProviderError(
   input: MapAuthProviderErrorInput,
 ): AppError | null {
@@ -343,7 +396,56 @@ function mapRefreshTokenProviderError(
 
   return AppError.invalidCredentials('The refresh token is invalid.');
 }
+function mapGuestSessionProviderError(
+  input: MapAuthProviderErrorInput,
+): AppError {
+  const commonError = mapCommonProviderError(input);
 
+  if (commonError) {
+    return commonError;
+  }
+
+  const error = normalizeAuthProviderError(input.error);
+
+  if (isAuthProviderAnonymousDisabledError(error)) {
+    return AppError.configurationInvalid(
+      'Supabase anonymous sign-ins are not enabled. Enable anonymous sign-ins before creating guest sessions.',
+      input.error,
+    );
+  }
+
+  if (isAuthProviderCaptchaRejectedError(error)) {
+    return AppError.invalidRequest(
+      'Captcha verification is required or invalid for guest session creation.',
+      {
+        field: 'captcha_token',
+      },
+    );
+  }
+
+  return AppError.supabaseUnavailable(input.error);
+}
+function mapAccessTokenLookupProviderError(
+  input: MapAuthProviderErrorInput,
+): AppError {
+  const commonError = mapCommonProviderError(input);
+
+  if (commonError) {
+    return commonError;
+  }
+
+  const error = normalizeAuthProviderError(input.error);
+
+  if (isAuthProviderAccessTokenRejectedError(error)) {
+    return AppError.sessionExpired(
+      'The authentication token is invalid or expired.',
+    );
+  }
+
+  return AppError.sessionExpired(
+    'The authentication token is invalid or expired.',
+  );
+}
 function mapResetOtpProviderError(input: MapAuthProviderErrorInput): AppError {
   const commonError = mapCommonProviderError(input);
 
@@ -408,15 +510,20 @@ export function mapAuthProviderErrorToAppError(
     case 'refresh_token':
       return mapRefreshTokenProviderError(input);
 
+    case 'access_token_lookup':
+      return mapAccessTokenLookupProviderError(input);
+
     case 'verify_reset_otp':
       return mapResetOtpProviderError(input);
 
     case 'guest_conversion':
       return mapGuestConversionProviderError(input);
 
+    case 'guest_session':
+      return mapGuestSessionProviderError(input);
+
     case 'reset_password':
     case 'change_password':
-    case 'guest_session':
     case 'admin_user_operation':
     case 'unknown':
       return (
@@ -500,6 +607,7 @@ export const AUTH_PROVIDER_SAFE_REASON_BY_FLOW = {
   guest_session: AUTH_ERROR_REASON_PROVIDER_UNAVAILABLE,
   guest_conversion: AUTH_ERROR_REASON_GUEST_CONVERSION_FAILED,
   admin_user_operation: AUTH_ERROR_REASON_PROVIDER_UNAVAILABLE,
+  access_token_lookup: AUTH_ERROR_REASON_INVALID_CREDENTIALS,
   unknown: AUTH_ERROR_REASON_PROVIDER_UNAVAILABLE,
 } as const satisfies Record<AuthProviderErrorFlow, AuthErrorReason>;
 
