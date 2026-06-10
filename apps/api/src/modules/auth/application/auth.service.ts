@@ -353,6 +353,8 @@ export class AuthService {
         metadata: {
           session_id: session.id,
           session_type: session.sessionType,
+          device_id: dto.device_id ?? null,
+          device_name: dto.device_name ?? null,
         },
       });
 

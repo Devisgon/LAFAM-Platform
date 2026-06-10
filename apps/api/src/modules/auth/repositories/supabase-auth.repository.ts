@@ -531,12 +531,12 @@ export class SupabaseAuthRepository {
     if (error) {
       throw mapAuthProviderErrorToAppError({
         error,
-        flow: 'unknown',
+        flow: 'access_token_lookup',
       });
     }
 
     return {
-      user: assertSupabaseUser(data.user, 'unknown'),
+      user: assertSupabaseUser(data.user, 'access_token_lookup'),
     };
   }
 
