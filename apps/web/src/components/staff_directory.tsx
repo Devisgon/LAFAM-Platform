@@ -6,12 +6,18 @@ import { Badge } from "./reuseable_ui_components/badge";
 import { Toast } from "./reuseable_ui_components/toast";
 
 export type StaffMember = {
+  address: string;
   avatarTone: string;
   availability: string;
   bio: string;
   days: string;
+  email: string;
+  firstName: string;
   id: string;
+  lastName: string;
   name: string;
+  phone: string;
+  post: string;
   specialties: string[];
   status: "Available" | "On leave";
 };
@@ -67,13 +73,26 @@ export function StaffDirectory({
   function createStaff(formData: FormData) {
     try {
       const name = String(formData.get("name")).trim();
-      if (staff.some((member) => member.name.toLowerCase() === name.toLowerCase())) {
-        setToast({ message: `${name} already exists in the ${label.toLowerCase()} directory.`, title: "Staff not created", tone: "error" });
+      const email = String(formData.get("email")).trim().toLowerCase();
+      const password = String(formData.get("password"));
+      const confirmPassword = String(formData.get("confirmPassword"));
+      if (password !== confirmPassword) {
+        setToast({ message: "Password and confirmation do not match.", title: "Staff not created", tone: "error" });
+        return;
+      }
+      if (staff.some((member) => member.email?.toLowerCase() === email)) {
+        setToast({ message: `${email} already belongs to a staff account.`, title: "Staff not created", tone: "error" });
         return;
       }
       const createdStaff: StaffMember = {
         id: `${prefix}-${String(staff.length + 1).padStart(3, "0")}`,
         name,
+        firstName: String(formData.get("firstName")).trim(),
+        lastName: String(formData.get("lastName")).trim(),
+        email,
+        phone: String(formData.get("phone")).trim(),
+        address: String(formData.get("address")).trim(),
+        post: String(formData.get("post")).trim(),
         bio: String(formData.get("bio")).trim(),
         specialties: String(formData.get("specialties")).split(",").map((specialty) => specialty.trim()).filter(Boolean),
         availability: `${String(formData.get("startTime"))} - ${String(formData.get("endTime"))}`,
@@ -82,6 +101,7 @@ export function StaffDirectory({
         avatarTone: "bg-primary/10 text-primary",
       };
 
+      // Passwords must be sent to a secure server endpoint and never persisted in browser storage.
       window.localStorage.setItem(storageKey, JSON.stringify([...customStaff, createdStaff]));
       window.dispatchEvent(new Event(storageKey));
       (document.getElementById("add-staff-form") as HTMLFormElement | null)?.reset();
@@ -95,7 +115,6 @@ export function StaffDirectory({
   return (
     <>
       <section className="mb-5" aria-labelledby="staff-directory-heading">
-        <h2 className="mt-1 text-xl font-bold text-text-primary" id="staff-directory-heading">{label} directory</h2>
         <p className="mt-1 text-sm text-text-secondary">
           {staff.length} {pluralLabel} | {staff.filter((member) => member.status === "Available").length} available today
         </p>
@@ -106,7 +125,7 @@ export function StaffDirectory({
           <table className="w-full min-w-[920px] border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-background-secondary bg-card-bg-secondary text-text-secondary">
-                {["Staff member", "Staff ID", "Bio", "Available time", "Status", "Actions"].map((heading) => (
+                {["Staff member", "Contact", "Post", "Available time", "Status", "Actions"].map((heading) => (
                   <th className="px-5 py-3 font-bold" key={heading}>{heading}</th>
                 ))}
               </tr>
@@ -120,8 +139,14 @@ export function StaffDirectory({
                       {member.name}
                     </span>
                   </td>
-                  <td className="px-5 py-4 font-mono text-text-secondary">{member.id}</td>
-                  <td className="max-w-72 px-5 py-4 leading-5 text-text-secondary">{member.bio}</td>
+                  <td className="px-5 py-4 text-text-primary">
+                    <strong>{member.email || "No email provided"}</strong>
+                    <span className="mt-0.5 block text-text-secondary">{member.phone || "No phone provided"}</span>
+                  </td>
+                  <td className="max-w-64 px-5 py-4 text-text-primary">
+                    <strong>{member.post || "Staff member"}</strong>
+                    <span className="mt-0.5 block font-mono text-text-secondary">{member.id}</span>
+                  </td>
                   <td className="px-5 py-4 text-text-primary">
                     <strong>{member.availability}</strong>
                     <span className="mt-0.5 block text-text-secondary">{member.days}</span>
@@ -162,7 +187,15 @@ export function StaffDirectory({
           <p className="mt-1 text-sm text-text-secondary">Enter the staff member&apos;s profile and availability details.</p>
 
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <label className="grid gap-1.5 text-xs font-bold">Full name<input autoComplete="name" className={inputClass} maxLength={80} name="name" required /></label>
+            <label className="grid gap-1.5 text-xs font-bold">First name<input autoComplete="given-name" className={inputClass} maxLength={40} name="firstName" required /></label>
+            <label className="grid gap-1.5 text-xs font-bold">Last name<input autoComplete="family-name" className={inputClass} maxLength={40} name="lastName" required /></label>
+            <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Display name<input autoComplete="name" className={inputClass} maxLength={80} name="name" required /></label>
+            <label className="grid gap-1.5 text-xs font-bold">Email<input autoComplete="email" className={inputClass} maxLength={120} name="email" required type="email" /></label>
+            <label className="grid gap-1.5 text-xs font-bold">Phone<input autoComplete="tel" className={inputClass} maxLength={30} name="phone" required type="tel" /></label>
+            <label className="grid gap-1.5 text-xs font-bold">Password<input autoComplete="new-password" className={inputClass} minLength={10} name="password" required type="password" /></label>
+            <label className="grid gap-1.5 text-xs font-bold">Confirm password<input autoComplete="new-password" className={inputClass} minLength={10} name="confirmPassword" required type="password" /></label>
+            <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Address<input autoComplete="street-address" className={inputClass} maxLength={160} name="address" required /></label>
+            <label className="grid gap-1.5 text-xs font-bold">Post / role<input className={inputClass} maxLength={80} name="post" placeholder="Pilates Trainer" required /></label>
             <label className="grid gap-1.5 text-xs font-bold">Working days<input className={inputClass} maxLength={40} name="days" placeholder="Sun - Thu" required /></label>
             <label className="grid gap-1.5 text-xs font-bold">Start time<input className={inputClass} name="startTime" required type="time" /></label>
             <label className="grid gap-1.5 text-xs font-bold">End time<input className={inputClass} name="endTime" required type="time" /></label>
@@ -193,11 +226,14 @@ export function StaffDirectory({
               <div>
                 <h3 className="text-xl font-bold" id="profile-title">{selectedStaff.name}</h3>
                 <p className="mt-1 font-mono text-xs text-text-secondary">{selectedStaff.id}</p>
+                <p className="mt-1 text-sm font-semibold text-text-secondary">{selectedStaff.post || "Staff member"}</p>
                 <Badge className="mt-3" tone={selectedStaff.status === "Available" ? "success" : "warning"}>{selectedStaff.status}</Badge>
               </div>
             </header>
             <p className="mt-5 border-y border-background-secondary py-4 text-sm leading-6 text-text-secondary">{selectedStaff.bio}</p>
             <dl className="mt-5 grid gap-5 sm:grid-cols-2">
+              <div><dt className="text-xs font-bold uppercase tracking-wide text-text-secondary">Contact</dt><dd className="mt-2 text-sm font-bold">{selectedStaff.email || "No email provided"}</dd><dd className="mt-1 text-xs text-text-secondary">{selectedStaff.phone || "No phone provided"}</dd></div>
+              <div><dt className="text-xs font-bold uppercase tracking-wide text-text-secondary">Address</dt><dd className="mt-2 text-sm font-bold">{selectedStaff.address || "No address provided"}</dd></div>
               <div><dt className="text-xs font-bold uppercase tracking-wide text-text-secondary">Available time</dt><dd className="mt-2 text-sm font-bold">{selectedStaff.availability}</dd><dd className="mt-1 text-xs text-text-secondary">{selectedStaff.days}</dd></div>
               <div><dt className="text-xs font-bold uppercase tracking-wide text-text-secondary">Specialties</dt><dd className="mt-2 flex flex-wrap gap-2">{selectedStaff.specialties.map((specialty) => <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary" key={specialty}>{specialty}</span>)}</dd></div>
             </dl>

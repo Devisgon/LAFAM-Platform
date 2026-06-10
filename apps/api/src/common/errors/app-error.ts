@@ -72,7 +72,19 @@ export type AppErrorCode =
   | 'GUEST_CANNOT_ACCESS_RESOURCE'
   | 'GUEST_CANNOT_CREATE_BOOKING'
   | 'GUEST_CANNOT_ACCESS_BOOKING_HISTORY'
-  | 'GUEST_RATE_LIMITED';
+  | 'GUEST_RATE_LIMITED'
+  | 'STAFF_EMAIL_ALREADY_EXISTS'
+  | 'STAFF_NOT_FOUND'
+  | 'STAFF_ROLE_NOT_ALLOWED'
+  | 'STAFF_PASSWORD_INVALID'
+  | 'STAFF_AVAILABILITY_INVALID'
+  | 'STAFF_AUTH_USER_CREATION_FAILED'
+  | 'STAFF_PROFILE_CREATION_FAILED'
+  | 'STAFF_DELETE_BLOCKED'
+  | 'STAFF_ALREADY_DEACTIVATED'
+  | 'STAFF_ALREADY_ACTIVE'
+  | 'STAFF_ALREADY_DELETED'
+  | 'STAFF_EMPTY_UPDATE';
 
 export type AppErrorDetails = Record<string, unknown>;
 
@@ -661,6 +673,164 @@ export class AppError extends Error {
       code: 'GUEST_RATE_LIMITED',
       category: 'rate_limit',
       statusCode: HttpStatus.TOO_MANY_REQUESTS,
+      publicMessage,
+    });
+  }
+
+  static staffEmailAlreadyExists(
+    publicMessage = 'A staff account with this email already exists.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'STAFF_EMAIL_ALREADY_EXISTS',
+      category: 'conflict',
+      statusCode: HttpStatus.CONFLICT,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static staffNotFound(
+    publicMessage = 'The requested staff member was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'STAFF_NOT_FOUND',
+      category: 'not_found',
+      statusCode: HttpStatus.NOT_FOUND,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static staffRoleNotAllowed(
+    publicMessage = 'This staff role is not allowed for this operation.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'STAFF_ROLE_NOT_ALLOWED',
+      category: 'authorization',
+      statusCode: HttpStatus.FORBIDDEN,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static staffPasswordInvalid(
+    publicMessage = 'The staff password is invalid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'STAFF_PASSWORD_INVALID',
+      category: 'validation',
+      statusCode: HttpStatus.BAD_REQUEST,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static staffAvailabilityInvalid(
+    publicMessage = 'The staff availability is invalid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'STAFF_AVAILABILITY_INVALID',
+      category: 'validation',
+      statusCode: HttpStatus.BAD_REQUEST,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static staffAuthUserCreationFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'STAFF_AUTH_USER_CREATION_FAILED',
+      category: 'external_provider',
+      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+      publicMessage:
+        'Staff login account creation failed. Please try again later.',
+      cause,
+    });
+  }
+
+  static staffProfileCreationFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'STAFF_PROFILE_CREATION_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage: 'Staff profile creation failed. Please try again later.',
+      cause,
+    });
+  }
+
+  static staffDeleteBlocked(
+    publicMessage = 'This staff member cannot be deleted because related records still depend on it.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'STAFF_DELETE_BLOCKED',
+      category: 'conflict',
+      statusCode: HttpStatus.CONFLICT,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static staffAlreadyDeactivated(
+    publicMessage = 'This staff member is already deactivated.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'STAFF_ALREADY_DEACTIVATED',
+      category: 'conflict',
+      statusCode: HttpStatus.CONFLICT,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static staffAlreadyActive(
+    publicMessage = 'This staff member is already active.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'STAFF_ALREADY_ACTIVE',
+      category: 'conflict',
+      statusCode: HttpStatus.CONFLICT,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static staffAlreadyDeleted(
+    publicMessage = 'This staff member is already deleted.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code: 'STAFF_ALREADY_DELETED',
+      category: 'conflict',
+      statusCode: HttpStatus.CONFLICT,
+      publicMessage,
+      details,
+      exposeDetails: true,
+    });
+  }
+
+  static staffEmptyUpdate(
+    publicMessage = 'At least one staff field must be provided for update.',
+  ): AppError {
+    return new AppError({
+      code: 'STAFF_EMPTY_UPDATE',
+      category: 'validation',
+      statusCode: HttpStatus.BAD_REQUEST,
       publicMessage,
     });
   }

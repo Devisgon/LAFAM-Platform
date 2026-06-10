@@ -19,16 +19,14 @@ type IconName =
   | "staff";
 
 const primaryItems: Array<{ href: string; icon: IconName; label: string }> = [
-  { href: "/", icon: "dashboard", label: "Dashboard" },
-  { href: "/bookings", icon: "bookings", label: "Bookings" },
-  { href: "/calendar", icon: "calendar", label: "Calendar" },
+  { href: "/admin", icon: "dashboard", label: "Dashboard" },
+  { href: "/admin/bookings", icon: "bookings", label: "Bookings" },
 ];
 
 const managementItems: Array<{ href: string; icon: IconName; label: string }> = [
   { href: "#", icon: "payments", label: "Payments" },
-  { href: "#", icon: "promotions", label: "Promotions" },
   { href: "#", icon: "reviews", label: "Reviews" },
-  { href: "#", icon: "settings", label: "Settings" },
+  { href: "/admin/settings", icon: "settings", label: "Settings" },
 ];
 
 type NavigationChild = {
@@ -144,8 +142,6 @@ function NavigationGroup({
 export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
   const [collapsed, setCollapsed] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(true);
-  const [staffOpen, setStaffOpen] = useState(true);
-
   const width = collapsed ? "md:w-20" : "md:w-56";
 
   return (
@@ -159,11 +155,9 @@ export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
         <nav className="grid gap-1" aria-label="Main navigation">
           {primaryItems.map((item) => <NavigationLink active={item.label === activeItem} collapsed={collapsed} key={item.label} {...item} />)}
           <NavigationGroup activeItem={activeItem} collapsed={collapsed} icon="services" label="Services" open={servicesOpen} setOpen={() => setServicesOpen((current) => !current)}>
-            {[{ href: "/services/pilates", label: "Pilates" }]}
+            {[{ href: "/admin/services/pilates", label: "Pilates" }]}
           </NavigationGroup>
-          <NavigationGroup activeItem={activeItem} collapsed={collapsed} icon="staff" label="Staff" open={staffOpen} setOpen={() => setStaffOpen((current) => !current)}>
-            {[{ href: "/staff/trainers", label: "Trainers" },]}
-          </NavigationGroup>
+          <NavigationLink active={activeItem === "Staff"} collapsed={collapsed} href="/admin/staff" icon="staff" label="Staff" />
           {managementItems.map((item) => <NavigationLink collapsed={collapsed} key={item.label} {...item} />)}
         </nav>
 

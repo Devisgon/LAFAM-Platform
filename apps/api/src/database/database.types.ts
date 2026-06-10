@@ -55,6 +55,13 @@ export type DatabaseAuthSessionType =
   | 'admin'
   | 'staff';
 
+export type DatabaseStaffProfileStatus =
+  | 'available'
+  | 'unavailable'
+  | 'on_leave'
+  | 'deactivated'
+  | 'deleted';
+
 export interface Database {
   public: {
     Tables: {
@@ -293,10 +300,128 @@ export interface Database {
           },
         ];
       };
+
+      staff_profiles: {
+        Row: {
+          id: string;
+          app_user_id: string;
+          display_name: string;
+          address: string | null;
+          post_title: string;
+          bio: string | null;
+          specialties: string[];
+          status: DatabaseStaffProfileStatus;
+          created_by_admin_id: string | null;
+          updated_by_admin_id: string | null;
+          created_at: string;
+          updated_at: string;
+          deactivated_at: string | null;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          app_user_id: string;
+          display_name: string;
+          address?: string | null;
+          post_title: string;
+          bio?: string | null;
+          specialties?: string[];
+          status?: DatabaseStaffProfileStatus;
+          created_by_admin_id?: string | null;
+          updated_by_admin_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deactivated_at?: string | null;
+          deleted_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          app_user_id?: string;
+          display_name?: string;
+          address?: string | null;
+          post_title?: string;
+          bio?: string | null;
+          specialties?: string[];
+          status?: DatabaseStaffProfileStatus;
+          created_by_admin_id?: string | null;
+          updated_by_admin_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deactivated_at?: string | null;
+          deleted_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'staff_profiles_app_user_id_fkey';
+            columns: ['app_user_id'];
+            isOneToOne: true;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'staff_profiles_created_by_admin_id_fkey';
+            columns: ['created_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'staff_profiles_updated_by_admin_id_fkey';
+            columns: ['updated_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      staff_availability_rules: {
+        Row: {
+          id: string;
+          staff_profile_id: string;
+          day_of_week: number;
+          start_time: string;
+          end_time: string;
+          is_available: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          staff_profile_id: string;
+          day_of_week: number;
+          start_time: string;
+          end_time: string;
+          is_available?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          staff_profile_id?: string;
+          day_of_week?: number;
+          start_time?: string;
+          end_time?: string;
+          is_available?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'staff_availability_rules_staff_profile_id_fkey';
+            columns: ['staff_profile_id'];
+            isOneToOne: false;
+            referencedRelation: 'staff_profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
-    Enums: Record<string, never>;
+    Enums: {
+      staff_profile_status: DatabaseStaffProfileStatus;
+    };
     CompositeTypes: Record<string, never>;
   };
 }
@@ -325,6 +450,20 @@ export type AuthAuditEventInsert =
   Database['public']['Tables']['auth_audit_events']['Insert'];
 export type AuthAuditEventUpdate =
   Database['public']['Tables']['auth_audit_events']['Update'];
+
+export type StaffProfileRow =
+  Database['public']['Tables']['staff_profiles']['Row'];
+export type StaffProfileInsert =
+  Database['public']['Tables']['staff_profiles']['Insert'];
+export type StaffProfileUpdate =
+  Database['public']['Tables']['staff_profiles']['Update'];
+
+export type StaffAvailabilityRuleRow =
+  Database['public']['Tables']['staff_availability_rules']['Row'];
+export type StaffAvailabilityRuleInsert =
+  Database['public']['Tables']['staff_availability_rules']['Insert'];
+export type StaffAvailabilityRuleUpdate =
+  Database['public']['Tables']['staff_availability_rules']['Update'];
 
 export type LAFAMSupabaseClient = SupabaseClient<Database>;
 

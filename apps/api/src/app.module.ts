@@ -25,6 +25,7 @@ import { LoggingModule } from './common/logging/logging.module';
 import { DatabaseModule } from './database/database.module';
 import { CoreModule } from './modules/core/core.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { StaffModule } from './modules/staff/staff.module';
 
 const DEFAULT_THROTTLE_TTL_MS = 60_000;
 const DEFAULT_THROTTLE_LIMIT = 120;
@@ -41,6 +42,7 @@ const DEFAULT_THROTTLE_LIMIT = 120;
     DatabaseModule,
     CoreModule,
     AuthModule,
+    StaffModule,
   ],
   providers: [
     {

@@ -12,12 +12,14 @@
  * - Never log passwords, OTPs, access tokens, refresh tokens, or reset tokens.
  * - Public Auth calls use isolated Supabase clients to avoid shared session state.
  * - Admin Auth calls use the injected server-only Supabase admin client.
+ * - Staff Auth creation intentionally creates a pending email-verification identity.
  */
 
 import { Inject, Injectable } from '@nestjs/common';
 import { createClient } from '@supabase/supabase-js';
 
 import { currentSupabaseConfig } from '../../../common/config';
+import { AppError } from '../../../common/errors/app-error';
 import { SUPABASE_ADMIN_CLIENT } from '../../../database/database.constants';
 import type {
   Database,
@@ -83,6 +85,15 @@ export interface SignUpWithPasswordInput {
   readonly fullName: string;
   readonly phone: string | null;
   readonly timezone: string | null;
+}
+
+export interface CreateStaffAuthUserWithPasswordInput {
+  readonly email: string;
+  readonly password: string;
+  readonly displayName: string;
+  readonly phone: string | null;
+  readonly portalRole: 'trainer' | 'staff';
+  readonly createdByAdminId: string;
 }
 
 export interface VerifyEmailOtpInput {
@@ -252,6 +263,19 @@ function createPublicAuthClient(): LAFAMSupabaseClient {
   );
 }
 
+function mapStaffAuthCreationError(error: unknown): AppError {
+  const mappedError = mapAuthProviderErrorToAppError({
+    error,
+    flow: 'sign_up',
+  });
+
+  if (mappedError.code === 'EMAIL_ALREADY_REGISTERED') {
+    return AppError.staffEmailAlreadyExists();
+  }
+
+  return AppError.staffAuthUserCreationFailed(mappedError);
+}
+
 @Injectable()
 export class SupabaseAuthRepository {
   constructor(
@@ -287,6 +311,34 @@ export class SupabaseAuthRepository {
     return {
       user: assertSupabaseUser(data.user, 'sign_up'),
       session: data.session ? mapSupabaseAuthSession(data.session) : null,
+    };
+  }
+
+  async createStaffAuthUserWithPassword(
+    input: CreateStaffAuthUserWithPasswordInput,
+  ): Promise<SupabaseAuthUserResult> {
+    const client = createPublicAuthClient();
+
+    const { data, error } = await client.auth.signUp({
+      email: input.email,
+      password: input.password,
+      options: {
+        data: {
+          full_name: input.displayName,
+          phone: input.phone,
+          portal_role: input.portalRole,
+          source: 'lafam_admin_staff_create',
+          created_by_admin_id: input.createdByAdminId,
+        },
+      },
+    });
+
+    if (error) {
+      throw mapStaffAuthCreationError(error);
+    }
+
+    return {
+      user: assertSupabaseUser(data.user, 'sign_up'),
     };
   }
 
