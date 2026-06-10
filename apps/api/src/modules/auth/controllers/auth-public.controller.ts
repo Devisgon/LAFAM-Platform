@@ -189,8 +189,12 @@ export class AuthPublicController {
   @HttpCode(HttpStatus.OK)
   async forgotPassword(
     @Body() dto: ForgotPasswordDto,
+    @Req() request: Request,
   ): Promise<ApiSuccessResponse<AuthForgotPasswordResponse>> {
-    const data = await this.passwordResetService.forgotPassword(dto);
+    const data = await this.passwordResetService.forgotPassword(
+      dto,
+      resolveRequestMetadata(request),
+    );
 
     return createApiSuccessResponse({
       status: HttpStatus.OK,
@@ -203,8 +207,12 @@ export class AuthPublicController {
   @HttpCode(HttpStatus.OK)
   async verifyResetOtp(
     @Body() dto: VerifyResetOtpDto,
+    @Req() request: Request,
   ): Promise<ApiSuccessResponse<AuthVerifyResetOtpResponse>> {
-    const data = await this.passwordResetService.verifyResetOtp(dto);
+    const data = await this.passwordResetService.verifyResetOtp(
+      dto,
+      resolveRequestMetadata(request),
+    );
 
     return createApiSuccessResponse({
       status: HttpStatus.OK,
@@ -217,8 +225,12 @@ export class AuthPublicController {
   @HttpCode(HttpStatus.OK)
   async resetPassword(
     @Body() dto: ResetPasswordDto,
+    @Req() request: Request,
   ): Promise<ApiSuccessResponse<AuthResetPasswordResponse>> {
-    const data = await this.passwordResetService.resetPassword(dto);
+    const data = await this.passwordResetService.resetPassword(
+      dto,
+      resolveRequestMetadata(request),
+    );
 
     return createApiSuccessResponse({
       status: HttpStatus.OK,

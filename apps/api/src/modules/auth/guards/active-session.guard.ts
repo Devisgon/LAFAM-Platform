@@ -16,7 +16,7 @@
 
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-
+import { currentAuthConfig } from '../../../common/config';
 import { AppError } from '../../../common/errors/app-error';
 import { AUTH_GUEST_ROLE } from '../constants/auth-role.constants';
 import {
@@ -201,6 +201,10 @@ export class ActiveSessionGuard implements CanActivate {
     auth: AuthInternalContext,
   ): Promise<void> {
     if (!isGuestAuthContext(auth)) {
+      return;
+    }
+
+    if (!currentAuthConfig.guest.cleanupEnabled) {
       return;
     }
 

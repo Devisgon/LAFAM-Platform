@@ -16,7 +16,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { currentAuthConfig } from '../../../common/config';
-import { AppError } from '../../../common/errors/app-error';
+import { AppError, isAppError } from '../../../common/errors/app-error';
 import {
   AUTH_ERROR_DETAIL_KEYS,
   AUTH_ERROR_REASON_PASSWORD_CONFIRMATION_MISMATCH,
@@ -130,7 +130,9 @@ function assertResetChallengeCanResetPassword(
     throw AppError.resetTokenExpired('The password reset token has expired.');
   }
 }
-
+function shouldCountFailedResetOtpAttempt(error: unknown): boolean {
+  return isAppError(error) && error.code === 'RESET_OTP_INVALID';
+}
 @Injectable()
 export class PasswordResetService {
   constructor(
@@ -259,10 +261,12 @@ export class PasswordResetService {
         reset_token_expires_at: resetTokenExpiresAt,
       };
     } catch (error) {
-      await this.passwordResetRepository.incrementFailedAttempts({
-        challengeId: challenge.id,
-        failedAttempts: challenge.failedAttempts,
-      });
+      if (shouldCountFailedResetOtpAttempt(error)) {
+        await this.passwordResetRepository.incrementFailedAttempts({
+          challengeId: challenge.id,
+          failedAttempts: challenge.failedAttempts,
+        });
+      }
 
       throw error;
     }
