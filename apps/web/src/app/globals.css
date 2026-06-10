@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   /* --- App / Base Light Mode --- */
   --background: #ffffff;
   --background-primary: #f8fafc;           /* Light gray page wrapper */
@@ -27,7 +28,8 @@
 }
 
 /* --- Web Portal Dark Themes (Dashboard / Salon / Pilates Modes) --- */
-.dark {
+html[data-theme="dark"] {
+  color-scheme: dark;
   /* Dashboard Admin / Sidebar Mode Colors */
   --background: #0b1329;                   /* Deep Navy/Black Sidebar Base */
   --background-primary: #111c44;           /* Dark inner component surfaces */

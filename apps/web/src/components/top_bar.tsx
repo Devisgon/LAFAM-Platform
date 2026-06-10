@@ -5,7 +5,6 @@ import { ThemeSwitcher } from "./theme_switcher";
 export function TopBar({
   actionHref,
   actionLabel = "+ Add New",
-  dateLabel = "20 May - 26 May 2024",
   description = "Welcome back, Admin!",
   title = "Dashboard",
 }: {
@@ -23,9 +22,6 @@ export function TopBar({
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <button className="rounded-lg border border-background-secondary bg-background px-3 py-2 text-xs font-semibold text-text-secondary" type="button">
-          {dateLabel}
-        </button>
         {actionHref ? (
           <a
             className="inline-flex min-h-8 items-center justify-center rounded-lg bg-button-primary px-3 py-1 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"

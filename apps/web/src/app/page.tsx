@@ -1,202 +1,160 @@
-import { Sidebar } from "@/components/sidebar";
-import { TopBar } from "@/components/top_bar";
-import { Avatar } from "@/components/reuseable_ui_components/avatar";
-import { Badge } from "@/components/reuseable_ui_components/badge";
-import { Card } from "@/components/reuseable_ui_components/cards";
+"use client";
+import React, { type FormEvent, useState } from 'react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 
-const upcomingBookings = [
-  ["10:00 AM", "Reformer Pilates", "Sara"],
-  ["11:30 AM", "Hair Coloring", "Mona"],
-  ["12:00 PM", "Mat Pilates", "Lina"],
-  ["3:00 PM", "Facial Treatment", "Hala"],
-];
+export default function LoginScreen() {
+  const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState('sarah@example.com');
+  const [password, setPassword] = useState('password123');
 
-const recentBookings = [
-  ["Fatima Al-Khalid", "Reformer Pilates", "20 May 2024, 10:00 AM", "15 KWD", "Confirmed", "bg-violet-100 text-violet-700"],
-  ["Noora Al Sabah", "Hair Styling", "20 May 2024, 11:30 AM", "20 KWD", "Confirmed", "bg-rose-100 text-rose-700"],
-  ["Mariam Hassan", "Mat Pilates", "20 May 2024, 02:00 PM", "12 KWD", "Confirmed", "bg-blue-100 text-blue-700"],
-  ["Huda Ahmad", "Facial Treatment", "20 May 2024, 03:00 PM", "25 KWD", "Pending", "bg-amber-100 text-amber-700"],
-];
-
-const stats = {
-  cancelled: 18,
-  customers: 156,
-  pilates: 160,
-  revenue: 7850,
-  revenuePoints: [2100, 4900, 4300, 6700, 4700, 6900, 8500],
-  salon: 140,
-  services: [120, 95, 65],
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  e.preventDefault();
+  console.log('Logging in with:', { email, password });
 };
 
-function SectionHeading({ action, children }: { action?: string; children: React.ReactNode }) {
   return (
-    <div className="mb-4 flex items-center justify-between gap-3">
-      <h2 className="text-sm font-bold text-text-primary">{children}</h2>
-      {action && <button className="text-xs font-semibold text-primary" type="button">{action}</button>}
-    </div>
-  );
-}
+    <div className="flex min-h-screen w-full bg-background font-sans antialiased text-text-primary transition-colors duration-300">
+      
+      <div 
+        className="relative hidden w-2/2 flex-col items-center justify-center p-8 lg:flex border-r border-text-secondary/10"
+        style={{
+          backgroundImage: `linear-gradient(to bottom, color-mix(in srgb, var(--primary) 30%, transparent), color-mix(in srgb, var(--background-secondary) 80%, transparent)), url('/login_screen_side_image.png')`,
+          backgroundSize: 'contain',
+          backgroundPosition: 'center',
+        }}
+      >
 
-export default function DashboardPage() {
-  const totalBookings = stats.pilates + stats.salon;
-  const chartMaximum = Math.max(...stats.revenuePoints, 10000);
-  const chartPoints = stats.revenuePoints.map((value, index) => ({
-    value,
-    x: 10 + index * 80,
-    y: 210 - (value / chartMaximum) * 180,
-  }));
-  const linePath = chartPoints.map(({ x, y }, index) => `${index === 0 ? "M" : "L"}${x} ${y}`).join(" ");
-  const circumference = 276.5;
-  const pilatesArc = (stats.pilates / totalBookings) * circumference;
-  const salonArc = (stats.salon / totalBookings) * circumference;
-
-  const metrics = [
-    { label: "Total Revenue", value: `${stats.revenue.toLocaleString()} KWD`, change: "+12.5%", icon: "$", tone: "text-primary bg-primary/10" },
-    { label: "Total Bookings", value: totalBookings.toLocaleString(), change: "+8.3%", icon: "/", tone: "text-primary bg-primary/10" },
-    { label: "New Customers", value: stats.customers.toLocaleString(), change: "+15.2%", icon: "+", tone: "text-primary bg-primary/10" },
-    { label: "Cancelled Bookings", value: stats.cancelled.toLocaleString(), change: "-2.1%", icon: "x", tone: "text-error bg-error/10" },
-  ];
-  const services = [
-    ["Reformer Pilates", stats.services[0]],
-    ["Hair Styling", stats.services[1]],
-    ["Facial Treatment", stats.services[2]],
-  ] as const;
-
-  return (
-    <div className="min-h-screen bg-background-primary md:flex">
-      <Sidebar activeItem="Dashboard" />
-
-      <div className="min-w-0 flex-1">
-        <TopBar />
-
-        <main className="p-4 lg:p-5">
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Dashboard metrics">
-            {metrics.map((metric) => (
-              <Card className="p-4" key={metric.label}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs text-text-secondary">{metric.label}</p>
-                    <p className="mt-2 text-2xl font-bold text-text-primary">{metric.value}</p>
-                    <p className={`mt-1 text-xs font-semibold ${metric.change.startsWith("-") ? "text-error" : "text-success"}`}>
-                      {metric.change} <span className="font-normal text-text-secondary">vs last week</span>
-                    </p>
-                  </div>
-                  <span className={`flex size-9 items-center justify-center rounded-full text-sm font-bold ${metric.tone}`} aria-hidden="true">{metric.icon}</span>
-                </div>
-              </Card>
-            ))}
-          </section>
-
-          <section className="mt-4 grid gap-4 xl:grid-cols-[1.15fr_1fr_0.9fr]">
-            <Card className="min-h-80 p-4">
-              <SectionHeading action="This Week">Revenue Overview</SectionHeading>
-              <div className="mt-3">
-                <div className="flex h-52 gap-3">
-                  <div className="flex flex-col justify-between pb-5 text-[10px] text-text-secondary">
-                    <span>{Math.round(chartMaximum / 1000)}K</span><span>8K</span><span>6K</span><span>4K</span><span>2K</span><span>0</span>
-                  </div>
-                  <svg aria-label="Weekly revenue line chart" className="h-full min-w-0 flex-1" role="img" viewBox="0 0 500 220">
-                    <g stroke="currentColor" className="text-background-secondary" strokeWidth="1">
-                      <path d="M0 20H500M0 60H500M0 100H500M0 140H500M0 180H500M0 220H500" />
-                    </g>
-                    <path d={linePath} fill="none" stroke="var(--primary)" strokeWidth="3" />
-                    {chartPoints.map(({ value, x, y }) => <circle cx={x} cy={y} fill="var(--primary)" key={`${x}-${value}`} r="5" />)}
-                  </svg>
-                </div>
-                <div className="ml-8 grid grid-cols-7 text-center text-[10px] text-text-secondary">
-                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <span key={day}>{day}</span>)}
-                </div>
-              </div>
-            </Card>
-
-            <Card className="min-h-80 p-4">
-              <SectionHeading>Bookings by Category</SectionHeading>
-              <div className="flex h-60 flex-col items-center justify-center gap-6 sm:flex-row">
-                <div className="relative size-40 shrink-0">
-                  <svg aria-label="Bookings category donut chart" className="-rotate-90" role="img" viewBox="0 0 120 120">
-                    <circle cx="60" cy="60" fill="none" r="44" stroke="var(--background-secondary)" strokeWidth="22" />
-                    <circle cx="60" cy="60" fill="none" r="44" stroke="var(--primary)"  strokeDasharray={`${pilatesArc} ${circumference}`} strokeWidth="22" />
-                    <circle cx="60" cy="60" fill="none" r="44" stroke="#f43f5e" strokeDasharray={`${salonArc} ${circumference}`} strokeDashoffset={-pilatesArc} strokeWidth="22" />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <strong className="text-2xl text-text-primary">{totalBookings}</strong>
-                    <span className="text-xs text-text-secondary">Total</span>
-                  </div>
-                </div>
-                <div className="grid gap-4 text-xs text-text-secondary">
-                  <p><span className="mr-2 inline-block size-2 rounded-full bg-primary" />Pilates Studio<br /><strong className="ml-4 text-text-primary">{stats.pilates} ({Math.round(stats.pilates / totalBookings * 100)}%)</strong></p>
-                  <p><span className="mr-2 inline-block size-2 rounded-full bg-[#f43f5e]" />Ladies Salon<br /><strong className="ml-4 text-text-primary">{stats.salon} ({Math.round(stats.salon / totalBookings * 100)}%)</strong></p>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-4">
-              <SectionHeading>Upcoming Bookings</SectionHeading>
-              <div className="divide-y divide-background-secondary">
-                {upcomingBookings.map(([time, service, customer]) => (
-                  <div className="grid grid-cols-[4.5rem_1fr_auto] items-center gap-2 py-3 text-xs" key={`${time}-${customer}`}>
-                    <span className="font-semibold text-text-primary">{time}</span>
-                    <span className="text-text-primary">{service}<small className="block text-text-secondary">{customer}</small></span>
-                    <Badge tone="success">Confirmed</Badge>
-                  </div>
-                ))}
-              </div>
-              <a className="mt-3 inline-block text-xs font-semibold text-primary" href="/bookings">View All Bookings +</a>
-            </Card>
-          </section>
-
-          <section className="mt-4 grid gap-4 xl:grid-cols-[2.15fr_0.9fr]">
-            <Card className="overflow-hidden p-4">
-              <SectionHeading action="View All">Recent Bookings</SectionHeading>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[700px] border-collapse text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-background-secondary text-text-secondary">
-                      {["Customer", "Service", "Date & Time", "Amount", "Status"].map((heading) => <th className="px-2 py-3 font-semibold" key={heading}>{heading}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentBookings.map(([customer, service, date, amount, status, avatarStyle]) => (
-                      <tr className="border-b border-background-secondary last:border-0" key={`${customer}-${date}`}>
-                        <td className="px-2 py-3 font-semibold text-text-primary">
-                          <span className="flex items-center gap-2">
-                            <Avatar alt={`${customer} avatar`} className={avatarStyle} name={customer} size="sm" />
-                            {customer}
-                          </span>
-                        </td>
-                        <td className="px-2 py-3 text-text-secondary">{service}</td>
-                        <td className="px-2 py-3 text-text-secondary">{date}</td>
-                        <td className="px-2 py-3 text-text-primary">{amount}</td>
-                        <td className="px-2 py-3"><Badge tone={status === "Pending" ? "warning" : "success"}>{status}</Badge></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-
-            <Card className="p-4">
-              <SectionHeading>Top Services</SectionHeading>
-              <div className="grid gap-6">
-                {services.map(([service, count], index) => (
-                  <div key={service}>
-                    <div className="mb-2 flex justify-between gap-3 text-xs">
-                      <strong className="text-text-primary">{service}</strong>
-                      <span className="text-text-secondary">{count} Bookings</span>
-                    </div>
-                    <progress
-                      aria-label={`${service} bookings`}
-                      className={`h-1.5 w-full overflow-hidden rounded-full ${index === 0 ? "accent-primary" : "accent-error"}`}
-                      max={Math.max(...stats.services)}
-                      value={count}
-                    />
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </section>
-        </main>
+        <div className="relative z-10 flex w-full max-w-md flex-col items-center justify-center rounded-3xl bg-card-bg-primary/80 p-12 text-center shadow-xl backdrop-blur-md border border-text-secondary/10">
+          <h1 className="font-serif text-5xl font-bold tracking-wide text-primary mb-4">
+            LAFAM
+          </h1>
+          <p className="italic text-text-secondary text-lg font-medium">
+            Elevate your practice. Nourish your soul.
+          </p>
+          
+         
+        </div>
       </div>
+
+      {/* RIGHT SIDE: Authentication Form */}
+      <div className="flex w-full flex-col justify-center bg-background px-6 py-12 sm:px-16 lg:w-1/2 lg:px-24 xl:px-32">
+        <div className="mx-auto  w-full max-w-md">
+          
+          {/* Header */}
+          <div className="mb-10">
+            <h2 className="text-4xl font-semibold tracking-tight text-text-primary mb-3">
+              Welcome Back
+            </h2>
+            <p className="text-sm text-text-secondary leading-relaxed">
+              Sign in to book sessions, manage your wellness wallet, and access your profile.
+            </p>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            
+            {/* Email  */}
+            <div className="flex flex-col gap-2">
+              <label htmlFor="email" className="text-xs font-semibold text-text-secondary">
+                Email Address
+              </label>
+              <div className="relative flex items-center">
+                <Mail className="absolute left-4 h-5 w-5 text-text-secondary/60" />
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full rounded-2xl bg-background-primary py-4 pl-12 pr-4 text-sm text-text-primary placeholder-text-secondary/50 outline-none transition-all border border-text-secondary/10 focus:border-primary/40 focus:bg-card-bg-primary focus:ring-4 focus:ring-primary/10"
+                  placeholder="name@example.com"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Password  */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <label htmlFor="password" className="text-xs font-semibold text-text-secondary">
+                  Password
+                </label>
+                <a href="#forgot" className="text-xs font-semibold text-primary hover:underline">
+                  Forgot Password?
+                </a>
+              </div>
+              <div className="relative flex items-center">
+                <Lock className="absolute left-4 h-5 w-5 text-text-secondary/60" />
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-2xl bg-background-primary py-4 pl-12 pr-12 text-sm text-text-primary placeholder-text-secondary/50 outline-none transition-all border border-text-secondary/10 focus:border-primary/40 focus:bg-card-bg-primary focus:ring-4 focus:ring-primary/10"
+                  placeholder="••••••••"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 text-text-secondary/60 hover:text-text-primary transition-colors"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-button-primary py-4 text-sm font-semibold text-white shadow-md shadow-primary/10 transition-all hover:brightness-110 active:scale-[0.99]"
+            >
+              Sign In
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </form>
+
+          {/* Divider */}
+          <div className="relative my-8 flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-text-secondary/10"></div>
+            </div>
+            <span className="relative bg-background px-4 text-xs font-medium text-text-secondary">
+              Or continue with
+            </span>
+          </div>
+
+          {/* Social Logins */}
+          <div className="grid grid-cols-2 gap-4">
+            <button className="flex items-center justify-center gap-2 rounded-2xl border border-text-secondary/20 bg-card-bg-primary py-3.5 text-sm font-semibold text-text-primary transition-all hover:bg-background-primary active:scale-[0.98]">
+              {/* Google Icon SVG */}
+              <svg className="h-4 w-4" viewBox="0 0 24 24">
+                <path fill="#EA4335" d="M12 5.04c1.64 0 3.12.56 4.28 1.67l3.2-3.2C17.52 1.58 14.94 1 12 1 7.35 1 3.4 3.65 1.5 7.5l3.6 2.8C6.01 7.12 8.78 5.04 12 5.04z"/>
+                <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.36H12v4.51h6.46c-.29 1.48-1.14 2.73-2.4 3.58l3.6 2.8c2.1-1.94 3.83-4.8 3.83-8.53z"/>
+                <path fill="#FBBC05" d="M5.1 14.7c-.25-.76-.39-1.57-.39-2.4s.14-1.64.39-2.4L1.5 7.1C.54 9.03 0 11.19 0 13.5s.54 4.47 1.5 6.4l3.6-2.82z"/>
+                <path fill="#34A853" d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.6-2.8c-1.1.74-2.52 1.18-4.36 1.18-3.22 0-5.99-2.08-6.96-5.26l-3.6 2.8C3.4 20.35 7.35 23 12 23z"/>
+              </svg>
+              Google
+            </button>
+            
+            <button className="flex items-center justify-center gap-2 rounded-2xl border border-text-secondary/20 bg-card-bg-primary py-3.5 text-sm font-semibold text-text-primary transition-all hover:bg-background-primary active:scale-[0.98]">
+              {/* Apple Icon SVG configured to respect theme color updates */}
+              <svg className="h-4 w-4 text-text-primary" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 4.17c.66-.81 1.11-1.93.99-3.06-1 .04-2.21.67-2.93 1.49-.62.69-1.16 1.84-1.01 2.96 1.12.09 2.27-.58 2.95-1.39z"/>
+              </svg>
+              Apple
+            </button>
+          </div>
+
+          {/* Footer Sign Up */}
+          <p className="mt-10 text-center text-sm text-text-secondary">
+            Don&apos;t have an account?{' '}
+            <a href="#signup" className="font-semibold text-primary hover:underline">
+              Sign Up
+            </a>
+          </p>
+
+        </div>
+      </div>
+
     </div>
   );
 }
