@@ -13,7 +13,7 @@
 
 export * from './environment.contract';
 export * from './env.validation';
-
+export * from './auth.config';
 export * from './app.config';
 export * from './api.config';
 export * from './cors.config';

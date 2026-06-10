@@ -1,0 +1,237 @@
+// apps/api/src/modules/auth/constants/auth-permission.constants.ts
+/**
+ * LAFAM Auth permission constants.
+ *
+ * Role:
+ * - Defines stable permission strings returned by /auth/context.
+ * - Maps Auth roles to permission sets.
+ * - Keeps guest/customer/staff/admin access decisions consistent across guards, services, and frontend bootstrapping.
+ *
+ * Important:
+ * - Permissions are application-level authorization hints.
+ * - Frontend permission rendering is usability only.
+ * - Backend guards/services remain the final authority.
+ */
+
+import {
+  AUTH_ADMIN_ROLE,
+  AUTH_CUSTOMER_ROLE,
+  AUTH_GUEST_ROLE,
+  AUTH_STAFF_ROLE,
+  AUTH_STYLIST_ROLE,
+  AUTH_SUPER_ADMIN_ROLE,
+  AUTH_TRAINER_ROLE,
+  type AuthUserRole,
+} from './auth-role.constants';
+
+export const AUTH_PERMISSIONS = [
+  'public:read_home',
+  'public:read_classes',
+  'public:read_class_details',
+  'public:read_trainers',
+  'public:read_offers',
+
+  'guest:create_session',
+  'guest:read_public_catalog',
+  'guest:read_availability',
+  'guest:convert_to_customer',
+  'guest:end_session',
+
+  'auth:read_context',
+
+  'session:logout',
+  'session:logout_all',
+  'session:read_active',
+  'session:revoke',
+
+  'profile:read',
+  'profile:update',
+  'profile:delete_account',
+
+  'avatar:read',
+  'avatar:upload',
+
+  'password:change',
+
+  'booking:create_confirmed',
+  'booking:view_history',
+  'booking:cancel',
+  'booking:reschedule',
+
+  'payment:create',
+
+  'wallet:read',
+
+  'staff:access_dashboard',
+
+  'admin:access_dashboard',
+  'admin:users:read',
+  'admin:users:deactivate',
+  'admin:users:reactivate',
+
+  'super_admin:users:hard_delete',
+] as const;
+
+export type AuthPermission = (typeof AUTH_PERMISSIONS)[number];
+
+export const AUTH_PUBLIC_READ_PERMISSIONS = [
+  'public:read_home',
+  'public:read_classes',
+  'public:read_class_details',
+  'public:read_trainers',
+  'public:read_offers',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_GUEST_PERMISSIONS = [
+  ...AUTH_PUBLIC_READ_PERMISSIONS,
+  'guest:create_session',
+  'guest:read_public_catalog',
+  'guest:read_availability',
+  'guest:convert_to_customer',
+  'guest:end_session',
+  'auth:read_context',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_SESSION_PERMISSIONS = [
+  'session:logout',
+  'session:logout_all',
+  'session:read_active',
+  'session:revoke',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_PROFILE_PERMISSIONS = [
+  'profile:read',
+  'profile:update',
+  'profile:delete_account',
+  'avatar:read',
+  'avatar:upload',
+  'password:change',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_CUSTOMER_BOOKING_PERMISSIONS = [
+  'booking:create_confirmed',
+  'booking:view_history',
+  'booking:cancel',
+  'booking:reschedule',
+  'payment:create',
+  'wallet:read',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_CUSTOMER_PERMISSIONS = [
+  ...AUTH_PUBLIC_READ_PERMISSIONS,
+  'auth:read_context',
+  ...AUTH_SESSION_PERMISSIONS,
+  ...AUTH_PROFILE_PERMISSIONS,
+  ...AUTH_CUSTOMER_BOOKING_PERMISSIONS,
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_STAFF_PERMISSIONS = [
+  ...AUTH_PUBLIC_READ_PERMISSIONS,
+  'auth:read_context',
+  ...AUTH_SESSION_PERMISSIONS,
+  ...AUTH_PROFILE_PERMISSIONS,
+  'staff:access_dashboard',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_ADMIN_PERMISSIONS = [
+  ...AUTH_STAFF_PERMISSIONS,
+  'admin:access_dashboard',
+  'admin:users:read',
+  'admin:users:deactivate',
+  'admin:users:reactivate',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_SUPER_ADMIN_PERMISSIONS = [
+  ...AUTH_ADMIN_PERMISSIONS,
+  'super_admin:users:hard_delete',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_GUEST_DENIED_PERMISSIONS = [
+  'booking:create_confirmed',
+  'booking:view_history',
+  'booking:cancel',
+  'booking:reschedule',
+  'payment:create',
+  'wallet:read',
+  'profile:update',
+  'profile:delete_account',
+  'avatar:upload',
+  'password:change',
+  'staff:access_dashboard',
+  'admin:access_dashboard',
+  'admin:users:read',
+  'admin:users:deactivate',
+  'admin:users:reactivate',
+  'super_admin:users:hard_delete',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_ROLE_PERMISSIONS = {
+  [AUTH_GUEST_ROLE]: AUTH_GUEST_PERMISSIONS,
+  [AUTH_CUSTOMER_ROLE]: AUTH_CUSTOMER_PERMISSIONS,
+  [AUTH_TRAINER_ROLE]: AUTH_STAFF_PERMISSIONS,
+  [AUTH_STYLIST_ROLE]: AUTH_STAFF_PERMISSIONS,
+  [AUTH_STAFF_ROLE]: AUTH_STAFF_PERMISSIONS,
+  [AUTH_ADMIN_ROLE]: AUTH_ADMIN_PERMISSIONS,
+  [AUTH_SUPER_ADMIN_ROLE]: AUTH_SUPER_ADMIN_PERMISSIONS,
+} as const satisfies Record<AuthUserRole, readonly AuthPermission[]>;
+
+export const AUTH_ADMIN_ACCESS_PERMISSIONS = [
+  'admin:access_dashboard',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_STAFF_ACCESS_PERMISSIONS = [
+  'staff:access_dashboard',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_BOOKING_WRITE_PERMISSIONS = [
+  'booking:create_confirmed',
+  'booking:cancel',
+  'booking:reschedule',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_PAYMENT_PERMISSIONS = [
+  'payment:create',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_WALLET_PERMISSIONS = [
+  'wallet:read',
+] as const satisfies readonly AuthPermission[];
+
+const AUTH_PERMISSION_SET = new Set<AuthPermission>(AUTH_PERMISSIONS);
+
+export function isAuthPermission(value: string): value is AuthPermission {
+  return AUTH_PERMISSION_SET.has(value as AuthPermission);
+}
+
+export function getAuthPermissionsForRole(
+  role: AuthUserRole,
+): readonly AuthPermission[] {
+  return AUTH_ROLE_PERMISSIONS[role];
+}
+
+export function roleHasAuthPermission(
+  role: AuthUserRole,
+  permission: AuthPermission,
+): boolean {
+  return getAuthPermissionsForRole(role).includes(permission);
+}
+
+export function roleHasEveryAuthPermission(
+  role: AuthUserRole,
+  permissions: readonly AuthPermission[],
+): boolean {
+  const rolePermissions = getAuthPermissionsForRole(role);
+
+  return permissions.every((permission) =>
+    rolePermissions.includes(permission),
+  );
+}
+
+export function roleHasSomeAuthPermission(
+  role: AuthUserRole,
+  permissions: readonly AuthPermission[],
+): boolean {
+  const rolePermissions = getAuthPermissionsForRole(role);
+
+  return permissions.some((permission) => rolePermissions.includes(permission));
+}

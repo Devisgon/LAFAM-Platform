@@ -18,6 +18,16 @@ function createValidEnvironment(
     BREVO_SENDER_NAME: 'LAFAM',
     JWT_CLOCK_TOLERANCE_SECONDS: '30',
     REQUEST_BODY_LIMIT: '1mb',
+    AUTH_ACCESS_TOKEN_HASH_PEPPER: 'test-auth-token-hash-pepper-value-0001',
+    AUTH_RESET_TOKEN_TTL_MINUTES: '15',
+    AUTH_MAX_RESET_OTP_ATTEMPTS: '5',
+    AUTH_AVATAR_BUCKET: 'avatars',
+    AUTH_AVATAR_MAX_SIZE_BYTES: '2097152',
+    AUTH_AVATAR_SIGNED_URL_TTL_SECONDS: '3600',
+    AUTH_GUEST_SESSION_TTL_HOURS: '24',
+    AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR: '20',
+    AUTH_GUEST_REQUIRE_CAPTCHA: 'false',
+    AUTH_GUEST_CLEANUP_ENABLED: 'true',
     ...overrides,
   };
 }
@@ -52,6 +62,18 @@ describe('validateEnvironment', () => {
         jwtClockToleranceSeconds: 30,
         requestBodyLimit: '1mb',
       },
+      auth: {
+        accessTokenHashPepper: 'test-auth-token-hash-pepper-value-0001',
+        resetTokenTtlMinutes: 15,
+        maxResetOtpAttempts: 5,
+        avatarBucket: 'avatars',
+        avatarMaxSizeBytes: 2097152,
+        avatarSignedUrlTtlSeconds: 3600,
+        guestSessionTtlHours: 24,
+        guestMaxSessionsPerIpPerHour: 20,
+        guestRequireCaptcha: false,
+        guestCleanupEnabled: true,
+      },
     });
   });
 
@@ -73,6 +95,18 @@ describe('validateEnvironment', () => {
     );
 
     expect(result.security.requestBodyLimit).toBe('2mb');
+  });
+
+  it('parses Auth boolean values', () => {
+    const result = validateEnvironment(
+      createValidEnvironment({
+        AUTH_GUEST_REQUIRE_CAPTCHA: 'true',
+        AUTH_GUEST_CLEANUP_ENABLED: 'false',
+      }),
+    );
+
+    expect(result.auth.guestRequireCaptcha).toBe(true);
+    expect(result.auth.guestCleanupEnabled).toBe(false);
   });
 
   it('rejects invalid port values', () => {
@@ -107,6 +141,86 @@ describe('validateEnvironment', () => {
       ),
     ).toThrow(
       'BREVO_API_KEY and BREVO_SENDER_EMAIL must be configured together.',
+    );
+  });
+
+  it('rejects short Auth access token hash pepper', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          AUTH_ACCESS_TOKEN_HASH_PEPPER: 'too-short',
+        }),
+      ),
+    ).toThrow(
+      'AUTH_ACCESS_TOKEN_HASH_PEPPER must be at least 32 characters long.',
+    );
+  });
+
+  it('rejects invalid Auth avatar bucket names', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          AUTH_AVATAR_BUCKET: 'Invalid Bucket',
+        }),
+      ),
+    ).toThrow(
+      'AUTH_AVATAR_BUCKET must be 2 to 63 characters and may only contain lowercase letters, numbers, underscores, and hyphens.',
+    );
+  });
+
+  it('rejects invalid Auth avatar file size limits', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          AUTH_AVATAR_MAX_SIZE_BYTES: '100',
+        }),
+      ),
+    ).toThrow(
+      'AUTH_AVATAR_MAX_SIZE_BYTES must be an integer between 1024 and 10485760.',
+    );
+  });
+
+  it('rejects invalid guest captcha boolean value', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          AUTH_GUEST_REQUIRE_CAPTCHA: 'yes',
+        }),
+      ),
+    ).toThrow('AUTH_GUEST_REQUIRE_CAPTCHA must be either true or false.');
+  });
+
+  it('rejects invalid guest cleanup boolean value', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          AUTH_GUEST_CLEANUP_ENABLED: '1',
+        }),
+      ),
+    ).toThrow('AUTH_GUEST_CLEANUP_ENABLED must be either true or false.');
+  });
+
+  it('rejects invalid guest session ttl values', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          AUTH_GUEST_SESSION_TTL_HOURS: '0',
+        }),
+      ),
+    ).toThrow(
+      'AUTH_GUEST_SESSION_TTL_HOURS must be an integer between 1 and 168.',
+    );
+  });
+
+  it('rejects invalid guest session rate-limit values', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR: '0',
+        }),
+      ),
+    ).toThrow(
+      'AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR must be an integer between 1 and 1000.',
     );
   });
 });

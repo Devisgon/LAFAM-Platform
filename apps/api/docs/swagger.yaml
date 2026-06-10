@@ -1,11 +1,12 @@
 openapi: 3.0.3
-
 info:
   title: LAFAM API
   version: 0.1.0
   description:
-    'LAFAM backend API contract for the single-tenant Pilates and ladies salon booking platform.
-    This API is currently in early development and is subject to change. It provides endpoints for core API identity and health-check functionality, as well as foundational services like database connectivity checks. Future iterations will expand this contract to include booking management, user profiles, and more.
+    'LAFAM backend API contract for the single-tenant Pilates and ladies salon booking platform. The contract currently
+    exposes Core foundation endpoints and the approved Auth module endpoints. Auth includes public customer sign-up/login/password
+    reset, guest sessions, authenticated session/profile management, admin user management, and frontend auth-context bootstrapping.
+
 
     **OpenAPI JSON:** [openapi.json](/api/openapi.json)
 
@@ -13,11 +14,21 @@ info:
 servers:
   - url: http://localhost:4000/api
     description: Local development API server
-
 tags:
   - name: Core
     description: API identity and health-check endpoints
-
+  - name: Auth - Public
+    description: Public authentication and password recovery endpoints
+  - name: Auth - Guest
+    description: Guest session creation, conversion, and ending endpoints
+  - name: Auth - Sessions
+    description: Authenticated session-management endpoints
+  - name: Auth - Profile
+    description: Authenticated self-profile, avatar, password, and account endpoints
+  - name: Auth - Admin
+    description: Protected admin user-management endpoints
+  - name: Auth - Context
+    description: Authenticated frontend bootstrapping context endpoint
 paths:
   /:
     get:
@@ -44,7 +55,6 @@ paths:
                   base_url: http://localhost:4000/api
                   uptime_seconds: 42
                 timestamp_ms: 1780918065292
-
   /health:
     get:
       summary: Process health check
@@ -74,7 +84,6 @@ paths:
                     external_bytes: 2413816
                     array_buffers_bytes: 532815
                 timestamp_ms: 1780918065292
-
   /health/foundation:
     get:
       summary: Foundation health check
@@ -137,7 +146,653 @@ paths:
                           code: DATABASE_HEALTH_CHECK_FAILED
                           message: Supabase health check failed.
                     timestamp_ms: 1780918065292
-
+  /auth/sign-up:
+    post:
+      summary: Create customer account
+      description: Creates a customer account and starts email verification. Public sign-up never accepts privileged roles.
+      operationId: authSignUp
+      tags:
+        - Auth - Public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignUpRequest'
+      responses:
+        '201':
+          description: Customer account created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSignUpSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /auth/verify-email:
+    post:
+      summary: Verify email OTP
+      description: Verifies the email OTP for normal signup or guest conversion.
+      operationId: authVerifyEmail
+      tags:
+        - Auth - Public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+      responses:
+        '200':
+          description: Email verified successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthEmailVerificationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /auth/resend-verification-otp:
+    post:
+      summary: Resend verification OTP
+      description: Resends the email verification OTP.
+      operationId: authResendVerificationOtp
+      tags:
+        - Auth - Public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendVerificationOtpRequest'
+      responses:
+        '200':
+          description: Verification code sent successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResendVerificationOtpSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /auth/login:
+    post:
+      summary: Login
+      description: Authenticates a verified user with email and password and creates an app-owned session record.
+      operationId: authLogin
+      tags:
+        - Auth - Public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthLoginSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /auth/refresh-token:
+    post:
+      summary: Refresh token
+      description: Rotates the refresh token, refreshes the provider session, and updates app-owned token hashes.
+      operationId: authRefreshToken
+      tags:
+        - Auth - Public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token refreshed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthRefreshTokenSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /auth/forgot-password:
+    post:
+      summary: Request password reset OTP
+      description: Starts password reset by sending a reset OTP and creating a reset challenge.
+      operationId: authForgotPassword
+      tags:
+        - Auth - Public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '200':
+          description: Password reset code sent successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthForgotPasswordSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /auth/verify-reset-otp:
+    post:
+      summary: Verify password reset OTP
+      description: Verifies the reset OTP and returns a short-lived reset token.
+      operationId: authVerifyResetOtp
+      tags:
+        - Auth - Public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyResetOtpRequest'
+      responses:
+        '200':
+          description: Password reset code verified successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthVerifyResetOtpSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /auth/reset-password:
+    post:
+      summary: Reset password
+      description: Resets the user password with a verified reset token and revokes existing sessions.
+      operationId: authResetPassword
+      tags:
+        - Auth - Public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Password reset successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResetPasswordSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /auth/guest-session:
+    post:
+      summary: Create guest session
+      description: Creates an authenticated anonymous guest session with limited permissions.
+      operationId: authCreateGuestSession
+      tags:
+        - Auth - Guest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGuestSessionRequest'
+      responses:
+        '201':
+          description: Guest session created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthGuestSessionSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      summary: End guest session
+      description: Ends the current active guest session. This does not delete a real customer account.
+      operationId: authEndGuestSession
+      tags:
+        - Auth - Guest
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Guest session ended successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthEndGuestSessionSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+  /auth/guest/convert:
+    post:
+      summary: Convert guest to customer
+      description: Converts the current authenticated guest user into a pending customer account and starts email verification.
+      operationId: authConvertGuestToCustomer
+      tags:
+        - Auth - Guest
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-refresh-token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Current guest refresh token required for conversion.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConvertGuestRequest'
+      responses:
+        '200':
+          description: Guest conversion started successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthGuestConversionSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+  /auth/logout:
+    post:
+      summary: Logout current session
+      description: Revokes the current app-owned session and signs out the provider session where possible.
+      operationId: authLogout
+      tags:
+        - Auth - Sessions
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Logout successful.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthLogoutSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+  /auth/logout-all:
+    post:
+      summary: Logout all sessions
+      description: Revokes all active sessions owned by the authenticated user.
+      operationId: authLogoutAll
+      tags:
+        - Auth - Sessions
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: All sessions logged out successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthLogoutAllSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+  /auth/sessions:
+    get:
+      summary: List active sessions
+      description: Lists active app-owned sessions for the authenticated user.
+      operationId: authListSessions
+      tags:
+        - Auth - Sessions
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Active sessions retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionListSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+  /auth/sessions/{sessionId}:
+    delete:
+      summary: Revoke owned session
+      description: Revokes one active session owned by the authenticated user.
+      operationId: authRevokeSession
+      tags:
+        - Auth - Sessions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Session id to revoke.
+      responses:
+        '200':
+          description: Session revoked successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthRevokeSessionSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+  /auth/me:
+    get:
+      summary: Get current user
+      description: Returns the authenticated user profile.
+      operationId: authGetCurrentUser
+      tags:
+        - Auth - Profile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current user retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthCurrentUserSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+  /auth/profile:
+    patch:
+      summary: Update profile
+      description: 'Updates safe self-service profile fields: full_name, phone, and timezone.'
+      operationId: authUpdateProfile
+      tags:
+        - Auth - Profile
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profile updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUpdateProfileSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+  /auth/avatar:
+    post:
+      summary: Upload avatar
+      description: Uploads and stores the authenticated user avatar. Guests are blocked by the service.
+      operationId: authUploadAvatar
+      tags:
+        - Auth - Profile
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AvatarUploadRequest'
+      responses:
+        '200':
+          description: Avatar uploaded successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthAvatarUploadSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+    get:
+      summary: Get avatar URL
+      description: Returns the current authenticated user avatar path and signed URL if present.
+      operationId: authGetAvatar
+      tags:
+        - Auth - Profile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Avatar retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthAvatarSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+  /auth/change-password:
+    post:
+      summary: Change password
+      description: Changes the authenticated user password after verifying the current password and revokes existing sessions.
+      operationId: authChangePassword
+      tags:
+        - Auth - Profile
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthChangePasswordSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+  /auth/delete-account:
+    delete:
+      summary: Delete own account
+      description: Soft-deletes the authenticated user account and revokes active sessions.
+      operationId: authDeleteAccount
+      tags:
+        - Auth - Profile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Account deleted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthDeleteAccountSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+  /auth/admin/users:
+    get:
+      summary: List users
+      description: Lists users for admin user-management screens. Requires admin or super_admin.
+      operationId: authAdminListUsers
+      tags:
+        - Auth - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Search by email, phone, or full name.
+        - name: role
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/AuthUserRole'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/AuthUserStatus'
+        - name: is_guest
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Users retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthAdminUserListSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+  /auth/admin/users/{userId}/deactivate:
+    post:
+      summary: Deactivate user
+      description: Deactivate user. Requires admin or super_admin.
+      operationId: authAdminDeactivateUser
+      tags:
+        - Auth - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Target app user id.
+      responses:
+        '200':
+          description: User deactivated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthAdminUserMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+  /auth/admin/users/{userId}/reactivate:
+    post:
+      summary: Reactivate user
+      description: Reactivate user. Requires admin or super_admin.
+      operationId: authAdminReactivateUser
+      tags:
+        - Auth - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Target app user id.
+      responses:
+        '200':
+          description: User reactivated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthAdminUserMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+  /auth/admin/users/{userId}/hard-delete:
+    delete:
+      summary: Hard delete user
+      description: Permanently deletes a target user through the Supabase admin boundary. Requires super_admin.
+      operationId: authAdminHardDeleteUser
+      tags:
+        - Auth - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Target app user id.
+      responses:
+        '200':
+          description: User hard deleted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthAdminHardDeleteUserSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+  /auth/context:
+    get:
+      summary: Get auth context
+      description: 'Returns authenticated frontend bootstrapping context: user, session, permissions, and access flags.'
+      operationId: authGetContext
+      tags:
+        - Auth - Context
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Auth context resolved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthContextSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
 components:
   schemas:
     ApiSuccessBase:
@@ -158,14 +813,12 @@ components:
           type: integer
           format: int64
           example: 1780918065292
-
     CoreHealthStatus:
       type: string
       enum:
         - ok
         - degraded
         - unavailable
-
     ApiIdentityData:
       type: object
       required:
@@ -194,7 +847,6 @@ components:
         uptime_seconds:
           type: integer
           example: 42
-
     ProcessHealthData:
       type: object
       required:
@@ -218,7 +870,6 @@ components:
           example: 42
         memory:
           $ref: '#/components/schemas/ProcessMemory'
-
     ProcessMemory:
       type: object
       required:
@@ -243,7 +894,6 @@ components:
         array_buffers_bytes:
           type: integer
           example: 532815
-
     FoundationHealthData:
       type: object
       required:
@@ -270,7 +920,6 @@ components:
           $ref: '#/components/schemas/FoundationApiHealth'
         database:
           $ref: '#/components/schemas/FoundationDatabaseHealth'
-
     FoundationApiHealth:
       type: object
       required:
@@ -286,7 +935,6 @@ components:
         prefix:
           type: string
           example: api
-
     FoundationDatabaseHealth:
       type: object
       required:
@@ -318,7 +966,6 @@ components:
           example: '2026-06-08T11:12:47.974Z'
         error:
           $ref: '#/components/schemas/FoundationHealthError'
-
     FoundationHealthError:
       type: object
       required:
@@ -331,7 +978,6 @@ components:
         message:
           type: string
           example: Supabase health check failed.
-
     ApiIdentitySuccessResponse:
       allOf:
         - $ref: '#/components/schemas/ApiSuccessBase'
@@ -339,7 +985,6 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/ApiIdentityData'
-
     ProcessHealthSuccessResponse:
       allOf:
         - $ref: '#/components/schemas/ApiSuccessBase'
@@ -347,7 +992,6 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/ProcessHealthData'
-
     FoundationHealthSuccessResponse:
       allOf:
         - $ref: '#/components/schemas/ApiSuccessBase'
@@ -355,3 +999,1243 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/FoundationHealthData'
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          enum:
+            - false
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - statusCode
+            - path
+            - method
+            - timestamp
+          properties:
+            code:
+              type: string
+              example: AUTHENTICATION_REQUIRED
+            message:
+              type: string
+              example: Authentication is required.
+            statusCode:
+              type: integer
+              example: 401
+            path:
+              type: string
+              example: /api/auth/me
+            method:
+              type: string
+              example: GET
+            timestamp:
+              type: string
+              format: date-time
+              example: '2026-06-09T18:20:00.000Z'
+            requestId:
+              type: string
+              example: a3f7bb42-52d6-4b4a-b2fd-a15352b50d11
+            details:
+              type: object
+              additionalProperties: true
+              nullable: true
+    AuthUserRole:
+      type: string
+      enum:
+        - guest
+        - customer
+        - admin
+        - trainer
+        - stylist
+        - staff
+        - super_admin
+    AuthUserStatus:
+      type: string
+      enum:
+        - guest_active
+        - pending_email_verification
+        - active
+        - deactivated
+        - deleted
+    AuthSessionType:
+      type: string
+      enum:
+        - guest
+        - authenticated
+        - admin
+        - staff
+    AuthPermission:
+      type: string
+      enum:
+        - public:read_home
+        - public:read_classes
+        - public:read_class_details
+        - public:read_trainers
+        - public:read_offers
+        - guest:create_session
+        - guest:read_public_catalog
+        - guest:read_availability
+        - guest:convert_to_customer
+        - guest:end_session
+        - auth:read_context
+        - session:logout
+        - session:logout_all
+        - session:read_active
+        - session:revoke
+        - profile:read
+        - profile:update
+        - profile:delete_account
+        - avatar:read
+        - avatar:upload
+        - password:change
+        - booking:create_confirmed
+        - booking:view_history
+        - booking:cancel
+        - booking:reschedule
+        - payment:create
+        - wallet:read
+        - staff:access_dashboard
+        - admin:access_dashboard
+        - admin:users:read
+        - admin:users:deactivate
+        - admin:users:reactivate
+        - super_admin:users:hard_delete
+    AuthSafeUser:
+      type: object
+      required:
+        - id
+        - email
+        - phone
+        - full_name
+        - role
+        - status
+        - is_guest
+        - avatar_path
+        - timezone
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          nullable: true
+          example: customer@example.com
+        phone:
+          type: string
+          nullable: true
+          example: '+96550000000'
+        full_name:
+          type: string
+          nullable: true
+          example: Saqiba Customer
+        role:
+          $ref: '#/components/schemas/AuthUserRole'
+        status:
+          $ref: '#/components/schemas/AuthUserStatus'
+        is_guest:
+          type: boolean
+          example: false
+        avatar_path:
+          type: string
+          nullable: true
+          example: users/9f35b13e/avatar.jpg
+        timezone:
+          type: string
+          nullable: true
+          example: Asia/Kuwait
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AuthAdminUser:
+      allOf:
+        - $ref: '#/components/schemas/AuthSafeUser'
+        - type: object
+          required:
+            - auth_user_id
+            - guest_expires_at
+            - converted_from_guest_at
+            - deactivated_at
+            - deleted_at
+          properties:
+            auth_user_id:
+              type: string
+              format: uuid
+            guest_expires_at:
+              type: string
+              format: date-time
+              nullable: true
+            converted_from_guest_at:
+              type: string
+              format: date-time
+              nullable: true
+            deactivated_at:
+              type: string
+              format: date-time
+              nullable: true
+            deleted_at:
+              type: string
+              format: date-time
+              nullable: true
+    AuthSafeSession:
+      type: object
+      required:
+        - id
+        - type
+        - device_id
+        - device_name
+        - ip_address
+        - user_agent
+        - created_at
+        - last_seen_at
+        - expires_at
+        - revoked_at
+        - revoked_reason
+        - converted_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/AuthSessionType'
+        device_id:
+          type: string
+          nullable: true
+          example: web-chrome
+        device_name:
+          type: string
+          nullable: true
+          example: Chrome on Windows
+        ip_address:
+          type: string
+          nullable: true
+          example: 203.0.113.10
+        user_agent:
+          type: string
+          nullable: true
+          example: Mozilla/5.0
+        created_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_reason:
+          type: string
+          nullable: true
+          example: logout
+        converted_at:
+          type: string
+          format: date-time
+          nullable: true
+    AuthActiveSession:
+      type: object
+      required:
+        - id
+        - type
+        - device_id
+        - device_name
+        - ip_address
+        - user_agent
+        - created_at
+        - last_seen_at
+        - expires_at
+        - is_current
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/AuthSessionType'
+        device_id:
+          type: string
+          nullable: true
+        device_name:
+          type: string
+          nullable: true
+        ip_address:
+          type: string
+          nullable: true
+        user_agent:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        is_current:
+          type: boolean
+    SignUpRequest:
+      type: object
+      required:
+        - email
+        - password
+        - confirm_password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: customer@example.com
+        phone:
+          type: string
+          maxLength: 32
+          nullable: true
+          example: '+96550000000'
+        full_name:
+          type: string
+          maxLength: 120
+          nullable: true
+          example: Saqiba Customer
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          example: StrongP@ssw0rd
+        confirm_password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          example: StrongP@ssw0rd
+        timezone:
+          type: string
+          maxLength: 64
+          nullable: true
+          example: Asia/Kuwait
+        device_id:
+          type: string
+          maxLength: 128
+          nullable: true
+          example: web-chrome
+        device_name:
+          type: string
+          maxLength: 160
+          nullable: true
+          example: Chrome on Windows
+    VerifyEmailRequest:
+      type: object
+      required:
+        - email
+        - otp
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: customer@example.com
+        otp:
+          type: string
+          minLength: 4
+          maxLength: 10
+          example: '123456'
+    ResendVerificationOtpRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: customer@example.com
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: customer@example.com
+        password:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 128
+          example: StrongP@ssw0rd
+        device_id:
+          type: string
+          maxLength: 128
+          nullable: true
+          example: web-chrome
+        device_name:
+          type: string
+          maxLength: 160
+          nullable: true
+          example: Chrome on Windows
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          minLength: 1
+          example: eyJhbGciOi...
+    ForgotPasswordRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: customer@example.com
+    VerifyResetOtpRequest:
+      type: object
+      required:
+        - email
+        - otp
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: customer@example.com
+        otp:
+          type: string
+          minLength: 4
+          maxLength: 10
+          example: '123456'
+    ResetPasswordRequest:
+      type: object
+      required:
+        - email
+        - reset_token
+        - password
+        - confirm_password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: customer@example.com
+        reset_token:
+          type: string
+          maxLength: 256
+          example: secure-reset-token
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          example: NewStrongP@ssw0rd
+        confirm_password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          example: NewStrongP@ssw0rd
+    CreateGuestSessionRequest:
+      type: object
+      properties:
+        device_id:
+          type: string
+          maxLength: 128
+          nullable: true
+          example: web-guest
+        device_name:
+          type: string
+          maxLength: 160
+          nullable: true
+          example: Guest browser
+        captcha_token:
+          type: string
+          maxLength: 4096
+          nullable: true
+          example: captcha-token
+    ConvertGuestRequest:
+      type: object
+      required:
+        - full_name
+        - email
+        - password
+        - confirm_password
+      properties:
+        full_name:
+          type: string
+          maxLength: 120
+          example: Saqiba Customer
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: customer@example.com
+        phone:
+          type: string
+          maxLength: 32
+          nullable: true
+          example: '+96550000000'
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          example: StrongP@ssw0rd
+        confirm_password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          example: StrongP@ssw0rd
+        timezone:
+          type: string
+          maxLength: 64
+          nullable: true
+          example: Asia/Kuwait
+    UpdateProfileRequest:
+      type: object
+      properties:
+        full_name:
+          type: string
+          maxLength: 120
+          nullable: true
+          example: Saqiba Customer
+        phone:
+          type: string
+          maxLength: 32
+          nullable: true
+          example: '+96550000000'
+        timezone:
+          type: string
+          maxLength: 64
+          nullable: true
+          example: Asia/Kuwait
+    ChangePasswordRequest:
+      type: object
+      required:
+        - current_password
+        - password
+        - confirm_password
+      properties:
+        current_password:
+          type: string
+          format: password
+          example: CurrentP@ssw0rd
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          example: NewStrongP@ssw0rd
+        confirm_password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          example: NewStrongP@ssw0rd
+    AvatarUploadRequest:
+      type: object
+      required:
+        - avatar
+      properties:
+        avatar:
+          type: string
+          format: binary
+          description: 'Avatar image file. Allowed MIME types: image/jpeg, image/png, image/webp. Max size defaults to 2 MB.'
+    AuthSignUpData:
+      type: object
+      required:
+        - user
+        - email_verification_required
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthSafeUser'
+        email_verification_required:
+          type: boolean
+    AuthEmailVerificationData:
+      type: object
+      required:
+        - user
+        - verified
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthSafeUser'
+        verified:
+          type: boolean
+          enum:
+            - true
+    AuthResendVerificationOtpData:
+      type: object
+      required:
+        - email
+        - sent
+      properties:
+        email:
+          type: string
+          format: email
+        sent:
+          type: boolean
+          enum:
+            - true
+    AuthLoginData:
+      type: object
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_in
+        - user
+        - session
+        - authenticated
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          enum:
+            - bearer
+        expires_in:
+          type: integer
+          nullable: true
+        user:
+          $ref: '#/components/schemas/AuthSafeUser'
+        session:
+          $ref: '#/components/schemas/AuthSafeSession'
+        authenticated:
+          type: boolean
+          enum:
+            - true
+    AuthRefreshTokenData:
+      type: object
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_in
+        - session
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          enum:
+            - bearer
+        expires_in:
+          type: integer
+          nullable: true
+        session:
+          $ref: '#/components/schemas/AuthSafeSession'
+    AuthForgotPasswordData:
+      type: object
+      required:
+        - email
+        - reset_otp_sent
+      properties:
+        email:
+          type: string
+          format: email
+        reset_otp_sent:
+          type: boolean
+          enum:
+            - true
+    AuthVerifyResetOtpData:
+      type: object
+      required:
+        - email
+        - reset_token
+        - reset_token_expires_at
+      properties:
+        email:
+          type: string
+          format: email
+        reset_token:
+          type: string
+        reset_token_expires_at:
+          type: string
+          format: date-time
+    AuthResetPasswordData:
+      type: object
+      required:
+        - password_reset
+      properties:
+        password_reset:
+          type: boolean
+          enum:
+            - true
+    AuthLogoutData:
+      type: object
+      required:
+        - logged_out
+        - session_id
+      properties:
+        logged_out:
+          type: boolean
+          enum:
+            - true
+        session_id:
+          type: string
+          format: uuid
+    AuthLogoutAllData:
+      type: object
+      required:
+        - logged_out_all
+        - revoked_sessions
+      properties:
+        logged_out_all:
+          type: boolean
+          enum:
+            - true
+        revoked_sessions:
+          type: integer
+          minimum: 0
+    AuthSessionListData:
+      type: object
+      required:
+        - sessions
+        - total
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthActiveSession'
+        total:
+          type: integer
+          minimum: 0
+    AuthRevokeSessionData:
+      type: object
+      required:
+        - revoked
+        - session_id
+      properties:
+        revoked:
+          type: boolean
+          enum:
+            - true
+        session_id:
+          type: string
+          format: uuid
+    AuthCurrentUserData:
+      type: object
+      required:
+        - user
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthSafeUser'
+    AuthUpdateProfileData:
+      type: object
+      required:
+        - user
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthSafeUser'
+    AuthAvatarUploadData:
+      type: object
+      required:
+        - avatar_path
+        - avatar_url
+      properties:
+        avatar_path:
+          type: string
+          example: users/9f35b13e/avatar.jpg
+        avatar_url:
+          type: string
+          format: uri
+    AuthAvatarData:
+      type: object
+      required:
+        - avatar_path
+        - avatar_url
+      properties:
+        avatar_path:
+          type: string
+          nullable: true
+          example: users/9f35b13e/avatar.jpg
+        avatar_url:
+          type: string
+          format: uri
+          nullable: true
+    AuthChangePasswordData:
+      type: object
+      required:
+        - password_changed
+        - sessions_revoked
+      properties:
+        password_changed:
+          type: boolean
+          enum:
+            - true
+        sessions_revoked:
+          type: boolean
+          enum:
+            - true
+    AuthDeleteAccountData:
+      type: object
+      required:
+        - account_deleted
+        - user_id
+      properties:
+        account_deleted:
+          type: boolean
+          enum:
+            - true
+        user_id:
+          type: string
+          format: uuid
+    AuthAdminUserListData:
+      type: object
+      required:
+        - users
+        - total
+        - limit
+        - offset
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthAdminUser'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+    AuthAdminUserMutationData:
+      type: object
+      required:
+        - user
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthAdminUser'
+    AuthAdminHardDeleteUserData:
+      type: object
+      required:
+        - hard_deleted
+        - user_id
+      properties:
+        hard_deleted:
+          type: boolean
+          enum:
+            - true
+        user_id:
+          type: string
+          format: uuid
+    AuthGuestSessionData:
+      type: object
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_in
+        - user
+        - session
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          enum:
+            - bearer
+        expires_in:
+          type: integer
+        user:
+          $ref: '#/components/schemas/AuthSafeUser'
+        session:
+          $ref: '#/components/schemas/AuthSafeSession'
+    AuthGuestConversionData:
+      type: object
+      required:
+        - user
+        - email_verification_required
+        - guest_converted
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthSafeUser'
+        email_verification_required:
+          type: boolean
+          enum:
+            - true
+        guest_converted:
+          type: boolean
+          enum:
+            - true
+    AuthEndGuestSessionData:
+      type: object
+      required:
+        - guest_session_ended
+        - session_id
+        - ended_at
+      properties:
+        guest_session_ended:
+          type: boolean
+          enum:
+            - true
+        session_id:
+          type: string
+          format: uuid
+        ended_at:
+          type: string
+          format: date-time
+    AuthContextUser:
+      type: object
+      required:
+        - id
+        - email
+        - phone
+        - full_name
+        - role
+        - status
+        - is_guest
+        - avatar_path
+        - timezone
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        full_name:
+          type: string
+          nullable: true
+        role:
+          $ref: '#/components/schemas/AuthUserRole'
+        status:
+          $ref: '#/components/schemas/AuthUserStatus'
+        is_guest:
+          type: boolean
+        avatar_path:
+          type: string
+          nullable: true
+        timezone:
+          type: string
+          nullable: true
+    AuthContextSession:
+      type: object
+      required:
+        - id
+        - type
+        - expires_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/AuthSessionType'
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+    AuthContextAccessFlags:
+      type: object
+      required:
+        - can_access_admin_dashboard
+        - can_access_staff_dashboard
+        - can_create_booking
+        - can_view_booking_history
+        - can_checkout
+        - can_access_wallet
+        - can_manage_users
+        - can_hard_delete_users
+        - requires_email_verification
+        - requires_guest_conversion
+      properties:
+        can_access_admin_dashboard:
+          type: boolean
+        can_access_staff_dashboard:
+          type: boolean
+        can_create_booking:
+          type: boolean
+        can_view_booking_history:
+          type: boolean
+        can_checkout:
+          type: boolean
+        can_access_wallet:
+          type: boolean
+        can_manage_users:
+          type: boolean
+        can_hard_delete_users:
+          type: boolean
+        requires_email_verification:
+          type: boolean
+        requires_guest_conversion:
+          type: boolean
+    AuthContextData:
+      type: object
+      required:
+        - is_authenticated
+        - is_guest
+        - user
+        - session
+        - permissions
+        - access
+      properties:
+        is_authenticated:
+          type: boolean
+          enum:
+            - true
+        is_guest:
+          type: boolean
+        user:
+          $ref: '#/components/schemas/AuthContextUser'
+        session:
+          $ref: '#/components/schemas/AuthContextSession'
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthPermission'
+        access:
+          $ref: '#/components/schemas/AuthContextAccessFlags'
+    AuthSignUpSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthSignUpData'
+    AuthEmailVerificationSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthEmailVerificationData'
+    AuthResendVerificationOtpSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthResendVerificationOtpData'
+    AuthLoginSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthLoginData'
+    AuthRefreshTokenSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthRefreshTokenData'
+    AuthForgotPasswordSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthForgotPasswordData'
+    AuthVerifyResetOtpSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthVerifyResetOtpData'
+    AuthResetPasswordSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthResetPasswordData'
+    AuthLogoutSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthLogoutData'
+    AuthLogoutAllSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthLogoutAllData'
+    AuthSessionListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthSessionListData'
+    AuthRevokeSessionSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthRevokeSessionData'
+    AuthCurrentUserSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthCurrentUserData'
+    AuthUpdateProfileSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthUpdateProfileData'
+    AuthAvatarUploadSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthAvatarUploadData'
+    AuthAvatarSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthAvatarData'
+    AuthChangePasswordSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthChangePasswordData'
+    AuthDeleteAccountSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthDeleteAccountData'
+    AuthAdminUserListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthAdminUserListData'
+    AuthAdminUserMutationSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthAdminUserMutationData'
+    AuthAdminHardDeleteUserSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthAdminHardDeleteUserData'
+    AuthGuestSessionSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthGuestSessionData'
+    AuthGuestConversionSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthGuestConversionData'
+    AuthEndGuestSessionSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthEndGuestSessionData'
+    AuthContextSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthContextData'
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase access token accepted by the LAFAM Auth guard.
+  responses:
+    ValidationError:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    AuthenticationRequired:
+      description: Authentication is required or the token/session is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    AuthorizationDenied:
+      description: The authenticated user is not allowed to perform this action.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: The requested resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: The request conflicts with current resource state.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: Too many requests.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
