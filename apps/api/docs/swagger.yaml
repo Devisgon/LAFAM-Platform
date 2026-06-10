@@ -29,6 +29,8 @@ tags:
     description: Protected admin user-management endpoints
   - name: Auth - Context
     description: Authenticated frontend bootstrapping context endpoint
+  - name: Staff - Admin
+    description: Protected admin staff and trainer management endpoints
 paths:
   /:
     get:
@@ -793,6 +795,321 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/AuthenticationRequired'
+  /admin/staff:
+    get:
+      summary: List staff members
+      description: Lists staff and trainer records for the admin dashboard. Requires admin or super_admin.
+      operationId: staffAdminListStaff
+      tags:
+        - Staff - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 254
+          description: Search by staff email, phone, or display name.
+        - name: portal_role
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/StaffPortalRole'
+        - name: staff_status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/StaffProfileStatus'
+        - name: auth_status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/AuthUserStatus'
+        - name: include_deleted
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Staff members retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffListSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+    post:
+      summary: Create staff member
+      description: Creates a staff or trainer account from the admin dashboard. The created Supabase Auth user must verify email before login.
+      operationId: staffAdminCreateStaff
+      tags:
+        - Staff - Admin
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStaffRequest'
+      responses:
+        '201':
+          description: Staff member created successfully. Email verification is required before login.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: Staff login account creation failed because the authentication provider is temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/staff/{staffId}:
+    get:
+      summary: Get staff member
+      description: Returns one staff or trainer record by staff profile id. Requires admin or super_admin.
+      operationId: staffAdminGetStaffById
+      tags:
+        - Staff - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Staff profile id.
+      responses:
+        '200':
+          description: Staff member retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update staff member
+      description: Updates safe staff profile fields. Email, password, and portal role are not updated through this endpoint.
+      operationId: staffAdminUpdateStaff
+      tags:
+        - Staff - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Staff profile id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStaffRequest'
+      responses:
+        '200':
+          description: Staff member updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      summary: Delete staff member
+      description: Soft-deletes a staff or trainer record from the admin dashboard. Requires admin or super_admin.
+      operationId: staffAdminDeleteStaff
+      tags:
+        - Staff - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Staff profile id.
+      responses:
+        '200':
+          description: Staff member deleted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffDeleteSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/staff/{staffId}/availability:
+    patch:
+      summary: Replace staff availability
+      description: Replaces the weekly availability rules for one staff or trainer profile. Requires admin or super_admin.
+      operationId: staffAdminReplaceStaffAvailability
+      tags:
+        - Staff - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Staff profile id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStaffAvailabilityRequest'
+      responses:
+        '200':
+          description: Staff availability updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/staff/{staffId}/deactivate:
+    post:
+      summary: Deactivate staff member
+      description: Deactivates a staff or trainer account. Requires admin or super_admin.
+      operationId: staffAdminDeactivateStaff
+      tags:
+        - Staff - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Staff profile id.
+      responses:
+        '200':
+          description: Staff member deactivated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/staff/{staffId}/reactivate:
+    post:
+      summary: Reactivate staff member
+      description: Reactivates a deactivated staff or trainer account. Requires admin or super_admin.
+      operationId: staffAdminReactivateStaff
+      tags:
+        - Staff - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Staff profile id.
+      responses:
+        '200':
+          description: Staff member reactivated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 components:
   schemas:
     ApiSuccessBase:
@@ -2196,6 +2513,401 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/AuthContextData'
+    StaffPortalRole:
+      type: string
+      enum:
+        - trainer
+        - staff
+      example: trainer
+
+    StaffProfileStatus:
+      type: string
+      enum:
+        - available
+        - unavailable
+        - on_leave
+        - deactivated
+        - deleted
+      example: available
+
+    StaffAssignableProfileStatus:
+      type: string
+      enum:
+        - available
+        - unavailable
+        - on_leave
+      example: available
+
+    StaffDayOfWeek:
+      type: integer
+      enum:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+      description: Day of week where 0 is Sunday and 6 is Saturday.
+      example: 1
+
+    StaffAvailabilityRuleInput:
+      type: object
+      required:
+        - day_of_week
+        - start_time
+        - end_time
+      properties:
+        day_of_week:
+          $ref: '#/components/schemas/StaffDayOfWeek'
+        start_time:
+          type: string
+          pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
+          example: '09:00'
+        end_time:
+          type: string
+          pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
+          example: '17:00'
+        is_available:
+          type: boolean
+          default: true
+          example: true
+
+    StaffAvailabilityRule:
+      type: object
+      required:
+        - id
+        - day_of_week
+        - start_time
+        - end_time
+        - is_available
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        day_of_week:
+          $ref: '#/components/schemas/StaffDayOfWeek'
+        start_time:
+          type: string
+          example: '09:00'
+        end_time:
+          type: string
+          example: '17:00'
+        is_available:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    StaffProfile:
+      type: object
+      required:
+        - id
+        - app_user_id
+        - auth_user_id
+        - email
+        - phone
+        - display_name
+        - portal_role
+        - post_title
+        - address
+        - bio
+        - specialties
+        - staff_status
+        - auth_status
+        - email_verification_required
+        - availability
+        - created_at
+        - updated_at
+        - deactivated_at
+        - deleted_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        app_user_id:
+          type: string
+          format: uuid
+        auth_user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          example: trainer@example.com
+        phone:
+          type: string
+          nullable: true
+          example: '+96550000000'
+        display_name:
+          type: string
+          example: Sarah Pilates Trainer
+        portal_role:
+          $ref: '#/components/schemas/StaffPortalRole'
+        post_title:
+          type: string
+          example: Pilates Trainer
+        address:
+          type: string
+          nullable: true
+          example: Salmiya, Kuwait
+        bio:
+          type: string
+          nullable: true
+          example: Certified Pilates trainer with reformer experience.
+        specialties:
+          type: array
+          items:
+            type: string
+          example:
+            - Reformer Pilates
+            - Mat Pilates
+        staff_status:
+          $ref: '#/components/schemas/StaffProfileStatus'
+        auth_status:
+          $ref: '#/components/schemas/AuthUserStatus'
+        email_verification_required:
+          type: boolean
+          example: true
+        availability:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffAvailabilityRule'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deactivated_at:
+          type: string
+          format: date-time
+          nullable: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateStaffRequest:
+      type: object
+      required:
+        - display_name
+        - email
+        - password
+        - confirm_password
+        - portal_role
+        - post_title
+        - working_days
+        - start_time
+        - end_time
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Sarah Pilates Trainer
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: trainer@example.com
+        phone:
+          type: string
+          nullable: true
+          maxLength: 32
+          example: '+96550000000'
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          writeOnly: true
+          example: StrongPass123!
+        confirm_password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          writeOnly: true
+          example: StrongPass123!
+        address:
+          type: string
+          nullable: true
+          maxLength: 500
+          example: Salmiya, Kuwait
+        portal_role:
+          $ref: '#/components/schemas/StaffPortalRole'
+        post_title:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Pilates Trainer
+        working_days:
+          type: array
+          minItems: 1
+          maxItems: 7
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/StaffDayOfWeek'
+          example:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+        start_time:
+          type: string
+          pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
+          example: '09:00'
+        end_time:
+          type: string
+          pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
+          example: '17:00'
+        specialties:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 80
+          example:
+            - Reformer Pilates
+            - Mat Pilates
+        bio:
+          type: string
+          nullable: true
+          maxLength: 1000
+          example: Certified Pilates trainer with reformer experience.
+        status:
+          $ref: '#/components/schemas/StaffAssignableProfileStatus'
+
+    UpdateStaffRequest:
+      type: object
+      minProperties: 1
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Sarah Pilates Trainer
+        phone:
+          type: string
+          nullable: true
+          maxLength: 32
+          example: '+96550000000'
+        address:
+          type: string
+          nullable: true
+          maxLength: 500
+          example: Salmiya, Kuwait
+        post_title:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Senior Pilates Trainer
+        specialties:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 80
+          example:
+            - Reformer Pilates
+            - Prenatal Pilates
+        bio:
+          type: string
+          nullable: true
+          maxLength: 1000
+          example: Senior certified Pilates trainer.
+        status:
+          $ref: '#/components/schemas/StaffAssignableProfileStatus'
+
+    UpdateStaffAvailabilityRequest:
+      type: object
+      required:
+        - availability
+      properties:
+        availability:
+          type: array
+          minItems: 1
+          maxItems: 7
+          items:
+            $ref: '#/components/schemas/StaffAvailabilityRuleInput'
+
+    StaffListData:
+      type: object
+      required:
+        - staff
+        - total
+        - limit
+        - offset
+      properties:
+        staff:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffProfile'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+
+    StaffMutationData:
+      type: object
+      required:
+        - staff
+      properties:
+        staff:
+          $ref: '#/components/schemas/StaffProfile'
+
+    StaffDeleteData:
+      type: object
+      required:
+        - deleted
+        - staff_id
+      properties:
+        deleted:
+          type: boolean
+          enum:
+            - true
+        staff_id:
+          type: string
+          format: uuid
+
+    StaffListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/StaffListData'
+
+    StaffMutationSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/StaffMutationData'
+
+    StaffDeleteSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/StaffDeleteData'
   securitySchemes:
     BearerAuth:
       type: http

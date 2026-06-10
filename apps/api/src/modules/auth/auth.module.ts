@@ -78,6 +78,12 @@ import { SupabaseAuthRepository } from './repositories/supabase-auth.repository'
   exports: [
     AuthService,
     AuthContextService,
+
+    SupabaseAuthRepository,
+    AuthUserRepository,
+    AuthSessionRepository,
+    GuestSessionService,
+
     AuthGuard,
     ActiveSessionGuard,
     RolesGuard,
