@@ -84,7 +84,32 @@ export type AppErrorCode =
   | 'STAFF_ALREADY_DEACTIVATED'
   | 'STAFF_ALREADY_ACTIVE'
   | 'STAFF_ALREADY_DELETED'
-  | 'STAFF_EMPTY_UPDATE';
+  | 'STAFF_EMPTY_UPDATE'
+  | 'PILATES_CLASS_NOT_FOUND'
+  | 'PILATES_CLASS_ALREADY_DELETED'
+  | 'PILATES_CLASS_EMPTY_UPDATE'
+  | 'PILATES_CLASS_INVALID_STATUS'
+  | 'PILATES_CLASS_TITLE_ALREADY_EXISTS'
+  | 'PILATES_CLASS_DELETE_BLOCKED'
+  | 'PILATES_SCHEDULE_NOT_FOUND'
+  | 'PILATES_SCHEDULE_INVALID_TIME'
+  | 'PILATES_SCHEDULE_DATE_IN_PAST'
+  | 'PILATES_SCHEDULE_CONFLICT'
+  | 'PILATES_SCHEDULE_ALREADY_CANCELLED'
+  | 'PILATES_SCHEDULE_ALREADY_DELETED'
+  | 'PILATES_SCHEDULE_ALREADY_COMPLETED'
+  | 'PILATES_SCHEDULE_EMPTY_UPDATE'
+  | 'PILATES_TRAINER_REQUIRED'
+  | 'PILATES_TRAINER_NOT_FOUND'
+  | 'PILATES_TRAINER_INACTIVE'
+  | 'PILATES_TRAINER_NOT_AVAILABLE'
+  | 'PILATES_CAPACITY_INVALID'
+  | 'PILATES_DURATION_INVALID'
+  | 'PILATES_CLASS_IMAGE_REQUIRED'
+  | 'PILATES_CLASS_IMAGE_INVALID_FILE_TYPE'
+  | 'PILATES_CLASS_IMAGE_FILE_TOO_LARGE'
+  | 'PILATES_CLASS_IMAGE_UPLOAD_FAILED'
+  | 'PILATES_CLASS_IMAGE_DELETE_FAILED';
 
 export type AppErrorDetails = Record<string, unknown>;
 
@@ -140,12 +165,13 @@ export class AppError extends Error {
     };
   }
 
-  static validationFailed(
-    publicMessage = 'The submitted request is invalid.',
+  private static createValidationError(
+    code: AppErrorCode,
+    publicMessage: string,
     details?: AppErrorDetails,
   ): AppError {
     return new AppError({
-      code: 'VALIDATION_FAILED',
+      code,
       category: 'validation',
       statusCode: HttpStatus.BAD_REQUEST,
       publicMessage,
@@ -154,68 +180,40 @@ export class AppError extends Error {
     });
   }
 
-  static invalidRequest(
-    publicMessage = 'The request could not be processed.',
+  private static createAuthenticationError(
+    code: AppErrorCode,
+    publicMessage: string,
+  ): AppError {
+    return new AppError({
+      code,
+      category: 'authentication',
+      statusCode: HttpStatus.UNAUTHORIZED,
+      publicMessage,
+    });
+  }
+
+  private static createAuthorizationError(
+    code: AppErrorCode,
+    publicMessage: string,
     details?: AppErrorDetails,
   ): AppError {
     return new AppError({
-      code: 'INVALID_REQUEST',
-      category: 'validation',
-      statusCode: HttpStatus.BAD_REQUEST,
-      publicMessage,
-      details,
-      exposeDetails: true,
-    });
-  }
-
-  static authenticationRequired(
-    publicMessage = 'Authentication is required.',
-  ): AppError {
-    return new AppError({
-      code: 'AUTHENTICATION_REQUIRED',
-      category: 'authentication',
-      statusCode: HttpStatus.UNAUTHORIZED,
-      publicMessage,
-    });
-  }
-
-  static invalidCredentials(
-    publicMessage = 'The provided credentials are invalid.',
-  ): AppError {
-    return new AppError({
-      code: 'INVALID_CREDENTIALS',
-      category: 'authentication',
-      statusCode: HttpStatus.UNAUTHORIZED,
-      publicMessage,
-    });
-  }
-
-  static sessionExpired(publicMessage = 'The session has expired.'): AppError {
-    return new AppError({
-      code: 'SESSION_EXPIRED',
-      category: 'authentication',
-      statusCode: HttpStatus.UNAUTHORIZED,
-      publicMessage,
-    });
-  }
-
-  static authorizationDenied(
-    publicMessage = 'You do not have permission to perform this action.',
-  ): AppError {
-    return new AppError({
-      code: 'AUTHORIZATION_DENIED',
+      code,
       category: 'authorization',
       statusCode: HttpStatus.FORBIDDEN,
       publicMessage,
+      details,
+      exposeDetails: typeof details !== 'undefined',
     });
   }
 
-  static notFound(
-    publicMessage = 'The requested resource was not found.',
+  private static createNotFoundError(
+    code: AppErrorCode,
+    publicMessage: string,
     details?: AppErrorDetails,
   ): AppError {
     return new AppError({
-      code: 'RESOURCE_NOT_FOUND',
+      code,
       category: 'not_found',
       statusCode: HttpStatus.NOT_FOUND,
       publicMessage,
@@ -224,18 +222,108 @@ export class AppError extends Error {
     });
   }
 
-  static conflict(
-    publicMessage = 'The requested operation conflicts with the current resource state.',
+  private static createConflictError(
+    code: AppErrorCode,
+    publicMessage: string,
     details?: AppErrorDetails,
   ): AppError {
     return new AppError({
-      code: 'RESOURCE_CONFLICT',
+      code,
       category: 'conflict',
       statusCode: HttpStatus.CONFLICT,
       publicMessage,
       details,
       exposeDetails: true,
     });
+  }
+
+  private static createExternalProviderError(
+    code: AppErrorCode,
+    publicMessage: string,
+    cause?: unknown,
+  ): AppError {
+    return new AppError({
+      code,
+      category: 'external_provider',
+      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+      publicMessage,
+      cause,
+    });
+  }
+
+  static validationFailed(
+    publicMessage = 'The submitted request is invalid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'VALIDATION_FAILED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static invalidRequest(
+    publicMessage = 'The request could not be processed.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'INVALID_REQUEST',
+      publicMessage,
+      details,
+    );
+  }
+
+  static authenticationRequired(
+    publicMessage = 'Authentication is required.',
+  ): AppError {
+    return AppError.createAuthenticationError(
+      'AUTHENTICATION_REQUIRED',
+      publicMessage,
+    );
+  }
+
+  static invalidCredentials(
+    publicMessage = 'The provided credentials are invalid.',
+  ): AppError {
+    return AppError.createAuthenticationError(
+      'INVALID_CREDENTIALS',
+      publicMessage,
+    );
+  }
+
+  static sessionExpired(publicMessage = 'The session has expired.'): AppError {
+    return AppError.createAuthenticationError('SESSION_EXPIRED', publicMessage);
+  }
+
+  static authorizationDenied(
+    publicMessage = 'You do not have permission to perform this action.',
+  ): AppError {
+    return AppError.createAuthorizationError(
+      'AUTHORIZATION_DENIED',
+      publicMessage,
+    );
+  }
+
+  static notFound(
+    publicMessage = 'The requested resource was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'RESOURCE_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static conflict(
+    publicMessage = 'The requested operation conflicts with the current resource state.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'RESOURCE_CONFLICT',
+      publicMessage,
+      details,
+    );
   }
 
   static rateLimited(
@@ -250,23 +338,19 @@ export class AppError extends Error {
   }
 
   static supabaseUnavailable(cause?: unknown): AppError {
-    return new AppError({
-      code: 'SUPABASE_UNAVAILABLE',
-      category: 'external_provider',
-      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
-      publicMessage: 'The authentication service is temporarily unavailable.',
+    return AppError.createExternalProviderError(
+      'SUPABASE_UNAVAILABLE',
+      'The authentication service is temporarily unavailable.',
       cause,
-    });
+    );
   }
 
   static emailProviderUnavailable(cause?: unknown): AppError {
-    return new AppError({
-      code: 'EMAIL_PROVIDER_UNAVAILABLE',
-      category: 'external_provider',
-      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
-      publicMessage: 'The email service is temporarily unavailable.',
+    return AppError.createExternalProviderError(
+      'EMAIL_PROVIDER_UNAVAILABLE',
+      'The email service is temporarily unavailable.',
       cause,
-    });
+    );
   }
 
   static configurationInvalid(
@@ -296,252 +380,182 @@ export class AppError extends Error {
     publicMessage = 'An account with this email already exists.',
     details?: AppErrorDetails,
   ): AppError {
-    return new AppError({
-      code: 'EMAIL_ALREADY_REGISTERED',
-      category: 'conflict',
-      statusCode: HttpStatus.CONFLICT,
+    return AppError.createConflictError(
+      'EMAIL_ALREADY_REGISTERED',
       publicMessage,
       details,
-      exposeDetails: true,
-    });
+    );
   }
 
   static emailNotVerified(
     publicMessage = 'Please verify your email before continuing.',
   ): AppError {
-    return new AppError({
-      code: 'EMAIL_NOT_VERIFIED',
-      category: 'authorization',
-      statusCode: HttpStatus.FORBIDDEN,
+    return AppError.createAuthorizationError(
+      'EMAIL_NOT_VERIFIED',
       publicMessage,
-    });
+    );
   }
 
   static verificationOtpInvalid(
     publicMessage = 'The verification code is invalid.',
   ): AppError {
-    return new AppError({
-      code: 'VERIFICATION_OTP_INVALID',
-      category: 'validation',
-      statusCode: HttpStatus.BAD_REQUEST,
+    return AppError.createValidationError(
+      'VERIFICATION_OTP_INVALID',
       publicMessage,
-    });
+    );
   }
 
   static verificationOtpExpired(
     publicMessage = 'The verification code has expired.',
   ): AppError {
-    return new AppError({
-      code: 'VERIFICATION_OTP_EXPIRED',
-      category: 'validation',
-      statusCode: HttpStatus.BAD_REQUEST,
+    return AppError.createValidationError(
+      'VERIFICATION_OTP_EXPIRED',
       publicMessage,
-    });
+    );
   }
 
   static resetOtpInvalid(
     publicMessage = 'The password reset code is invalid.',
   ): AppError {
-    return new AppError({
-      code: 'RESET_OTP_INVALID',
-      category: 'validation',
-      statusCode: HttpStatus.BAD_REQUEST,
-      publicMessage,
-    });
+    return AppError.createValidationError('RESET_OTP_INVALID', publicMessage);
   }
 
   static resetOtpExpired(
     publicMessage = 'The password reset code has expired.',
   ): AppError {
-    return new AppError({
-      code: 'RESET_OTP_EXPIRED',
-      category: 'validation',
-      statusCode: HttpStatus.BAD_REQUEST,
-      publicMessage,
-    });
+    return AppError.createValidationError('RESET_OTP_EXPIRED', publicMessage);
   }
 
   static resetTokenInvalid(
     publicMessage = 'The password reset token is invalid.',
   ): AppError {
-    return new AppError({
-      code: 'RESET_TOKEN_INVALID',
-      category: 'validation',
-      statusCode: HttpStatus.BAD_REQUEST,
-      publicMessage,
-    });
+    return AppError.createValidationError('RESET_TOKEN_INVALID', publicMessage);
   }
 
   static resetTokenExpired(
     publicMessage = 'The password reset token has expired.',
   ): AppError {
-    return new AppError({
-      code: 'RESET_TOKEN_EXPIRED',
-      category: 'validation',
-      statusCode: HttpStatus.BAD_REQUEST,
-      publicMessage,
-    });
+    return AppError.createValidationError('RESET_TOKEN_EXPIRED', publicMessage);
   }
 
   static passwordPolicyFailed(
     publicMessage = 'The password does not meet security requirements.',
     details?: AppErrorDetails,
   ): AppError {
-    return new AppError({
-      code: 'PASSWORD_POLICY_FAILED',
-      category: 'validation',
-      statusCode: HttpStatus.BAD_REQUEST,
+    return AppError.createValidationError(
+      'PASSWORD_POLICY_FAILED',
       publicMessage,
       details,
-      exposeDetails: true,
-    });
+    );
   }
 
   static passwordConfirmationMismatch(
     publicMessage = 'Password confirmation does not match.',
   ): AppError {
-    return new AppError({
-      code: 'PASSWORD_CONFIRMATION_MISMATCH',
-      category: 'validation',
-      statusCode: HttpStatus.BAD_REQUEST,
+    return AppError.createValidationError(
+      'PASSWORD_CONFIRMATION_MISMATCH',
       publicMessage,
-    });
+    );
   }
 
   static accountDeactivated(
     publicMessage = 'This account has been deactivated.',
   ): AppError {
-    return new AppError({
-      code: 'ACCOUNT_DEACTIVATED',
-      category: 'authorization',
-      statusCode: HttpStatus.FORBIDDEN,
+    return AppError.createAuthorizationError(
+      'ACCOUNT_DEACTIVATED',
       publicMessage,
-    });
+    );
   }
 
   static accountDeleted(
     publicMessage = 'This account has been deleted.',
   ): AppError {
-    return new AppError({
-      code: 'ACCOUNT_DELETED',
-      category: 'authorization',
-      statusCode: HttpStatus.FORBIDDEN,
-      publicMessage,
-    });
+    return AppError.createAuthorizationError('ACCOUNT_DELETED', publicMessage);
   }
 
   static sessionRevoked(
     publicMessage = 'The session has been revoked.',
   ): AppError {
-    return new AppError({
-      code: 'SESSION_REVOKED',
-      category: 'authentication',
-      statusCode: HttpStatus.UNAUTHORIZED,
-      publicMessage,
-    });
+    return AppError.createAuthenticationError('SESSION_REVOKED', publicMessage);
   }
 
   static sessionNotFound(
     publicMessage = 'The requested session was not found.',
     details?: AppErrorDetails,
   ): AppError {
-    return new AppError({
-      code: 'SESSION_NOT_FOUND',
-      category: 'not_found',
-      statusCode: HttpStatus.NOT_FOUND,
+    return AppError.createNotFoundError(
+      'SESSION_NOT_FOUND',
       publicMessage,
       details,
-      exposeDetails: true,
-    });
+    );
   }
 
   static userNotFound(
     publicMessage = 'The requested user was not found.',
     details?: AppErrorDetails,
   ): AppError {
-    return new AppError({
-      code: 'USER_NOT_FOUND',
-      category: 'not_found',
-      statusCode: HttpStatus.NOT_FOUND,
+    return AppError.createNotFoundError(
+      'USER_NOT_FOUND',
       publicMessage,
       details,
-      exposeDetails: true,
-    });
+    );
   }
 
   static userAlreadyDeactivated(
     publicMessage = 'This user is already deactivated.',
     details?: AppErrorDetails,
   ): AppError {
-    return new AppError({
-      code: 'USER_ALREADY_DEACTIVATED',
-      category: 'conflict',
-      statusCode: HttpStatus.CONFLICT,
+    return AppError.createConflictError(
+      'USER_ALREADY_DEACTIVATED',
       publicMessage,
       details,
-      exposeDetails: true,
-    });
+    );
   }
 
   static userAlreadyActive(
     publicMessage = 'This user is already active.',
     details?: AppErrorDetails,
   ): AppError {
-    return new AppError({
-      code: 'USER_ALREADY_ACTIVE',
-      category: 'conflict',
-      statusCode: HttpStatus.CONFLICT,
+    return AppError.createConflictError(
+      'USER_ALREADY_ACTIVE',
       publicMessage,
       details,
-      exposeDetails: true,
-    });
+    );
   }
 
   static cannotDeleteSelf(
     publicMessage = 'You cannot perform this deletion action on your own account.',
   ): AppError {
-    return new AppError({
-      code: 'CANNOT_DELETE_SELF',
-      category: 'conflict',
-      statusCode: HttpStatus.CONFLICT,
-      publicMessage,
-    });
+    return AppError.createConflictError('CANNOT_DELETE_SELF', publicMessage);
   }
 
   static superAdminRequired(
     publicMessage = 'Super admin access is required.',
   ): AppError {
-    return new AppError({
-      code: 'SUPER_ADMIN_REQUIRED',
-      category: 'authorization',
-      statusCode: HttpStatus.FORBIDDEN,
+    return AppError.createAuthorizationError(
+      'SUPER_ADMIN_REQUIRED',
       publicMessage,
-    });
+    );
   }
 
   static adminAccessRequired(
     publicMessage = 'Admin access is required.',
   ): AppError {
-    return new AppError({
-      code: 'ADMIN_ACCESS_REQUIRED',
-      category: 'authorization',
-      statusCode: HttpStatus.FORBIDDEN,
+    return AppError.createAuthorizationError(
+      'ADMIN_ACCESS_REQUIRED',
       publicMessage,
-    });
+    );
   }
 
   static avatarInvalidFileType(
     publicMessage = 'The avatar file type is not supported.',
     details?: AppErrorDetails,
   ): AppError {
-    return new AppError({
-      code: 'AVATAR_INVALID_FILE_TYPE',
-      category: 'validation',
-      statusCode: HttpStatus.BAD_REQUEST,
+    return AppError.createValidationError(
+      'AVATAR_INVALID_FILE_TYPE',
       publicMessage,
       details,
-      exposeDetails: true,
-    });
+    );
   }
 
   static avatarFileTooLarge(
@@ -559,111 +573,91 @@ export class AppError extends Error {
   }
 
   static avatarUploadFailed(cause?: unknown): AppError {
-    return new AppError({
-      code: 'AVATAR_UPLOAD_FAILED',
-      category: 'external_provider',
-      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
-      publicMessage: 'Avatar upload failed. Please try again later.',
+    return AppError.createExternalProviderError(
+      'AVATAR_UPLOAD_FAILED',
+      'Avatar upload failed. Please try again later.',
       cause,
-    });
+    );
   }
 
   static guestSessionRequired(
     publicMessage = 'A guest session is required for this action.',
   ): AppError {
-    return new AppError({
-      code: 'GUEST_SESSION_REQUIRED',
-      category: 'authentication',
-      statusCode: HttpStatus.UNAUTHORIZED,
+    return AppError.createAuthenticationError(
+      'GUEST_SESSION_REQUIRED',
       publicMessage,
-    });
+    );
   }
 
   static guestSessionExpired(
     publicMessage = 'The guest session has expired.',
   ): AppError {
-    return new AppError({
-      code: 'GUEST_SESSION_EXPIRED',
-      category: 'authentication',
-      statusCode: HttpStatus.UNAUTHORIZED,
+    return AppError.createAuthenticationError(
+      'GUEST_SESSION_EXPIRED',
       publicMessage,
-    });
+    );
   }
 
   static guestSessionRevoked(
     publicMessage = 'The guest session has been revoked.',
   ): AppError {
-    return new AppError({
-      code: 'GUEST_SESSION_REVOKED',
-      category: 'authentication',
-      statusCode: HttpStatus.UNAUTHORIZED,
+    return AppError.createAuthenticationError(
+      'GUEST_SESSION_REVOKED',
       publicMessage,
-    });
+    );
   }
 
   static guestConversionRequired(
     publicMessage = 'Please create an account to continue.',
   ): AppError {
-    return new AppError({
-      code: 'GUEST_CONVERSION_REQUIRED',
-      category: 'authorization',
-      statusCode: HttpStatus.FORBIDDEN,
+    return AppError.createAuthorizationError(
+      'GUEST_CONVERSION_REQUIRED',
       publicMessage,
-    });
+    );
   }
 
   static guestConversionFailed(cause?: unknown): AppError {
-    return new AppError({
-      code: 'GUEST_CONVERSION_FAILED',
-      category: 'external_provider',
-      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
-      publicMessage: 'Guest account conversion failed. Please try again later.',
+    return AppError.createExternalProviderError(
+      'GUEST_CONVERSION_FAILED',
+      'Guest account conversion failed. Please try again later.',
       cause,
-    });
+    );
   }
 
   static guestAlreadyConverted(
     publicMessage = 'This guest session has already been converted.',
   ): AppError {
-    return new AppError({
-      code: 'GUEST_ALREADY_CONVERTED',
-      category: 'conflict',
-      statusCode: HttpStatus.CONFLICT,
+    return AppError.createConflictError(
+      'GUEST_ALREADY_CONVERTED',
       publicMessage,
-    });
+    );
   }
 
   static guestCannotAccessResource(
     publicMessage = 'Guest users cannot access this resource.',
   ): AppError {
-    return new AppError({
-      code: 'GUEST_CANNOT_ACCESS_RESOURCE',
-      category: 'authorization',
-      statusCode: HttpStatus.FORBIDDEN,
+    return AppError.createAuthorizationError(
+      'GUEST_CANNOT_ACCESS_RESOURCE',
       publicMessage,
-    });
+    );
   }
 
   static guestCannotCreateBooking(
     publicMessage = 'Guest users cannot create confirmed bookings.',
   ): AppError {
-    return new AppError({
-      code: 'GUEST_CANNOT_CREATE_BOOKING',
-      category: 'authorization',
-      statusCode: HttpStatus.FORBIDDEN,
+    return AppError.createAuthorizationError(
+      'GUEST_CANNOT_CREATE_BOOKING',
       publicMessage,
-    });
+    );
   }
 
   static guestCannotAccessBookingHistory(
     publicMessage = 'Guest users cannot access booking history.',
   ): AppError {
-    return new AppError({
-      code: 'GUEST_CANNOT_ACCESS_BOOKING_HISTORY',
-      category: 'authorization',
-      statusCode: HttpStatus.FORBIDDEN,
+    return AppError.createAuthorizationError(
+      'GUEST_CANNOT_ACCESS_BOOKING_HISTORY',
       publicMessage,
-    });
+    );
   }
 
   static guestRateLimited(
@@ -681,81 +675,63 @@ export class AppError extends Error {
     publicMessage = 'A staff account with this email already exists.',
     details?: AppErrorDetails,
   ): AppError {
-    return new AppError({
-      code: 'STAFF_EMAIL_ALREADY_EXISTS',
-      category: 'conflict',
-      statusCode: HttpStatus.CONFLICT,
+    return AppError.createConflictError(
+      'STAFF_EMAIL_ALREADY_EXISTS',
       publicMessage,
       details,
-      exposeDetails: true,
-    });
+    );
   }
 
   static staffNotFound(
     publicMessage = 'The requested staff member was not found.',
     details?: AppErrorDetails,
   ): AppError {
-    return new AppError({
-      code: 'STAFF_NOT_FOUND',
-      category: 'not_found',
-      statusCode: HttpStatus.NOT_FOUND,
+    return AppError.createNotFoundError(
+      'STAFF_NOT_FOUND',
       publicMessage,
       details,
-      exposeDetails: true,
-    });
+    );
   }
 
   static staffRoleNotAllowed(
     publicMessage = 'This staff role is not allowed for this operation.',
     details?: AppErrorDetails,
   ): AppError {
-    return new AppError({
-      code: 'STAFF_ROLE_NOT_ALLOWED',
-      category: 'authorization',
-      statusCode: HttpStatus.FORBIDDEN,
+    return AppError.createAuthorizationError(
+      'STAFF_ROLE_NOT_ALLOWED',
       publicMessage,
       details,
-      exposeDetails: true,
-    });
+    );
   }
 
   static staffPasswordInvalid(
     publicMessage = 'The staff password is invalid.',
     details?: AppErrorDetails,
   ): AppError {
-    return new AppError({
-      code: 'STAFF_PASSWORD_INVALID',
-      category: 'validation',
-      statusCode: HttpStatus.BAD_REQUEST,
+    return AppError.createValidationError(
+      'STAFF_PASSWORD_INVALID',
       publicMessage,
       details,
-      exposeDetails: true,
-    });
+    );
   }
 
   static staffAvailabilityInvalid(
     publicMessage = 'The staff availability is invalid.',
     details?: AppErrorDetails,
   ): AppError {
-    return new AppError({
-      code: 'STAFF_AVAILABILITY_INVALID',
-      category: 'validation',
-      statusCode: HttpStatus.BAD_REQUEST,
+    return AppError.createValidationError(
+      'STAFF_AVAILABILITY_INVALID',
       publicMessage,
       details,
-      exposeDetails: true,
-    });
+    );
   }
 
   static staffAuthUserCreationFailed(cause?: unknown): AppError {
-    return new AppError({
-      code: 'STAFF_AUTH_USER_CREATION_FAILED',
-      category: 'external_provider',
-      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
-      publicMessage:
-        'Staff login account creation failed. Please try again later.',
+    return AppError.createExternalProviderError(
+      'STAFF_AUTH_USER_CREATION_FAILED',
+      'Staff login account creation failed. Please try again later.',
       cause,
-    });
+    );
   }
 
   static staffProfileCreationFailed(cause?: unknown): AppError {
@@ -772,67 +748,317 @@ export class AppError extends Error {
     publicMessage = 'This staff member cannot be deleted because related records still depend on it.',
     details?: AppErrorDetails,
   ): AppError {
-    return new AppError({
-      code: 'STAFF_DELETE_BLOCKED',
-      category: 'conflict',
-      statusCode: HttpStatus.CONFLICT,
+    return AppError.createConflictError(
+      'STAFF_DELETE_BLOCKED',
       publicMessage,
       details,
-      exposeDetails: true,
-    });
+    );
   }
 
   static staffAlreadyDeactivated(
     publicMessage = 'This staff member is already deactivated.',
     details?: AppErrorDetails,
   ): AppError {
-    return new AppError({
-      code: 'STAFF_ALREADY_DEACTIVATED',
-      category: 'conflict',
-      statusCode: HttpStatus.CONFLICT,
+    return AppError.createConflictError(
+      'STAFF_ALREADY_DEACTIVATED',
       publicMessage,
       details,
-      exposeDetails: true,
-    });
+    );
   }
 
   static staffAlreadyActive(
     publicMessage = 'This staff member is already active.',
     details?: AppErrorDetails,
   ): AppError {
-    return new AppError({
-      code: 'STAFF_ALREADY_ACTIVE',
-      category: 'conflict',
-      statusCode: HttpStatus.CONFLICT,
+    return AppError.createConflictError(
+      'STAFF_ALREADY_ACTIVE',
       publicMessage,
       details,
-      exposeDetails: true,
-    });
+    );
   }
 
   static staffAlreadyDeleted(
     publicMessage = 'This staff member is already deleted.',
     details?: AppErrorDetails,
   ): AppError {
+    return AppError.createConflictError(
+      'STAFF_ALREADY_DELETED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static staffEmptyUpdate(
+    publicMessage = 'At least one staff field must be provided for update.',
+  ): AppError {
+    return AppError.createValidationError('STAFF_EMPTY_UPDATE', publicMessage);
+  }
+
+  static pilatesClassNotFound(
+    publicMessage = 'The requested Pilates class was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'PILATES_CLASS_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesClassAlreadyDeleted(
+    publicMessage = 'This Pilates class is already deleted.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PILATES_CLASS_ALREADY_DELETED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesClassEmptyUpdate(
+    publicMessage = 'At least one Pilates class field must be provided for update.',
+  ): AppError {
+    return AppError.createValidationError(
+      'PILATES_CLASS_EMPTY_UPDATE',
+      publicMessage,
+    );
+  }
+
+  static pilatesClassInvalidStatus(
+    publicMessage = 'The Pilates class status is invalid for this operation.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PILATES_CLASS_INVALID_STATUS',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesClassTitleAlreadyExists(
+    publicMessage = 'A Pilates class with this title already exists.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PILATES_CLASS_TITLE_ALREADY_EXISTS',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesClassDeleteBlocked(
+    publicMessage = 'This Pilates class cannot be deleted because related schedules still depend on it.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PILATES_CLASS_DELETE_BLOCKED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesScheduleNotFound(
+    publicMessage = 'The requested Pilates class schedule was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'PILATES_SCHEDULE_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesScheduleInvalidTime(
+    publicMessage = 'The Pilates class schedule time is invalid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PILATES_SCHEDULE_INVALID_TIME',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesScheduleDateInPast(
+    publicMessage = 'A Pilates class schedule cannot be created in the past.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PILATES_SCHEDULE_DATE_IN_PAST',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesScheduleConflict(
+    publicMessage = 'The Pilates class schedule conflicts with an existing schedule.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PILATES_SCHEDULE_CONFLICT',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesScheduleAlreadyCancelled(
+    publicMessage = 'This Pilates class schedule is already cancelled.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PILATES_SCHEDULE_ALREADY_CANCELLED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesScheduleAlreadyDeleted(
+    publicMessage = 'This Pilates class schedule is already deleted.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PILATES_SCHEDULE_ALREADY_DELETED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesScheduleAlreadyCompleted(
+    publicMessage = 'This Pilates class schedule is already completed.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PILATES_SCHEDULE_ALREADY_COMPLETED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesScheduleEmptyUpdate(
+    publicMessage = 'At least one Pilates schedule field must be provided for update.',
+  ): AppError {
+    return AppError.createValidationError(
+      'PILATES_SCHEDULE_EMPTY_UPDATE',
+      publicMessage,
+    );
+  }
+
+  static pilatesTrainerRequired(
+    publicMessage = 'A Pilates trainer is required for this schedule.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PILATES_TRAINER_REQUIRED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesTrainerNotFound(
+    publicMessage = 'The selected Pilates trainer was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'PILATES_TRAINER_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesTrainerInactive(
+    publicMessage = 'The selected Pilates trainer is not active.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PILATES_TRAINER_INACTIVE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesTrainerNotAvailable(
+    publicMessage = 'The selected Pilates trainer is not available for this time slot.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PILATES_TRAINER_NOT_AVAILABLE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesCapacityInvalid(
+    publicMessage = 'The Pilates class capacity is invalid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PILATES_CAPACITY_INVALID',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesDurationInvalid(
+    publicMessage = 'The Pilates class duration is invalid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PILATES_DURATION_INVALID',
+      publicMessage,
+      details,
+    );
+  }
+  static pilatesClassImageRequired(
+    publicMessage = 'A Pilates class image file is required.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PILATES_CLASS_IMAGE_REQUIRED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesClassImageInvalidFileType(
+    publicMessage = 'The Pilates class image file type is not supported.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PILATES_CLASS_IMAGE_INVALID_FILE_TYPE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesClassImageFileTooLarge(
+    publicMessage = 'The Pilates class image file is too large.',
+    details?: AppErrorDetails,
+  ): AppError {
     return new AppError({
-      code: 'STAFF_ALREADY_DELETED',
-      category: 'conflict',
-      statusCode: HttpStatus.CONFLICT,
+      code: 'PILATES_CLASS_IMAGE_FILE_TOO_LARGE',
+      category: 'validation',
+      statusCode: HttpStatus.PAYLOAD_TOO_LARGE,
       publicMessage,
       details,
       exposeDetails: true,
     });
   }
 
-  static staffEmptyUpdate(
-    publicMessage = 'At least one staff field must be provided for update.',
-  ): AppError {
-    return new AppError({
-      code: 'STAFF_EMPTY_UPDATE',
-      category: 'validation',
-      statusCode: HttpStatus.BAD_REQUEST,
-      publicMessage,
-    });
+  static pilatesClassImageUploadFailed(cause?: unknown): AppError {
+    return AppError.createExternalProviderError(
+      'PILATES_CLASS_IMAGE_UPLOAD_FAILED',
+      'Pilates class image upload failed. Please try again later.',
+      cause,
+    );
+  }
+
+  static pilatesClassImageDeleteFailed(cause?: unknown): AppError {
+    return AppError.createExternalProviderError(
+      'PILATES_CLASS_IMAGE_DELETE_FAILED',
+      'Pilates class image deletion failed. Please try again later.',
+      cause,
+    );
   }
 }
 

@@ -31,6 +31,10 @@ tags:
     description: Authenticated frontend bootstrapping context endpoint
   - name: Staff - Admin
     description: Protected admin staff and trainer management endpoints
+  - name: Pilates - Public
+    description: Public Pilates class and schedule browsing endpoints
+  - name: Pilates - Admin
+    description: Protected admin Pilates class and schedule management endpoints
 paths:
   /:
     get:
@@ -1100,6 +1104,743 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StaffMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /pilates/classes:
+    get:
+      summary: List public Pilates classes
+      description: Returns active public Pilates class definitions. Optional schedule-aware filters can restrict classes by trainer and date range.
+      operationId: pilatesPublicListClasses
+      tags:
+        - Pilates - Public
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 160
+          description: Search text for Pilates class title or description.
+        - name: level
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PilatesClassLevel'
+        - name: trainer_staff_profile_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Trainer staff profile id used for schedule-aware public filtering.
+        - name: from_date
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-06-15'
+          description: Start date for schedule-aware filtering.
+        - name: to_date
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-06-30'
+          description: End date for schedule-aware filtering.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PilatesClassSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PilatesSortDirection'
+      responses:
+        '200':
+          description: Pilates classes retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesClassPublicListSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /pilates/classes/{classId}:
+    get:
+      summary: Get public Pilates class details
+      description: Returns one active public Pilates class definition by id.
+      operationId: pilatesPublicGetClassById
+      tags:
+        - Pilates - Public
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Pilates class id.
+      responses:
+        '200':
+          description: Pilates class retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesClassPublicDetailSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /pilates/schedules:
+    get:
+      summary: List public Pilates schedules
+      description: Returns future scheduled Pilates class occurrences for active public classes.
+      operationId: pilatesPublicListSchedules
+      tags:
+        - Pilates - Public
+      parameters:
+        - name: class_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Pilates class id.
+        - name: trainer_staff_profile_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Trainer staff profile id.
+        - name: studio
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 120
+          description: Studio or room name.
+        - name: from_date
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-06-15'
+        - name: to_date
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-06-30'
+        - name: only_available
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Prepared for booking-module availability filtering.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PilatesScheduleSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PilatesSortDirection'
+      responses:
+        '200':
+          description: Pilates schedules retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesSchedulePublicListSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /pilates/schedules/{scheduleId}:
+    get:
+      summary: Get public Pilates schedule details
+      description: Returns one future scheduled Pilates class occurrence by id.
+      operationId: pilatesPublicGetScheduleById
+      tags:
+        - Pilates - Public
+      parameters:
+        - name: scheduleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Pilates schedule id.
+      responses:
+        '200':
+          description: Pilates schedule retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesSchedulePublicDetailSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/pilates/classes:
+    get:
+      summary: List admin Pilates classes
+      description: Returns Pilates class definitions for admin management.
+      operationId: pilatesAdminListClasses
+      tags:
+        - Pilates - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 160
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PilatesClassStatus'
+        - name: level
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PilatesClassLevel'
+        - name: include_deleted
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PilatesClassSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PilatesSortDirection'
+      responses:
+        '200':
+          description: Pilates classes retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesClassAdminListSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+
+    post:
+      summary: Create Pilates class
+      description: Creates a reusable Pilates class definition. Schedules are created separately.
+      operationId: pilatesAdminCreateClass
+      tags:
+        - Pilates - Admin
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePilatesClassRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreatePilatesClassMultipartRequest'
+      responses:
+        '201':
+          description: Pilates class created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesClassAdminMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/pilates/classes/{classId}:
+    get:
+      summary: Get admin Pilates class details
+      description: Returns one Pilates class definition for admin management.
+      operationId: pilatesAdminGetClassById
+      tags:
+        - Pilates - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Pilates class id.
+      responses:
+        '200':
+          description: Pilates class retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesClassAdminDetailSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update Pilates class
+      description: Updates a reusable Pilates class definition. Existing schedules are not automatically modified.
+      operationId: pilatesAdminUpdateClass
+      tags:
+        - Pilates - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Pilates class id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePilatesClassRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UpdatePilatesClassMultipartRequest'
+      responses:
+        '200':
+          description: Pilates class updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesClassAdminMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+    delete:
+      summary: Delete Pilates class
+      description: Soft deletes a Pilates class when no scheduled active occurrences depend on it.
+      operationId: pilatesAdminDeleteClass
+      tags:
+        - Pilates - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Pilates class id.
+      responses:
+        '200':
+          description: Pilates class deleted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesDeleteSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/pilates/schedules:
+    get:
+      summary: List admin Pilates schedules
+      description: Returns Pilates class schedules for admin management.
+      operationId: pilatesAdminListSchedules
+      tags:
+        - Pilates - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: class_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: trainer_staff_profile_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PilatesScheduleStatus'
+        - name: studio
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 120
+        - name: from_date
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-06-15'
+        - name: to_date
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-06-30'
+        - name: include_deleted
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PilatesScheduleSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PilatesSortDirection'
+      responses:
+        '200':
+          description: Pilates schedules retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesScheduleAdminListSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+
+    post:
+      summary: Create Pilates schedule
+      description: Creates a bookable Pilates class occurrence. Backend calculates end_time from start_time and duration_minutes.
+      operationId: pilatesAdminCreateSchedule
+      tags:
+        - Pilates - Admin
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePilatesScheduleRequest'
+      responses:
+        '201':
+          description: Pilates schedule created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesScheduleAdminMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/pilates/schedules/{scheduleId}:
+    get:
+      summary: Get admin Pilates schedule details
+      description: Returns one Pilates class schedule for admin management.
+      operationId: pilatesAdminGetScheduleById
+      tags:
+        - Pilates - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: scheduleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Pilates schedule id.
+      responses:
+        '200':
+          description: Pilates schedule retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesScheduleAdminDetailSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update Pilates schedule
+      description: Updates a scheduled Pilates occurrence. Lifecycle changes use dedicated cancel, complete, or delete endpoints.
+      operationId: pilatesAdminUpdateSchedule
+      tags:
+        - Pilates - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: scheduleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Pilates schedule id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePilatesScheduleRequest'
+      responses:
+        '200':
+          description: Pilates schedule updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesScheduleAdminMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+    delete:
+      summary: Delete Pilates schedule
+      description: Soft deletes a Pilates schedule when allowed by lifecycle rules.
+      operationId: pilatesAdminDeleteSchedule
+      tags:
+        - Pilates - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: scheduleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Pilates schedule id.
+      responses:
+        '200':
+          description: Pilates schedule deleted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesDeleteSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/pilates/schedules/{scheduleId}/cancel:
+    post:
+      summary: Cancel Pilates schedule
+      description: Cancels a scheduled Pilates occurrence and stores a cancellation reason.
+      operationId: pilatesAdminCancelSchedule
+      tags:
+        - Pilates - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: scheduleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Pilates schedule id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelPilatesScheduleRequest'
+      responses:
+        '200':
+          description: Pilates schedule cancelled successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesScheduleAdminMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/pilates/schedules/{scheduleId}/complete:
+    post:
+      summary: Complete Pilates schedule
+      description: Marks a scheduled Pilates occurrence as completed.
+      operationId: pilatesAdminCompleteSchedule
+      tags:
+        - Pilates - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: scheduleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Pilates schedule id.
+      responses:
+        '200':
+          description: Pilates schedule completed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilatesScheduleAdminMutationSuccessResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -2908,6 +3649,908 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/StaffDeleteData'
+    PilatesClassLevel:
+      type: string
+      enum:
+        - beginner
+        - intermediate
+        - advanced
+        - all_levels
+      example: all_levels
+
+    PilatesClassStatus:
+      type: string
+      enum:
+        - draft
+        - active
+        - inactive
+        - deleted
+      example: active
+
+    PilatesClassMutableStatus:
+      type: string
+      enum:
+        - draft
+        - active
+        - inactive
+      example: active
+
+    PilatesScheduleStatus:
+      type: string
+      enum:
+        - scheduled
+        - cancelled
+        - completed
+        - deleted
+      example: scheduled
+
+    PilatesClassSortField:
+      type: string
+      enum:
+        - title
+        - status
+        - level
+        - created_at
+        - updated_at
+      example: created_at
+
+    PilatesScheduleSortField:
+      type: string
+      enum:
+        - class_date
+        - start_time
+        - status
+        - created_at
+        - updated_at
+      example: class_date
+
+    PilatesSortDirection:
+      type: string
+      enum:
+        - asc
+        - desc
+      example: asc
+
+    PilatesTrainerSummary:
+      type: object
+      required:
+        - id
+        - app_user_id
+        - display_name
+        - post_title
+        - bio
+        - specialties
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        app_user_id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+          example: Sarah Pilates Trainer
+        post_title:
+          type: string
+          nullable: true
+          example: Senior Pilates Trainer
+        bio:
+          type: string
+          nullable: true
+          example: Certified Pilates trainer with reformer experience.
+        specialties:
+          type: array
+          items:
+            type: string
+          example:
+            - Reformer Pilates
+            - Mat Pilates
+        status:
+          $ref: '#/components/schemas/StaffProfileStatus'
+
+    PilatesAvailabilitySnapshot:
+      type: object
+      required:
+        - capacity
+        - booked_count
+        - available_seats
+        - waitlist_count
+        - waitlist_available
+        - realtime_version
+      properties:
+        capacity:
+          type: integer
+          minimum: 1
+          example: 8
+        booked_count:
+          type: integer
+          minimum: 0
+          example: 0
+        available_seats:
+          type: integer
+          minimum: 0
+          example: 8
+        waitlist_count:
+          type: integer
+          minimum: 0
+          example: 0
+        waitlist_available:
+          type: boolean
+          example: false
+        realtime_version:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 3
+
+    PilatesClassAdminSummary:
+      type: object
+      required:
+        - id
+        - title
+        - description
+        - default_duration_minutes
+        - default_capacity
+        - level
+        - status
+        - image_path
+        - image_url
+        - created_by_admin_id
+        - updated_by_admin_id
+        - created_at
+        - updated_at
+        - deleted_at
+        - realtime_version
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: Reformer Pilates
+        description:
+          type: string
+          nullable: true
+          example: A low-impact full-body reformer session focused on strength and balance.
+        default_duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 240
+          example: 60
+        default_capacity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 8
+        level:
+          $ref: '#/components/schemas/PilatesClassLevel'
+        status:
+          $ref: '#/components/schemas/PilatesClassStatus'
+        image_path:
+          type: string
+          nullable: true
+          description: Backend-owned Supabase Storage object path.
+          example: classes/6f3d4a2b-8b31-4e57-a735-8bba18bb2a8f/cover.webp
+        image_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Public URL generated from the backend-owned image_path.
+          example: https://example.supabase.co/storage/v1/object/public/pilates-class-images/classes/6f3d4a2b-8b31-4e57-a735-8bba18bb2a8f/cover.webp
+        created_by_admin_id:
+          type: string
+          format: uuid
+        updated_by_admin_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        realtime_version:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 3
+
+    PilatesClassAdminDetail:
+      allOf:
+        - $ref: '#/components/schemas/PilatesClassAdminSummary'
+
+    PilatesClassPublicSummary:
+      type: object
+      required:
+        - id
+        - title
+        - description
+        - default_duration_minutes
+        - default_capacity
+        - level
+        - image_url
+        - realtime_version
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: Reformer Pilates
+        description:
+          type: string
+          nullable: true
+          example: A low-impact full-body reformer session focused on strength and balance.
+        default_duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 240
+          example: 60
+        default_capacity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 8
+        level:
+          $ref: '#/components/schemas/PilatesClassLevel'
+        image_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Public Pilates class image URL.
+          example: https://example.supabase.co/storage/v1/object/public/pilates-class-images/classes/6f3d4a2b-8b31-4e57-a735-8bba18bb2a8f/cover.webp
+        realtime_version:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 3
+
+    PilatesClassPublicDetail:
+      allOf:
+        - $ref: '#/components/schemas/PilatesClassPublicSummary'
+
+    PilatesScheduleAdminSummary:
+      type: object
+      required:
+        - id
+        - class_id
+        - trainer_staff_profile_id
+        - studio
+        - class_date
+        - start_time
+        - end_time
+        - duration_minutes
+        - capacity
+        - status
+        - cancellation_reason
+        - created_by_admin_id
+        - updated_by_admin_id
+        - created_at
+        - updated_at
+        - cancelled_at
+        - completed_at
+        - deleted_at
+        - realtime_version
+        - class
+        - trainer
+        - availability
+      properties:
+        id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+        studio:
+          type: string
+          example: LAFAM Pilates Studio
+        class_date:
+          type: string
+          format: date
+          example: '2026-06-15'
+        start_time:
+          type: string
+          example: '10:00'
+        end_time:
+          type: string
+          example: '11:00'
+        duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 240
+          example: 60
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 8
+        status:
+          $ref: '#/components/schemas/PilatesScheduleStatus'
+        cancellation_reason:
+          type: string
+          nullable: true
+          example: Trainer is unavailable due to emergency.
+        created_by_admin_id:
+          type: string
+          format: uuid
+        updated_by_admin_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        realtime_version:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 3
+        class:
+          $ref: '#/components/schemas/PilatesClassAdminSummary'
+        trainer:
+          $ref: '#/components/schemas/PilatesTrainerSummary'
+        availability:
+          $ref: '#/components/schemas/PilatesAvailabilitySnapshot'
+
+    PilatesScheduleAdminDetail:
+      allOf:
+        - $ref: '#/components/schemas/PilatesScheduleAdminSummary'
+
+    PilatesSchedulePublicSummary:
+      type: object
+      required:
+        - id
+        - studio
+        - class_date
+        - start_time
+        - end_time
+        - duration_minutes
+        - capacity
+        - status
+        - realtime_version
+        - class
+        - trainer
+        - availability
+      properties:
+        id:
+          type: string
+          format: uuid
+        studio:
+          type: string
+          example: LAFAM Pilates Studio
+        class_date:
+          type: string
+          format: date
+          example: '2026-06-15'
+        start_time:
+          type: string
+          example: '10:00'
+        end_time:
+          type: string
+          example: '11:00'
+        duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 240
+          example: 60
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 8
+        status:
+          $ref: '#/components/schemas/PilatesScheduleStatus'
+        realtime_version:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 3
+        class:
+          $ref: '#/components/schemas/PilatesClassPublicSummary'
+        trainer:
+          $ref: '#/components/schemas/PilatesTrainerSummary'
+        availability:
+          $ref: '#/components/schemas/PilatesAvailabilitySnapshot'
+
+    PilatesSchedulePublicDetail:
+      allOf:
+        - $ref: '#/components/schemas/PilatesSchedulePublicSummary'
+
+    CreatePilatesClassRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+          example: Reformer Pilates
+        description:
+          type: string
+          nullable: true
+          maxLength: 2000
+          example: A low-impact full-body reformer session focused on strength and balance.
+        default_duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 240
+          default: 60
+          example: 60
+        default_capacity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 8
+          example: 8
+        level:
+          $ref: '#/components/schemas/PilatesClassLevel'
+        status:
+          $ref: '#/components/schemas/PilatesClassMutableStatus'
+
+    CreatePilatesClassMultipartRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+          example: Reformer Pilates
+        description:
+          type: string
+          nullable: true
+          maxLength: 2000
+          example: A low-impact full-body reformer session focused on strength and balance.
+        default_duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 240
+          default: 60
+          example: 60
+        default_capacity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 8
+          example: 8
+        level:
+          $ref: '#/components/schemas/PilatesClassLevel'
+        status:
+          $ref: '#/components/schemas/PilatesClassMutableStatus'
+        image:
+          type: string
+          format: binary
+          description: 'Optional Pilates class cover image. Allowed MIME types: image/jpeg, image/png, image/webp. Max size: 5 MB.'
+
+    UpdatePilatesClassRequest:
+      type: object
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+          example: Reformer Pilates
+        description:
+          type: string
+          nullable: true
+          maxLength: 2000
+          example: Updated Pilates class description.
+        default_duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 240
+          example: 60
+        default_capacity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 8
+        level:
+          $ref: '#/components/schemas/PilatesClassLevel'
+        status:
+          $ref: '#/components/schemas/PilatesClassMutableStatus'
+        remove_image:
+          type: boolean
+          default: false
+          example: false
+          description: Set to true to remove the existing Pilates class image.
+
+    UpdatePilatesClassMultipartRequest:
+      type: object
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+          example: Reformer Pilates
+        description:
+          type: string
+          nullable: true
+          maxLength: 2000
+          example: Updated Pilates class description.
+        default_duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 240
+          example: 60
+        default_capacity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 8
+        level:
+          $ref: '#/components/schemas/PilatesClassLevel'
+        status:
+          $ref: '#/components/schemas/PilatesClassMutableStatus'
+        remove_image:
+          type: boolean
+          default: false
+          example: false
+          description: Set to true to remove the existing Pilates class image. Cannot be used together with image.
+        image:
+          type: string
+          format: binary
+          description: 'Optional Pilates class replacement cover image. Allowed MIME types: image/jpeg, image/png, image/webp. Max size: 5 MB.'
+    CreatePilatesScheduleRequest:
+      type: object
+      required:
+        - class_id
+        - trainer_staff_profile_id
+        - class_date
+        - start_time
+      properties:
+        class_id:
+          type: string
+          format: uuid
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+        studio:
+          type: string
+          minLength: 1
+          maxLength: 120
+          default: LAFAM Pilates Studio
+          example: LAFAM Pilates Studio
+        class_date:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-06-15'
+        start_time:
+          type: string
+          pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
+          example: '10:00'
+        duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 240
+          default: 60
+          example: 60
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 8
+
+    UpdatePilatesScheduleRequest:
+      type: object
+      minProperties: 1
+      properties:
+        class_id:
+          type: string
+          format: uuid
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+        studio:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: LAFAM Pilates Studio
+        class_date:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-06-15'
+        start_time:
+          type: string
+          pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
+          example: '10:00'
+        duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 240
+          example: 60
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 8
+
+    CancelPilatesScheduleRequest:
+      type: object
+      required:
+        - cancellation_reason
+      properties:
+        cancellation_reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          example: Trainer is unavailable due to emergency.
+
+    PilatesClassAdminListData:
+      type: object
+      required:
+        - items
+        - total
+        - limit
+        - offset
+        - has_more
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PilatesClassAdminSummary'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+        has_more:
+          type: boolean
+
+    PilatesClassPublicListData:
+      type: object
+      required:
+        - items
+        - total
+        - limit
+        - offset
+        - has_more
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PilatesClassPublicSummary'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+        has_more:
+          type: boolean
+
+    PilatesScheduleAdminListData:
+      type: object
+      required:
+        - items
+        - total
+        - limit
+        - offset
+        - has_more
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PilatesScheduleAdminSummary'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+        has_more:
+          type: boolean
+
+    PilatesSchedulePublicListData:
+      type: object
+      required:
+        - items
+        - total
+        - limit
+        - offset
+        - has_more
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PilatesSchedulePublicSummary'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+        has_more:
+          type: boolean
+
+    PilatesClassAdminMutationData:
+      type: object
+      required:
+        - class
+      properties:
+        class:
+          $ref: '#/components/schemas/PilatesClassAdminSummary'
+
+    PilatesClassAdminDetailData:
+      type: object
+      required:
+        - class
+      properties:
+        class:
+          $ref: '#/components/schemas/PilatesClassAdminDetail'
+
+    PilatesClassPublicDetailData:
+      type: object
+      required:
+        - class
+      properties:
+        class:
+          $ref: '#/components/schemas/PilatesClassPublicDetail'
+
+    PilatesScheduleAdminMutationData:
+      type: object
+      required:
+        - schedule
+      properties:
+        schedule:
+          $ref: '#/components/schemas/PilatesScheduleAdminSummary'
+
+    PilatesScheduleAdminDetailData:
+      type: object
+      required:
+        - schedule
+      properties:
+        schedule:
+          $ref: '#/components/schemas/PilatesScheduleAdminDetail'
+
+    PilatesSchedulePublicDetailData:
+      type: object
+      required:
+        - schedule
+      properties:
+        schedule:
+          $ref: '#/components/schemas/PilatesSchedulePublicDetail'
+
+    PilatesDeleteData:
+      type: object
+      required:
+        - deleted
+        - id
+      properties:
+        deleted:
+          type: boolean
+          enum:
+            - true
+        id:
+          type: string
+          format: uuid
+
+    PilatesClassAdminListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PilatesClassAdminListData'
+
+    PilatesClassPublicListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PilatesClassPublicListData'
+
+    PilatesScheduleAdminListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PilatesScheduleAdminListData'
+
+    PilatesSchedulePublicListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PilatesSchedulePublicListData'
+
+    PilatesClassAdminMutationSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PilatesClassAdminMutationData'
+
+    PilatesClassAdminDetailSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PilatesClassAdminDetailData'
+
+    PilatesClassPublicDetailSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PilatesClassPublicDetailData'
+
+    PilatesScheduleAdminMutationSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PilatesScheduleAdminMutationData'
+
+    PilatesScheduleAdminDetailSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PilatesScheduleAdminDetailData'
+
+    PilatesSchedulePublicDetailSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PilatesSchedulePublicDetailData'
+
+    PilatesDeleteSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PilatesDeleteData'
   securitySchemes:
     BearerAuth:
       type: http

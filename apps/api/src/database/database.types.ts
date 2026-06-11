@@ -62,6 +62,24 @@ export type DatabaseStaffProfileStatus =
   | 'deactivated'
   | 'deleted';
 
+export type DatabasePilatesClassStatus =
+  | 'draft'
+  | 'active'
+  | 'inactive'
+  | 'deleted';
+
+export type DatabasePilatesClassScheduleStatus =
+  | 'scheduled'
+  | 'cancelled'
+  | 'completed'
+  | 'deleted';
+
+export type DatabasePilatesClassLevel =
+  | 'beginner'
+  | 'intermediate'
+  | 'advanced'
+  | 'all_levels';
+
 export interface Database {
   public: {
     Tables: {
@@ -416,11 +434,177 @@ export interface Database {
           },
         ];
       };
+
+      pilates_classes: {
+        Row: {
+          id: string;
+          title: string;
+          description: string | null;
+          default_duration_minutes: number;
+          default_capacity: number;
+          level: DatabasePilatesClassLevel;
+          status: DatabasePilatesClassStatus;
+          image_path: string | null;
+          created_by_admin_id: string | null;
+          updated_by_admin_id: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+          realtime_version: number;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          description?: string | null;
+          default_duration_minutes?: number;
+          default_capacity?: number;
+          level?: DatabasePilatesClassLevel;
+          status?: DatabasePilatesClassStatus;
+          image_path?: string | null;
+          created_by_admin_id?: string | null;
+          updated_by_admin_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+          realtime_version?: number;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          description?: string | null;
+          default_duration_minutes?: number;
+          default_capacity?: number;
+          level?: DatabasePilatesClassLevel;
+          status?: DatabasePilatesClassStatus;
+          image_path?: string | null;
+          created_by_admin_id?: string | null;
+          updated_by_admin_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+          realtime_version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'pilates_classes_created_by_admin_id_fkey';
+            columns: ['created_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'pilates_classes_updated_by_admin_id_fkey';
+            columns: ['updated_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      pilates_class_schedules: {
+        Row: {
+          id: string;
+          class_id: string;
+          trainer_staff_profile_id: string;
+          studio: string;
+          class_date: string;
+          start_time: string;
+          end_time: string;
+          duration_minutes: number;
+          capacity: number;
+          status: DatabasePilatesClassScheduleStatus;
+          cancellation_reason: string | null;
+          created_by_admin_id: string | null;
+          updated_by_admin_id: string | null;
+          created_at: string;
+          updated_at: string;
+          cancelled_at: string | null;
+          completed_at: string | null;
+          deleted_at: string | null;
+          realtime_version: number;
+        };
+        Insert: {
+          id?: string;
+          class_id: string;
+          trainer_staff_profile_id: string;
+          studio?: string;
+          class_date: string;
+          start_time: string;
+          end_time: string;
+          duration_minutes: number;
+          capacity: number;
+          status?: DatabasePilatesClassScheduleStatus;
+          cancellation_reason?: string | null;
+          created_by_admin_id?: string | null;
+          updated_by_admin_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          cancelled_at?: string | null;
+          completed_at?: string | null;
+          deleted_at?: string | null;
+          realtime_version?: number;
+        };
+        Update: {
+          id?: string;
+          class_id?: string;
+          trainer_staff_profile_id?: string;
+          studio?: string;
+          class_date?: string;
+          start_time?: string;
+          end_time?: string;
+          duration_minutes?: number;
+          capacity?: number;
+          status?: DatabasePilatesClassScheduleStatus;
+          cancellation_reason?: string | null;
+          created_by_admin_id?: string | null;
+          updated_by_admin_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          cancelled_at?: string | null;
+          completed_at?: string | null;
+          deleted_at?: string | null;
+          realtime_version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'pilates_class_schedules_class_id_fkey';
+            columns: ['class_id'];
+            isOneToOne: false;
+            referencedRelation: 'pilates_classes';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'pilates_class_schedules_trainer_staff_profile_id_fkey';
+            columns: ['trainer_staff_profile_id'];
+            isOneToOne: false;
+            referencedRelation: 'staff_profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'pilates_class_schedules_created_by_admin_id_fkey';
+            columns: ['created_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'pilates_class_schedules_updated_by_admin_id_fkey';
+            columns: ['updated_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
     Enums: {
       staff_profile_status: DatabaseStaffProfileStatus;
+      pilates_class_status: DatabasePilatesClassStatus;
+      pilates_class_schedule_status: DatabasePilatesClassScheduleStatus;
+      pilates_class_level: DatabasePilatesClassLevel;
     };
     CompositeTypes: Record<string, never>;
   };
@@ -464,6 +648,20 @@ export type StaffAvailabilityRuleInsert =
   Database['public']['Tables']['staff_availability_rules']['Insert'];
 export type StaffAvailabilityRuleUpdate =
   Database['public']['Tables']['staff_availability_rules']['Update'];
+
+export type PilatesClassRow =
+  Database['public']['Tables']['pilates_classes']['Row'];
+export type PilatesClassInsert =
+  Database['public']['Tables']['pilates_classes']['Insert'];
+export type PilatesClassUpdate =
+  Database['public']['Tables']['pilates_classes']['Update'];
+
+export type PilatesClassScheduleRow =
+  Database['public']['Tables']['pilates_class_schedules']['Row'];
+export type PilatesClassScheduleInsert =
+  Database['public']['Tables']['pilates_class_schedules']['Insert'];
+export type PilatesClassScheduleUpdate =
+  Database['public']['Tables']['pilates_class_schedules']['Update'];
 
 export type LAFAMSupabaseClient = SupabaseClient<Database>;
 

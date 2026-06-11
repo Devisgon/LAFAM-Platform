@@ -10,6 +10,7 @@
  * Important:
  * - Public API responses must stay safe and predictable.
  * - Raw provider errors, stack traces, tokens, secrets, and database details must not be returned.
+ * - Provider diagnostics are logged only after safe field selection.
  * - AppError is the preferred error type for expected application failures.
  */
 
@@ -44,6 +45,18 @@ interface HttpExceptionResponseObject {
   readonly statusCode?: unknown;
 }
 
+interface SafeErrorSummary {
+  readonly name?: string;
+  readonly message?: string;
+  readonly code?: string | number;
+  readonly status?: string | number;
+  readonly statusCode?: string | number;
+  readonly type?: string;
+  readonly reason?: string;
+  readonly details?: string;
+  readonly hint?: string;
+}
+
 const HTTP_STATUS = {
   BAD_REQUEST: 400,
   UNAUTHORIZED: 401,
@@ -53,6 +66,8 @@ const HTTP_STATUS = {
   TOO_MANY_REQUESTS: 429,
   INTERNAL_SERVER_ERROR: 500,
 } as const;
+
+const MAX_CAUSE_CHAIN_DEPTH = 5;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -147,6 +162,138 @@ function resolveHttpExceptionDetails(
   }
 
   return undefined;
+}
+
+function readStringField(
+  source: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = source[key];
+
+  return typeof value === 'string' && value.trim().length > 0
+    ? value
+    : undefined;
+}
+
+function readStringOrNumberField(
+  source: Record<string, unknown>,
+  key: string,
+): string | number | undefined {
+  const value = source[key];
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  return undefined;
+}
+
+function resolveErrorCause(error: unknown): unknown {
+  if (!isRecord(error)) {
+    return undefined;
+  }
+
+  return error.cause;
+}
+
+function summarizeSafeError(error: unknown): SafeErrorSummary {
+  if (error instanceof Error) {
+    const recordError = isRecord(error) ? error : {};
+
+    return {
+      name: error.name,
+      message: error.message,
+      ...(readStringOrNumberField(recordError, 'code')
+        ? { code: readStringOrNumberField(recordError, 'code') }
+        : {}),
+      ...(readStringOrNumberField(recordError, 'status')
+        ? { status: readStringOrNumberField(recordError, 'status') }
+        : {}),
+      ...(readStringOrNumberField(recordError, 'statusCode')
+        ? { statusCode: readStringOrNumberField(recordError, 'statusCode') }
+        : {}),
+      ...(readStringField(recordError, 'type')
+        ? { type: readStringField(recordError, 'type') }
+        : {}),
+      ...(readStringField(recordError, 'reason')
+        ? { reason: readStringField(recordError, 'reason') }
+        : {}),
+      ...(readStringField(recordError, 'details')
+        ? { details: readStringField(recordError, 'details') }
+        : {}),
+      ...(readStringField(recordError, 'hint')
+        ? { hint: readStringField(recordError, 'hint') }
+        : {}),
+    };
+  }
+
+  if (isRecord(error)) {
+    return {
+      ...(readStringField(error, 'name')
+        ? { name: readStringField(error, 'name') }
+        : {}),
+      ...(readStringField(error, 'message')
+        ? { message: readStringField(error, 'message') }
+        : {}),
+      ...(readStringOrNumberField(error, 'code')
+        ? { code: readStringOrNumberField(error, 'code') }
+        : {}),
+      ...(readStringOrNumberField(error, 'status')
+        ? { status: readStringOrNumberField(error, 'status') }
+        : {}),
+      ...(readStringOrNumberField(error, 'statusCode')
+        ? { statusCode: readStringOrNumberField(error, 'statusCode') }
+        : {}),
+      ...(readStringField(error, 'type')
+        ? { type: readStringField(error, 'type') }
+        : {}),
+      ...(readStringField(error, 'reason')
+        ? { reason: readStringField(error, 'reason') }
+        : {}),
+      ...(readStringField(error, 'details')
+        ? { details: readStringField(error, 'details') }
+        : {}),
+      ...(readStringField(error, 'hint')
+        ? { hint: readStringField(error, 'hint') }
+        : {}),
+    };
+  }
+
+  return {
+    message: String(error),
+  };
+}
+
+function createCauseChain(error: unknown): readonly SafeErrorSummary[] {
+  const chain: SafeErrorSummary[] = [];
+  const seen = new WeakSet<object>();
+
+  let currentCause = resolveErrorCause(error);
+  let depth = 0;
+
+  while (typeof currentCause !== 'undefined' && depth < MAX_CAUSE_CHAIN_DEPTH) {
+    if (typeof currentCause === 'object' && currentCause !== null) {
+      if (seen.has(currentCause)) {
+        chain.push({
+          message: '[Circular cause]',
+        });
+        break;
+      }
+
+      seen.add(currentCause);
+    }
+
+    chain.push(summarizeSafeError(currentCause));
+
+    currentCause = resolveErrorCause(currentCause);
+    depth += 1;
+  }
+
+  return chain;
 }
 
 function createErrorResponseBody(params: {
@@ -275,15 +422,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       context: GlobalExceptionFilter.name,
       requestId,
       metadata: {
+        statusCode,
         method: request.method,
         path: request.originalUrl || request.url,
-        error:
-          exception instanceof Error
-            ? {
-                name: exception.name,
-                message: exception.message,
-              }
-            : String(exception),
+        failure: summarizeSafeError(exception),
+        causeChain: createCauseChain(exception),
       },
       trace: exception instanceof Error ? exception.stack : undefined,
     });
@@ -310,10 +453,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       statusCode,
       method: request.method,
       path: request.originalUrl || request.url,
-      error: {
-        name: exception.name,
-        message: exception.message,
-      },
+      failure: this.createHandledFailureMetadata(exception),
     };
 
     if (statusCode >= 500) {
@@ -331,5 +471,38 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       requestId,
       metadata,
     });
+  }
+
+  private createHandledFailureMetadata(
+    exception: Error,
+  ): Record<string, unknown> {
+    if (isAppError(exception)) {
+      return {
+        name: exception.name,
+        message: exception.message,
+        appCode: exception.code,
+        category: exception.category,
+        statusCode: exception.statusCode,
+        publicMessage: exception.publicMessage,
+        exposedDetails: exception.exposeDetails,
+        ...(exception.details ? { details: exception.details } : {}),
+        causeChain: createCauseChain(exception),
+      };
+    }
+
+    if (exception instanceof HttpException) {
+      return {
+        name: exception.name,
+        message: exception.message,
+        statusCode: exception.getStatus(),
+        response: summarizeSafeError(exception.getResponse()),
+        causeChain: createCauseChain(exception),
+      };
+    }
+
+    return {
+      ...summarizeSafeError(exception),
+      causeChain: createCauseChain(exception),
+    };
   }
 }
