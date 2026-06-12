@@ -35,6 +35,10 @@ tags:
     description: Public Pilates class and schedule browsing endpoints
   - name: Pilates - Admin
     description: Protected admin Pilates class and schedule management endpoints
+  - name: Bookings - Customer
+    description: Protected customer Pilates booking and waitlist endpoints
+  - name: Bookings - Admin
+    description: Protected admin booking, override, and waitlist management endpoints
 paths:
   /:
     get:
@@ -1851,6 +1855,608 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /bookings:
+    post:
+      summary: Create customer booking
+      description: Creates a Pilates booking for the authenticated customer. If the schedule is full, the database transaction may place the customer into the FIFO waitlist.
+      operationId: bookingCustomerCreateBooking
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRequest'
+      responses:
+        '201':
+          description: Booking request processed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingCreateSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      summary: List customer bookings
+      description: Lists bookings owned by the authenticated customer. The customer id is taken from the authenticated session, not from query parameters.
+      operationId: bookingCustomerListBookings
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BookingStatus'
+        - name: from_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: '2026-06-15'
+        - name: to_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: '2026-06-30'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BookingSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BookingSortDirection'
+      responses:
+        '200':
+          description: Bookings retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingListSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+
+  /bookings/waitlist:
+    get:
+      summary: List customer waitlist entries
+      description: Lists active waitlist entries owned by the authenticated customer.
+      operationId: bookingCustomerListWaitlist
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Waitlist entries retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingWaitlistListSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+
+  /bookings/waitlist/{waitlistId}/cancel:
+    post:
+      summary: Cancel customer waitlist entry
+      description: Cancels a waitlist entry owned by the authenticated customer.
+      operationId: bookingCustomerCancelWaitlistEntry
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: waitlistId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Booking waitlist entry id.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelBookingRequest'
+      responses:
+        '200':
+          description: Waitlist entry cancelled successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingWaitlistItemSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /bookings/{bookingId}:
+    get:
+      summary: Get customer booking
+      description: Returns one booking owned by the authenticated customer.
+      operationId: bookingCustomerGetBookingById
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Booking id.
+      responses:
+        '200':
+          description: Booking retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingDetailSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /bookings/{bookingId}/cancel:
+    post:
+      summary: Cancel customer booking
+      description: Cancels a booking owned by the authenticated customer.
+      operationId: bookingCustomerCancelBooking
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Booking id.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelBookingRequest'
+      responses:
+        '200':
+          description: Booking cancelled successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingCancelSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /bookings/{bookingId}/reschedule:
+    post:
+      summary: Reschedule customer booking
+      description: Reschedules a confirmed booking owned by the authenticated customer.
+      operationId: bookingCustomerRescheduleBooking
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Booking id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RescheduleBookingRequest'
+      responses:
+        '200':
+          description: Booking reschedule request processed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingRescheduleSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/bookings:
+    get:
+      summary: List admin bookings
+      description: Lists all customer bookings for the admin dashboard.
+      operationId: bookingAdminListBookings
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 254
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BookingStatus'
+        - name: payment_status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BookingPaymentStatus'
+        - name: schedule_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: class_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: trainer_staff_profile_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: from_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: '2026-06-15'
+        - name: to_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: '2026-06-30'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BookingSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BookingSortDirection'
+      responses:
+        '200':
+          description: Bookings retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingListSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+
+  /admin/pilates/schedules/{scheduleId}/waitlist:
+    get:
+      summary: List schedule waitlist
+      description: Lists FIFO waitlist entries for a Pilates schedule.
+      operationId: bookingAdminListScheduleWaitlist
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: scheduleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Pilates schedule id.
+      responses:
+        '200':
+          description: Schedule waitlist entries retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingWaitlistListSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/bookings/waitlist/{waitlistId}:
+    delete:
+      summary: Remove waitlist entry
+      description: Removes a waitlist entry from the admin dashboard.
+      operationId: bookingAdminRemoveWaitlistEntry
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: waitlistId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Booking waitlist entry id.
+      responses:
+        '200':
+          description: Waitlist entry removed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingWaitlistItemSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/bookings/{bookingId}:
+    get:
+      summary: Get admin booking
+      description: Returns one booking for the admin dashboard.
+      operationId: bookingAdminGetBookingById
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Booking id.
+      responses:
+        '200':
+          description: Booking retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingDetailSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/bookings/{bookingId}/cancel:
+    post:
+      summary: Cancel booking as admin
+      description: Cancels a booking from the admin dashboard with a required audit reason.
+      operationId: bookingAdminCancelBooking
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Booking id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCancelBookingRequest'
+      responses:
+        '200':
+          description: Booking cancelled successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingCancelSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/bookings/{bookingId}/reschedule:
+    post:
+      summary: Reschedule booking as admin
+      description: Reschedules a confirmed booking from the admin dashboard.
+      operationId: bookingAdminRescheduleBooking
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Booking id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RescheduleBookingRequest'
+      responses:
+        '200':
+          description: Booking reschedule request processed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingRescheduleSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/bookings/{bookingId}/override:
+    post:
+      summary: Override booking status
+      description: Applies a controlled admin booking status override with required audit reason.
+      operationId: bookingAdminOverrideBookingStatus
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Booking id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminOverrideBookingRequest'
+      responses:
+        '200':
+          description: Booking override applied successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingDetailSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 components:
   schemas:
     ApiSuccessBase:
@@ -2435,18 +3041,18 @@ components:
           type: string
           format: email
           maxLength: 254
-          example: customer@example.com
+          example: administration@lafam.com
         password:
           type: string
           format: password
           minLength: 1
           maxLength: 128
-          example: StrongP@ssw0rd
+          example: Something321!
         device_id:
           type: string
           maxLength: 128
           nullable: true
-          example: web-chrome
+          example: local-dev-test-1
         device_name:
           type: string
           maxLength: 160
@@ -4551,6 +5157,883 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/PilatesDeleteData'
+    BookingStatus:
+      type: string
+      enum:
+        - pending_payment
+        - confirmed
+        - cancelled
+        - completed
+        - no_show
+        - expired
+        - rescheduled
+        - deleted
+      example: confirmed
+
+    BookingPaymentStatus:
+      type: string
+      enum:
+        - not_required
+        - pending
+        - paid
+        - failed
+        - refunded
+        - expired
+      example: not_required
+
+    BookingSource:
+      type: string
+      enum:
+        - customer_web
+        - admin_dashboard
+        - system_waitlist_promotion
+      example: customer_web
+
+    BookingWaitlistStatus:
+      type: string
+      enum:
+        - waiting
+        - promoted
+        - expired
+        - cancelled
+        - converted
+        - removed
+      example: waiting
+
+    BookingHistoryAction:
+      type: string
+      enum:
+        - booking_created
+        - booking_confirmed
+        - booking_cancelled
+        - booking_completed
+        - booking_no_show
+        - booking_expired
+        - booking_rescheduled
+        - waitlist_joined
+        - waitlist_promoted
+        - waitlist_cancelled
+        - admin_override
+      example: booking_created
+
+    BookingSortField:
+      type: string
+      enum:
+        - created_at
+        - schedule_date
+        - start_time
+        - status
+      default: created_at
+      example: created_at
+
+    BookingSortDirection:
+      type: string
+      enum:
+        - asc
+        - desc
+      default: desc
+      example: desc
+
+    BookingCreateActionResult:
+      type: string
+      enum:
+        - existing_booking
+        - booked
+        - waitlisted
+      example: booked
+
+    BookingCancelActionResult:
+      type: string
+      enum:
+        - cancelled
+        - cancelled_and_promoted
+      example: cancelled
+
+    BookingRescheduleActionResult:
+      type: string
+      enum:
+        - rescheduled
+        - target_waitlisted
+      example: rescheduled
+
+    CreateBookingRequest:
+      type: object
+      required:
+        - schedule_id
+      properties:
+        schedule_id:
+          type: string
+          format: uuid
+          description: Pilates schedule id.
+        payment_required:
+          type: boolean
+          default: false
+          description: Optional controlled payment flag. Current Booking MVP defaults to false.
+        idempotency_key:
+          type: string
+          maxLength: 160
+          description: Optional retry/double-click protection key.
+          example: customer-click-20260612-001
+
+    CancelBookingRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 1000
+          nullable: true
+          example: Customer cannot attend this class.
+
+    RescheduleBookingRequest:
+      type: object
+      required:
+        - target_schedule_id
+      properties:
+        target_schedule_id:
+          type: string
+          format: uuid
+          description: Target Pilates schedule id.
+        join_waitlist_if_full:
+          type: boolean
+          default: false
+          description: If true, the customer may join the target schedule waitlist when it is full.
+        reason:
+          type: string
+          maxLength: 1000
+          nullable: true
+          example: Customer requested a different time slot.
+
+    AdminCancelBookingRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          maxLength: 1000
+          example: Schedule was cancelled by studio admin.
+
+    AdminOverrideBookingRequest:
+      type: object
+      required:
+        - target_status
+        - reason
+      properties:
+        target_status:
+          $ref: '#/components/schemas/BookingStatus'
+        reason:
+          type: string
+          maxLength: 1000
+          example: Manual correction after admin review.
+        admin_notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+          example: Customer called reception and confirmed attendance.
+
+    BookingSafeUserSnapshot:
+      type: object
+      required:
+        - id
+        - email
+        - phone
+        - full_name
+        - role
+        - status
+        - is_guest
+        - avatar_path
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+          example: '+96550000000'
+        full_name:
+          type: string
+          nullable: true
+          example: Fatima Al-Sabah
+        role:
+          $ref: '#/components/schemas/AuthUserRole'
+        status:
+          $ref: '#/components/schemas/AuthUserStatus'
+        is_guest:
+          type: boolean
+          example: false
+        avatar_path:
+          type: string
+          nullable: true
+          example: avatars/customer/avatar.webp
+
+    BookingTrainerSnapshot:
+      type: object
+      required:
+        - staff_profile_id
+        - app_user_id
+        - display_name
+        - post_title
+        - email
+        - phone
+        - avatar_path
+      properties:
+        staff_profile_id:
+          type: string
+          format: uuid
+          nullable: true
+        app_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        display_name:
+          type: string
+          nullable: true
+          example: Sarah Pilates Trainer
+        post_title:
+          type: string
+          nullable: true
+          example: Pilates Trainer
+        email:
+          type: string
+          format: email
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        avatar_path:
+          type: string
+          nullable: true
+
+    BookingClassSnapshot:
+      type: object
+      required:
+        - id
+        - title
+        - description
+        - level
+        - status
+        - duration_minutes
+        - capacity
+        - cover_image_path
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: Reformer Pilates
+        description:
+          type: string
+          nullable: true
+        level:
+          $ref: '#/components/schemas/PilatesClassLevel'
+        status:
+          $ref: '#/components/schemas/PilatesClassStatus'
+        duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 240
+          example: 60
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 8
+        cover_image_path:
+          type: string
+          nullable: true
+          example: classes/reformer/cover.webp
+
+    BookingScheduleSnapshot:
+      type: object
+      required:
+        - id
+        - class_id
+        - trainer_staff_profile_id
+        - studio
+        - class_date
+        - start_time
+        - end_time
+        - duration_minutes
+        - capacity
+        - status
+        - cancellation_reason
+        - cancelled_at
+        - completed_at
+        - realtime_version
+      properties:
+        id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+        studio:
+          type: string
+          example: LAFAM Pilates Studio
+        class_date:
+          type: string
+          format: date
+          example: '2026-06-15'
+        start_time:
+          type: string
+          example: '10:00'
+        end_time:
+          type: string
+          example: '11:00'
+        duration_minutes:
+          type: integer
+          example: 60
+        capacity:
+          type: integer
+          example: 8
+        status:
+          $ref: '#/components/schemas/PilatesScheduleStatus'
+        cancellation_reason:
+          type: string
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        realtime_version:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 4
+
+    BookingAvailabilitySnapshot:
+      type: object
+      required:
+        - schedule_id
+        - capacity
+        - booked_count
+        - pending_hold_count
+        - available_seats
+        - waitlist_count
+        - waitlist_available
+        - schedule_realtime_version
+      properties:
+        schedule_id:
+          type: string
+          format: uuid
+        capacity:
+          type: integer
+          minimum: 1
+          example: 8
+        booked_count:
+          type: integer
+          minimum: 0
+          example: 3
+        pending_hold_count:
+          type: integer
+          minimum: 0
+          example: 0
+        available_seats:
+          type: integer
+          minimum: 0
+          example: 5
+        waitlist_count:
+          type: integer
+          minimum: 0
+          example: 0
+        waitlist_available:
+          type: boolean
+          example: false
+        schedule_realtime_version:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 7
+
+    BookingHistoryEntry:
+      type: object
+      required:
+        - id
+        - booking_id
+        - actor_user_id
+        - actor_admin_id
+        - actor_role
+        - action
+        - from_status
+        - to_status
+        - notes
+        - metadata
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        booking_id:
+          type: string
+          format: uuid
+        actor_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        actor_admin_id:
+          type: string
+          format: uuid
+          nullable: true
+        actor_role:
+          type: string
+          nullable: true
+          example: customer
+        action:
+          $ref: '#/components/schemas/BookingHistoryAction'
+        from_status:
+          allOf:
+            - $ref: '#/components/schemas/BookingStatus'
+          nullable: true
+        to_status:
+          allOf:
+            - $ref: '#/components/schemas/BookingStatus'
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+
+    Booking:
+      type: object
+      required:
+        - id
+        - booking_number
+        - user_id
+        - schedule_id
+        - class_id
+        - trainer_staff_profile_id
+        - status
+        - source
+        - payment_status
+        - payment_required
+        - seat_hold_expires_at
+        - confirmed_at
+        - cancelled_at
+        - completed_at
+        - no_show_at
+        - rescheduled_from_booking_id
+        - cancellation_reason
+        - admin_notes
+        - created_at
+        - updated_at
+        - realtime_version
+      properties:
+        id:
+          type: string
+          format: uuid
+        booking_number:
+          type: string
+          example: LAFAM-20260612-ABC12345
+        user_id:
+          type: string
+          format: uuid
+        schedule_id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          $ref: '#/components/schemas/BookingStatus'
+        source:
+          $ref: '#/components/schemas/BookingSource'
+        payment_status:
+          $ref: '#/components/schemas/BookingPaymentStatus'
+        payment_required:
+          type: boolean
+          example: false
+        seat_hold_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        confirmed_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        no_show_at:
+          type: string
+          format: date-time
+          nullable: true
+        rescheduled_from_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        cancellation_reason:
+          type: string
+          nullable: true
+        admin_notes:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        realtime_version:
+          type: integer
+          format: int64
+          minimum: 1
+
+    BookingListItem:
+      allOf:
+        - $ref: '#/components/schemas/Booking'
+        - type: object
+          required:
+            - customer
+            - class
+            - schedule
+            - trainer
+          properties:
+            customer:
+              allOf:
+                - $ref: '#/components/schemas/BookingSafeUserSnapshot'
+              nullable: true
+            class:
+              allOf:
+                - $ref: '#/components/schemas/BookingClassSnapshot'
+              nullable: true
+            schedule:
+              allOf:
+                - $ref: '#/components/schemas/BookingScheduleSnapshot'
+              nullable: true
+            trainer:
+              allOf:
+                - $ref: '#/components/schemas/BookingTrainerSnapshot'
+              nullable: true
+
+    BookingDetail:
+      allOf:
+        - $ref: '#/components/schemas/BookingListItem'
+        - type: object
+          required:
+            - history
+            - availability
+          properties:
+            history:
+              type: array
+              items:
+                $ref: '#/components/schemas/BookingHistoryEntry'
+            availability:
+              allOf:
+                - $ref: '#/components/schemas/BookingAvailabilitySnapshot'
+              nullable: true
+
+    BookingWaitlistEntry:
+      type: object
+      required:
+        - id
+        - schedule_id
+        - class_id
+        - user_id
+        - position
+        - status
+        - joined_at
+        - promoted_at
+        - expired_at
+        - cancelled_at
+        - promotion_expires_at
+        - converted_booking_id
+        - cancellation_reason
+        - created_at
+        - updated_at
+        - realtime_version
+      properties:
+        id:
+          type: string
+          format: uuid
+        schedule_id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        position:
+          type: integer
+          minimum: 1
+          example: 1
+        status:
+          $ref: '#/components/schemas/BookingWaitlistStatus'
+        joined_at:
+          type: string
+          format: date-time
+        promoted_at:
+          type: string
+          format: date-time
+          nullable: true
+        expired_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        promotion_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        converted_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        cancellation_reason:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        realtime_version:
+          type: integer
+          format: int64
+          minimum: 1
+
+    BookingWaitlistListItem:
+      allOf:
+        - $ref: '#/components/schemas/BookingWaitlistEntry'
+        - type: object
+          required:
+            - customer
+            - class
+            - schedule
+            - trainer
+          properties:
+            customer:
+              allOf:
+                - $ref: '#/components/schemas/BookingSafeUserSnapshot'
+              nullable: true
+            class:
+              allOf:
+                - $ref: '#/components/schemas/BookingClassSnapshot'
+              nullable: true
+            schedule:
+              allOf:
+                - $ref: '#/components/schemas/BookingScheduleSnapshot'
+              nullable: true
+            trainer:
+              allOf:
+                - $ref: '#/components/schemas/BookingTrainerSnapshot'
+              nullable: true
+
+    BookingListData:
+      type: object
+      required:
+        - bookings
+        - total
+        - limit
+        - offset
+      properties:
+        bookings:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookingListItem'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+
+    BookingDetailData:
+      type: object
+      required:
+        - booking
+      properties:
+        booking:
+          $ref: '#/components/schemas/BookingDetail'
+
+    BookingCreateData:
+      type: object
+      required:
+        - result
+        - booking
+        - waitlist
+        - availability
+      properties:
+        result:
+          $ref: '#/components/schemas/BookingCreateActionResult'
+        booking:
+          allOf:
+            - $ref: '#/components/schemas/BookingListItem'
+          nullable: true
+        waitlist:
+          allOf:
+            - $ref: '#/components/schemas/BookingWaitlistListItem'
+          nullable: true
+        availability:
+          $ref: '#/components/schemas/BookingAvailabilitySnapshot'
+
+    BookingCancelData:
+      type: object
+      required:
+        - result
+        - cancelled_booking
+        - promoted_booking
+        - promoted_waitlist
+        - availability
+      properties:
+        result:
+          $ref: '#/components/schemas/BookingCancelActionResult'
+        cancelled_booking:
+          $ref: '#/components/schemas/BookingListItem'
+        promoted_booking:
+          allOf:
+            - $ref: '#/components/schemas/BookingListItem'
+          nullable: true
+        promoted_waitlist:
+          allOf:
+            - $ref: '#/components/schemas/BookingWaitlistListItem'
+          nullable: true
+        availability:
+          $ref: '#/components/schemas/BookingAvailabilitySnapshot'
+
+    BookingRescheduleData:
+      type: object
+      required:
+        - result
+        - old_booking
+        - new_booking
+        - waitlist
+        - availability
+      properties:
+        result:
+          $ref: '#/components/schemas/BookingRescheduleActionResult'
+        old_booking:
+          $ref: '#/components/schemas/BookingListItem'
+        new_booking:
+          allOf:
+            - $ref: '#/components/schemas/BookingListItem'
+          nullable: true
+        waitlist:
+          allOf:
+            - $ref: '#/components/schemas/BookingWaitlistListItem'
+          nullable: true
+        availability:
+          $ref: '#/components/schemas/BookingAvailabilitySnapshot'
+
+    BookingWaitlistListData:
+      type: object
+      required:
+        - waitlist
+        - total
+        - limit
+        - offset
+      properties:
+        waitlist:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookingWaitlistListItem'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+
+    BookingWaitlistItemData:
+      type: object
+      required:
+        - waitlist
+      properties:
+        waitlist:
+          $ref: '#/components/schemas/BookingWaitlistListItem'
+
+    BookingListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BookingListData'
+
+    BookingDetailSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BookingDetail'
+
+    BookingCreateSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BookingCreateData'
+
+    BookingCancelSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BookingCancelData'
+
+    BookingRescheduleSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BookingRescheduleData'
+
+    BookingWaitlistListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BookingWaitlistListData'
+
+    BookingWaitlistItemSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BookingWaitlistListItem'
   securitySchemes:
     BearerAuth:
       type: http
