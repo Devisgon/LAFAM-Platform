@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -147,10 +148,47 @@ export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
   return (
     <>
       <aside className={`relative z-20 flex w-full shrink-0 flex-col bg-[#06243a] p-4 text-white transition-[width] duration-200 md:fixed md:inset-y-0 md:left-0 md:h-screen ${collapsed ? "md:overflow-visible" : "md:overflow-y-auto"} ${width}`}>
-        <div className={`mb-6 flex items-center text-xl font-bold tracking-wide ${collapsed ? "justify-center" : "gap-2 px-2"}`}>
-          <span className="flex size-8 items-center justify-center rounded-full border border-white/30 text-sm">L</span>
-          {!collapsed && "LAFAM"}
-        </div>
+        <button
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className={`group mb-6 flex min-h-12 w-full items-center rounded-xl text-left transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${
+            collapsed ? "justify-center px-2" : "gap-3 px-3"
+          }`}
+          onClick={() => setCollapsed((current) => !current)}
+          type="button"
+        >
+          <span className="relative flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary">
+            <Image
+              alt=""
+              className="size-7 object-contain transition-opacity group-hover:opacity-0"
+              height={28}
+              priority
+              src="/logo.png"
+              width={28}
+            />
+            <svg
+              aria-hidden="true"
+              className="absolute size-5 opacity-0 transition-opacity group-hover:opacity-100"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.8"
+              viewBox="0 0 24 24"
+            >
+              <rect height="16" rx="2" width="18" x="3" y="4" />
+              <path d="M9 4v16M14 9l-3 3 3 3" />
+            </svg>
+          </span>
+          {!collapsed && (
+            <span>
+              <strong className="block text-base tracking-[0.18em]">LAFAM</strong>
+              <span className="block text-[10px] font-medium tracking-wide text-slate-400">
+                Wellness portal
+              </span>
+            </span>
+          )}
+          {collapsed && <Tooltip label="Expand sidebar" />}
+        </button>
 
         <nav className="grid gap-1" aria-label="Main navigation">
           {primaryItems.map((item) => <NavigationLink active={item.label === activeItem} collapsed={collapsed} key={item.label} {...item} />)}
@@ -160,17 +198,6 @@ export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
           <NavigationLink active={activeItem === "Staff"} collapsed={collapsed} href="/admin/staff" icon="staff" label="Staff" />
           {managementItems.map((item) => <NavigationLink collapsed={collapsed} key={item.label} {...item} />)}
         </nav>
-
-        <button
-          aria-label={collapsed ? "Show sidebar" : "Hide sidebar"}
-          className="absolute -right-3 top-16 z-20 hidden size-7 items-center justify-center rounded-full border border-background-secondary bg-card-bg-primary text-text-primary shadow-md hover:text-primary md:flex"
-          onClick={() => setCollapsed((current) => !current)}
-          type="button"
-        >
-          <svg aria-hidden="true" className={`size-4 transition-transform ${collapsed ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="m15 18-6-6 6-6" />
-          </svg>
-        </button>
 
         <a className={`group relative mt-6 flex min-h-10 items-center rounded-lg bg-error/15 py-2 text-sm font-semibold text-red-300 hover:bg-error hover:text-white md:mt-auto ${collapsed ? "justify-center px-2" : "gap-3 px-3"}`} href="#">
           <Icon name="logout" />

@@ -9,7 +9,9 @@ import {
   useState,
 } from "react";
 import {
+  AUTH_REFRESH_INTERVAL_MS,
   authClient,
+  type AvatarResult,
   getCachedPasswordResetEmail,
   getDashboardPath,
   getCachedVerificationEmail,
@@ -19,6 +21,7 @@ import {
   type LoginResult,
   type ResetPasswordPayload,
   type ResetPasswordResult,
+  refreshAuthSession,
   type ResendVerificationResult,
   type SignUpPayload,
   type SignUpResult,
@@ -28,6 +31,7 @@ import {
 
 type AuthContextValue = {
   user: AuthUser | null;
+  avatarUrl: string | null;
   pendingVerificationEmail: string | null;
   passwordResetEmail: string | null;
   isAuthenticated: boolean;
@@ -51,6 +55,9 @@ type AuthContextValue = {
   ) => Promise<ResetPasswordResult>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<AuthUser | null>;
+  refreshAvatar: () => Promise<AvatarResult>;
+  setCurrentUser: (user: AuthUser | null) => void;
+  setAvatarUrl: (url: string | null) => void;
   clearError: () => void;
   getDashboardPath: typeof getDashboardPath;
 };
@@ -63,6 +70,7 @@ type AuthProviderProps = {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState<
     string | null
   >(null);
@@ -79,6 +87,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isVerifyingResetOtp, setIsVerifyingResetOtp] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isAuthenticated = Boolean(user);
 
   const getErrorMessage = useCallback((err: unknown, fallback: string) => {
     return err instanceof Error ? err.message : fallback;
@@ -99,15 +108,46 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, []);
 
+  const refreshAvatar = useCallback(async () => {
+    try {
+      const avatar = await authClient.getAvatar();
+      setAvatarUrl(avatar.avatar_url);
+      return avatar;
+    } catch {
+      setAvatarUrl(null);
+      return { avatar_path: null, avatar_url: null };
+    }
+  }, []);
+
   useEffect(() => {
     const hydrateAuth = window.setTimeout(() => {
       setPendingVerificationEmail(getCachedVerificationEmail());
       setPasswordResetEmail(getCachedPasswordResetEmail());
       void refreshUser();
+      void refreshAvatar();
     }, 0);
 
     return () => window.clearTimeout(hydrateAuth);
-  }, [refreshUser]);
+  }, [refreshAvatar, refreshUser]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const rotateTokens = async () => {
+      const refreshed = await refreshAuthSession();
+
+      if (!refreshed) {
+        setUser(null);
+        setAvatarUrl(null);
+      }
+    };
+
+    const refreshInterval = window.setInterval(() => {
+      void rotateTokens().catch(() => undefined);
+    }, AUTH_REFRESH_INTERVAL_MS);
+
+    return () => window.clearInterval(refreshInterval);
+  }, [isAuthenticated]);
 
   const login = useCallback(
     async (payload: LoginPayload) => {
@@ -117,6 +157,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       try {
         const result = await authClient.login(payload);
         setUser(result.user);
+        void refreshAvatar();
         return result;
       } catch (err: unknown) {
         setError(getErrorMessage(err, "Login failed."));
@@ -125,7 +166,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setIsLoggingIn(false);
       }
     },
-    [getErrorMessage],
+    [getErrorMessage, refreshAvatar],
   );
 
   const signUp = useCallback(
@@ -244,6 +285,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       await authClient.logout();
     } finally {
       setUser(null);
+      setAvatarUrl(null);
     }
   }, []);
 
@@ -254,9 +296,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
+      avatarUrl,
       pendingVerificationEmail,
       passwordResetEmail,
-      isAuthenticated: Boolean(user),
+      isAuthenticated,
       isChecking,
       isLoggingIn,
       isSigningUp,
@@ -275,11 +318,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       resetPassword,
       logout,
       refreshUser,
+      refreshAvatar,
+      setCurrentUser: setUser,
+      setAvatarUrl,
       clearError,
       getDashboardPath,
     }),
     [
       user,
+      avatarUrl,
+      isAuthenticated,
       pendingVerificationEmail,
       passwordResetEmail,
       isChecking,
@@ -300,6 +348,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       resetPassword,
       logout,
       refreshUser,
+      refreshAvatar,
       clearError,
     ],
   );

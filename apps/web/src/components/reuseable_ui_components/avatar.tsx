@@ -27,7 +27,7 @@ export function Avatar({ alt, className, name, size = "md", src, ...props }: Ava
       title={name}
       {...props}
     >
-      {src ? <Image alt={alt} height={64} src={src} unoptimized width={64} /> : <span aria-hidden="true">{initials(name)}</span>}
+      {src ? <Image alt={alt} className="size-full object-cover" height={96} src={src} unoptimized width={96} /> : <span aria-hidden="true">{initials(name)}</span>}
       {!src && <span className="sr-only">{alt}</span>}
     </span>
   );

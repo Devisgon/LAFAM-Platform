@@ -2,68 +2,68 @@
 
 import { useState } from "react";
 import { BookingExplorer, bookingsData } from "@/app/admin/bookings/page";
-import { StaffDirectory } from "./staff_directory";
+import { AdminUserManager } from "./admin_user_manager";
+import { ProfileSettings } from "./profile_settings";
 
-type SettingsView = "users" | "history";
+type SettingsView = "profile" | "users" | "history";
 
 export function AdminSettings() {
-  const [view, setView] = useState<SettingsView>("users");
+  const [view, setView] = useState<SettingsView>("profile");
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-      <aside className="self-start rounded-xl border border-background-secondary bg-card-bg-primary p-3 shadow-sm">
-        <p className="px-3 pb-3 pt-2 text-xs font-bold uppercase tracking-wider text-text-secondary">
-          Settings
-        </p>
-        <nav className="grid gap-1" aria-label="Settings pages">
+    <div className="grid gap-7 lg:grid-cols-[190px_minmax(0,1fr)]">
+      <aside className="self-start overflow-x-auto lg:sticky lg:top-6">
+        <nav
+          className="flex min-w-max gap-1.5 lg:grid lg:min-w-0"
+          aria-label="Settings pages"
+        >
           {[
+            {
+              id: "profile" as const,
+              label: "Profile Details",
+            },
             {
               id: "users" as const,
               label: "Users",
-              description: "Staff accounts",
             },
             {
               id: "history" as const,
               label: "Booking history",
-              description: "Previous bookings",
             },
           ].map((item) => (
             <button
               aria-current={view === item.id ? "page" : undefined}
-              className={`rounded-lg px-3 py-2.5 text-left transition-colors ${view === item.id ? "bg-primary text-white" : "text-text-primary hover:bg-background-secondary"}`}
+              className={`min-h-11 rounded-xl px-4 py-2.5 text-left text-sm font-semibold transition-colors lg:w-full ${view === item.id ? "bg-primary/15 text-primary" : "text-text-primary hover:bg-card-bg-primary"}`}
               key={item.id}
               onClick={() => setView(item.id)}
               type="button"
             >
-              <strong className="block text-sm">{item.label}</strong>
-              <span
-                className={`mt-0.5 block text-xs ${view === item.id ? "text-white/75" : "text-text-secondary"}`}
-              >
-                {item.description}
-              </span>
+              {item.label}
             </button>
           ))}
         </nav>
       </aside>
 
-      <section className="min-w-0 rounded-xl border border-background-secondary bg-card-bg-primary p-5 shadow-sm lg:p-6">
-        {view === "users" ? (
+      <section
+        className={
+          view === "profile"
+            ? "min-w-0"
+            : "min-w-0 rounded-xl border border-background-secondary bg-card-bg-primary p-5 shadow-sm lg:p-6"
+        }
+      >
+        {view === "profile" ? (
+          <ProfileSettings />
+        ) : view === "users" ? (
           <>
             <header className="mb-6 flex flex-wrap items-end justify-between gap-3 border-b border-background-secondary pb-5">
               <div>
                 <h2 className="text-xl font-bold text-text-primary">Users</h2>
                 <p className="mt-1 text-sm text-text-secondary">
-                  Create and manage staff member accounts.
+                  Filter and manage all platform user accounts.
                 </p>
               </div>
-              <a
-                className="rounded-lg bg-button-primary px-4 py-2 text-xs font-bold text-white hover:opacity-90"
-                href="#add-staff"
-              >
-                + Create user
-              </a>
             </header>
-            <StaffDirectory />
+            <AdminUserManager />
           </>
         ) : (
           <>

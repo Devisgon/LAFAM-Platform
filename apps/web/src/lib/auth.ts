@@ -102,6 +102,11 @@ export type ResetPasswordResult = {
   password_reset: true;
 };
 
+export type AvatarResult = {
+  avatar_path: string | null;
+  avatar_url: string | null;
+};
+
 type LoginApiData = {
   authenticated: boolean;
   access_token: string;
@@ -115,7 +120,7 @@ type LoginApiData = {
 type RefreshApiData = {
   authenticated: boolean;
   access_token: string;
-  refresh_token?: string;
+  refresh_token: string;
   token_type: string;
   expires_in: number | null;
   user?: AuthUser;
@@ -151,6 +156,9 @@ const PENDING_VERIFICATION_EMAIL_KEY = "lafam_pending_verification_email";
 const PASSWORD_RESET_EMAIL_KEY = "lafam_password_reset_email";
 const PASSWORD_RESET_TOKEN_KEY = "lafam_password_reset_token";
 const REFRESH_TOKEN_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+export const AUTH_REFRESH_INTERVAL_MS = 59 * 60 * 1000;
+
+let refreshSessionRequest: Promise<boolean> | null = null;
 
 function getApiUrl(path: string): string {
   return `${API_BASE_URL!.replace(/\/$/, "")}${path}`;
@@ -429,7 +437,7 @@ export function getBrowserDeviceInfo() {
   };
 }
 
-async function refreshSession(): Promise<boolean> {
+async function runRefreshSession(): Promise<boolean> {
   const refreshToken = getRefreshToken();
 
   if (!refreshToken) {
@@ -458,7 +466,7 @@ async function refreshSession(): Promise<boolean> {
 
   const data = (payload as { data?: RefreshApiData } | null)?.data;
 
-  if (!data?.access_token) {
+  if (!data?.access_token || !data.refresh_token) {
     clearAuthCookies();
     return false;
   }
@@ -474,19 +482,31 @@ async function refreshSession(): Promise<boolean> {
   return true;
 }
 
+export function refreshAuthSession(): Promise<boolean> {
+  if (!refreshSessionRequest) {
+    refreshSessionRequest = runRefreshSession().finally(() => {
+      refreshSessionRequest = null;
+    });
+  }
+
+  return refreshSessionRequest;
+}
+
 export async function authFetch<T>(
   path: string,
   init: RequestInit = {},
   retryOnUnauthorized = true,
 ): Promise<T> {
   const accessToken = getAccessToken();
+  const isFormData =
+    typeof FormData !== "undefined" && init.body instanceof FormData;
 
   const response = await fetch(getApiUrl(path), {
     ...init,
     credentials: "include",
     headers: {
       Accept: "application/json",
-      "Content-Type": "application/json",
+      ...(!isFormData ? { "Content-Type": "application/json" } : {}),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...init.headers,
     },
@@ -495,7 +515,7 @@ export async function authFetch<T>(
   const payload = await readJsonSafe(response);
 
   if (response.status === 401 && retryOnUnauthorized) {
-    const refreshed = await refreshSession();
+    const refreshed = await refreshAuthSession();
 
     if (refreshed) {
       return authFetch<T>(path, init, false);
@@ -722,6 +742,19 @@ export const authClient = {
     });
 
     return extractCurrentUser(response);
+  },
+
+  async getAvatar(): Promise<AvatarResult> {
+    if (!hasCachedAuthSession()) {
+      return { avatar_path: null, avatar_url: null };
+    }
+
+    const response = await authFetch<ApiResponse<AvatarResult>>(
+      "/auth/avatar",
+      { method: "GET" },
+    );
+
+    return response.data;
   },
 
   async logout(): Promise<void> {
