@@ -63,19 +63,8 @@ export interface AuthAuditEventListResult {
 const DEFAULT_LIST_AUDIT_EVENTS_LIMIT = 50;
 const MAX_LIST_AUDIT_EVENTS_LIMIT = 200;
 
-function isDatabaseError(value: unknown): value is {
-  readonly code?: string;
-  readonly message?: string;
-} {
-  return typeof value === 'object' && value !== null;
-}
-
 function mapDatabaseError(error: unknown): AppError {
-  if (isDatabaseError(error)) {
-    return AppError.supabaseUnavailable(error);
-  }
-
-  return AppError.supabaseUnavailable(error);
+  return AppError.databaseOperationFailed(error);
 }
 
 function normalizeListLimit(limit: number): number {

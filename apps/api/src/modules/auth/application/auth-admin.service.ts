@@ -81,10 +81,10 @@ function isDatabaseError(value: unknown): value is {
 
 function mapDatabaseError(error: unknown): AppError {
   if (isDatabaseError(error)) {
-    return AppError.supabaseUnavailable(error);
+    return AppError.databaseOperationFailed(error);
   }
 
-  return AppError.supabaseUnavailable(error);
+  return AppError.databaseOperationFailed(error);
 }
 
 function normalizeListLimit(limit: number): number {

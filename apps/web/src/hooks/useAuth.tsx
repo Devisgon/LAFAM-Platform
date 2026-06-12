@@ -1,0 +1,318 @@
+"use client";
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  authClient,
+  getCachedPasswordResetEmail,
+  getDashboardPath,
+  getCachedVerificationEmail,
+  type AuthUser,
+  type ForgotPasswordResult,
+  type LoginPayload,
+  type LoginResult,
+  type ResetPasswordPayload,
+  type ResetPasswordResult,
+  type ResendVerificationResult,
+  type SignUpPayload,
+  type SignUpResult,
+  type VerifyEmailResult,
+  type VerifyResetOtpResult,
+} from "@/lib/auth";
+
+type AuthContextValue = {
+  user: AuthUser | null;
+  pendingVerificationEmail: string | null;
+  passwordResetEmail: string | null;
+  isAuthenticated: boolean;
+  isChecking: boolean;
+  isLoggingIn: boolean;
+  isSigningUp: boolean;
+  isVerifyingEmail: boolean;
+  isResendingVerification: boolean;
+  isRequestingPasswordReset: boolean;
+  isVerifyingResetOtp: boolean;
+  isResettingPassword: boolean;
+  error: string | null;
+  login: (payload: LoginPayload) => Promise<LoginResult>;
+  signUp: (payload: SignUpPayload) => Promise<SignUpResult>;
+  verifyEmail: (otp: string) => Promise<VerifyEmailResult>;
+  resendVerificationOtp: () => Promise<ResendVerificationResult>;
+  forgotPassword: (email: string) => Promise<ForgotPasswordResult>;
+  verifyResetOtp: (otp: string) => Promise<VerifyResetOtpResult>;
+  resetPassword: (
+    payload: ResetPasswordPayload,
+  ) => Promise<ResetPasswordResult>;
+  logout: () => Promise<void>;
+  refreshUser: () => Promise<AuthUser | null>;
+  clearError: () => void;
+  getDashboardPath: typeof getDashboardPath;
+};
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+type AuthProviderProps = {
+  children: React.ReactNode;
+};
+
+export function AuthProvider({ children }: AuthProviderProps) {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<
+    string | null
+  >(null);
+  const [passwordResetEmail, setPasswordResetEmail] = useState<string | null>(
+    null,
+  );
+  const [isChecking, setIsChecking] = useState(true);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isSigningUp, setIsSigningUp] = useState(false);
+  const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
+  const [isRequestingPasswordReset, setIsRequestingPasswordReset] =
+    useState(false);
+  const [isVerifyingResetOtp, setIsVerifyingResetOtp] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const getErrorMessage = useCallback((err: unknown, fallback: string) => {
+    return err instanceof Error ? err.message : fallback;
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    setIsChecking(true);
+
+    try {
+      const currentUser = await authClient.getCurrentUser();
+      setUser(currentUser);
+      return currentUser;
+    } catch {
+      setUser(null);
+      return null;
+    } finally {
+      setIsChecking(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const hydrateAuth = window.setTimeout(() => {
+      setPendingVerificationEmail(getCachedVerificationEmail());
+      setPasswordResetEmail(getCachedPasswordResetEmail());
+      void refreshUser();
+    }, 0);
+
+    return () => window.clearTimeout(hydrateAuth);
+  }, [refreshUser]);
+
+  const login = useCallback(
+    async (payload: LoginPayload) => {
+      setIsLoggingIn(true);
+      setError(null);
+
+      try {
+        const result = await authClient.login(payload);
+        setUser(result.user);
+        return result;
+      } catch (err: unknown) {
+        setError(getErrorMessage(err, "Login failed."));
+        throw err;
+      } finally {
+        setIsLoggingIn(false);
+      }
+    },
+    [getErrorMessage],
+  );
+
+  const signUp = useCallback(
+    async (payload: SignUpPayload) => {
+      setIsSigningUp(true);
+      setError(null);
+
+      try {
+        const result = await authClient.signUp(payload);
+        setPendingVerificationEmail(getCachedVerificationEmail());
+        return result;
+      } catch (err: unknown) {
+        setError(getErrorMessage(err, "Account creation failed."));
+        throw err;
+      } finally {
+        setIsSigningUp(false);
+      }
+    },
+    [getErrorMessage],
+  );
+
+  const verifyEmail = useCallback(
+    async (otp: string) => {
+      setIsVerifyingEmail(true);
+      setError(null);
+
+      try {
+        const result = await authClient.verifyEmail(otp);
+        setPendingVerificationEmail(null);
+        return result;
+      } catch (err: unknown) {
+        setError(getErrorMessage(err, "Email verification failed."));
+        throw err;
+      } finally {
+        setIsVerifyingEmail(false);
+      }
+    },
+    [getErrorMessage],
+  );
+
+  const resendVerificationOtp = useCallback(async () => {
+    setIsResendingVerification(true);
+    setError(null);
+
+    try {
+      return await authClient.resendVerificationOtp();
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Could not resend verification code."));
+      throw err;
+    } finally {
+      setIsResendingVerification(false);
+    }
+  }, [getErrorMessage]);
+
+  const forgotPassword = useCallback(
+    async (email: string) => {
+      setIsRequestingPasswordReset(true);
+      setError(null);
+
+      try {
+        const result = await authClient.forgotPassword(email);
+        setPasswordResetEmail(getCachedPasswordResetEmail());
+        return result;
+      } catch (err: unknown) {
+        setError(getErrorMessage(err, "Could not request a password reset."));
+        throw err;
+      } finally {
+        setIsRequestingPasswordReset(false);
+      }
+    },
+    [getErrorMessage],
+  );
+
+  const verifyResetOtp = useCallback(
+    async (otp: string) => {
+      setIsVerifyingResetOtp(true);
+      setError(null);
+
+      try {
+        return await authClient.verifyResetOtp(otp);
+      } catch (err: unknown) {
+        setError(
+          getErrorMessage(err, "Password reset code verification failed."),
+        );
+        throw err;
+      } finally {
+        setIsVerifyingResetOtp(false);
+      }
+    },
+    [getErrorMessage],
+  );
+
+  const resetPassword = useCallback(
+    async (payload: ResetPasswordPayload) => {
+      setIsResettingPassword(true);
+      setError(null);
+
+      try {
+        const result = await authClient.resetPassword(payload);
+        setPasswordResetEmail(null);
+        return result;
+      } catch (err: unknown) {
+        setError(getErrorMessage(err, "Password reset failed."));
+        throw err;
+      } finally {
+        setIsResettingPassword(false);
+      }
+    },
+    [getErrorMessage],
+  );
+
+  const logout = useCallback(async () => {
+    setError(null);
+
+    try {
+      await authClient.logout();
+    } finally {
+      setUser(null);
+    }
+  }, []);
+
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      pendingVerificationEmail,
+      passwordResetEmail,
+      isAuthenticated: Boolean(user),
+      isChecking,
+      isLoggingIn,
+      isSigningUp,
+      isVerifyingEmail,
+      isResendingVerification,
+      isRequestingPasswordReset,
+      isVerifyingResetOtp,
+      isResettingPassword,
+      error,
+      login,
+      signUp,
+      verifyEmail,
+      resendVerificationOtp,
+      forgotPassword,
+      verifyResetOtp,
+      resetPassword,
+      logout,
+      refreshUser,
+      clearError,
+      getDashboardPath,
+    }),
+    [
+      user,
+      pendingVerificationEmail,
+      passwordResetEmail,
+      isChecking,
+      isLoggingIn,
+      isSigningUp,
+      isVerifyingEmail,
+      isResendingVerification,
+      isRequestingPasswordReset,
+      isVerifyingResetOtp,
+      isResettingPassword,
+      error,
+      login,
+      signUp,
+      verifyEmail,
+      resendVerificationOtp,
+      forgotPassword,
+      verifyResetOtp,
+      resetPassword,
+      logout,
+      refreshUser,
+      clearError,
+    ],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth(): AuthContextValue {
+  const context = useContext(AuthContext);
+
+  if (!context) {
+    throw new Error("useAuth must be used inside AuthProvider.");
+  }
+
+  return context;
+}

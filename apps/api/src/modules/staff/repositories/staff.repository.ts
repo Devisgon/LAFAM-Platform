@@ -106,7 +106,7 @@ function isDatabaseError(value: unknown): value is DatabaseErrorShape {
 
 function mapDatabaseError(error: unknown): AppError {
   if (!isDatabaseError(error)) {
-    return AppError.supabaseUnavailable(error);
+    return AppError.databaseOperationFailed(error);
   }
 
   if (error.code === POSTGRES_UNIQUE_VIOLATION_CODE) {
@@ -128,7 +128,7 @@ function mapDatabaseError(error: unknown): AppError {
     return AppError.invalidRequest('The staff database payload is invalid.');
   }
 
-  return AppError.supabaseUnavailable(error);
+  return AppError.databaseOperationFailed(error);
 }
 
 function mapAppUserInsertError(error: unknown): AppError {

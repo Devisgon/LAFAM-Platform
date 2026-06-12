@@ -118,7 +118,7 @@ function mapDatabaseError(error: unknown): AppError {
     );
   }
 
-  return AppError.supabaseUnavailable(error);
+  return AppError.databaseOperationFailed(error);
 }
 
 function assertAppUserRow(
