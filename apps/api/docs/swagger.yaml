@@ -3041,18 +3041,18 @@ components:
           type: string
           format: email
           maxLength: 254
-          example: customer@example.com
+          example: administration@lafam.com
         password:
           type: string
           format: password
           minLength: 1
           maxLength: 128
-          example: StrongP@ssw0rd
+          example: Something321!
         device_id:
           type: string
           maxLength: 128
           nullable: true
-          example: web-chrome
+          example: local-dev-test-1
         device_name:
           type: string
           maxLength: 160

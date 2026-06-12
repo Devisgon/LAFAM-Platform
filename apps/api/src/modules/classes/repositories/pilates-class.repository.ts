@@ -112,7 +112,7 @@ function createProviderErrorDetails(
 
 function mapDatabaseError(error: unknown): AppError {
   if (!isProviderDatabaseError(error)) {
-    return AppError.internal(error);
+    return AppError.databaseOperationFailed(error);
   }
 
   const details = createProviderErrorDetails(error);
@@ -152,7 +152,7 @@ function mapDatabaseError(error: unknown): AppError {
     );
   }
 
-  return AppError.internal(error);
+  return AppError.databaseOperationFailed(error);
 }
 
 function resolveLimit(

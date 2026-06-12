@@ -99,8 +99,8 @@ const BOOKING_RELATIONS_SELECT = `
     description,
     level,
     status,
-    duration_minutes,
-    capacity,
+    default_duration_minutes,
+    default_capacity,
     image_path
   ),
   pilates_class_schedules!bookings_schedule_id_fkey (
@@ -155,8 +155,8 @@ const WAITLIST_RELATIONS_SELECT = `
     description,
     level,
     status,
-    duration_minutes,
-    capacity,
+    default_duration_minutes,
+    default_capacity,
     image_path
   ),
   pilates_class_schedules!booking_waitlist_schedule_id_fkey (
@@ -359,7 +359,7 @@ function mapBookingRpcError(error: unknown): AppError {
 
 function mapDatabaseError(error: unknown): AppError {
   if (!isProviderDatabaseError(error)) {
-    return AppError.supabaseUnavailable(error);
+    return AppError.databaseOperationFailed(error);
   }
 
   if (error.code === POSTGRES_UNIQUE_VIOLATION_CODE) {
@@ -378,7 +378,7 @@ function mapDatabaseError(error: unknown): AppError {
     );
   }
 
-  return AppError.supabaseUnavailable(error);
+  return AppError.databaseOperationFailed(error);
 }
 
 function resolveLimit(

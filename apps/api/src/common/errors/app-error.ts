@@ -37,6 +37,7 @@ export type AppErrorCode =
   | 'RESOURCE_CONFLICT'
   | 'RATE_LIMITED'
   | 'SUPABASE_UNAVAILABLE'
+  | 'DATABASE_OPERATION_FAILED'
   | 'EMAIL_PROVIDER_UNAVAILABLE'
   | 'CONFIGURATION_INVALID'
   | 'INTERNAL_ERROR'
@@ -361,7 +362,16 @@ export class AppError extends Error {
       cause,
     );
   }
-
+  static databaseOperationFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'DATABASE_OPERATION_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage:
+        'A database operation failed while processing the request.',
+      cause,
+    });
+  }
   static emailProviderUnavailable(cause?: unknown): AppError {
     return AppError.createExternalProviderError(
       'EMAIL_PROVIDER_UNAVAILABLE',
