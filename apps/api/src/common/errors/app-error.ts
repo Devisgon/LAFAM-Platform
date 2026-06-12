@@ -109,7 +109,24 @@ export type AppErrorCode =
   | 'PILATES_CLASS_IMAGE_INVALID_FILE_TYPE'
   | 'PILATES_CLASS_IMAGE_FILE_TOO_LARGE'
   | 'PILATES_CLASS_IMAGE_UPLOAD_FAILED'
-  | 'PILATES_CLASS_IMAGE_DELETE_FAILED';
+  | 'PILATES_CLASS_IMAGE_DELETE_FAILED'
+  | 'BOOKING_SCHEDULE_NOT_FOUND'
+  | 'BOOKING_CLASS_NOT_ACTIVE'
+  | 'BOOKING_SCHEDULE_NOT_BOOKABLE'
+  | 'BOOKING_SCHEDULE_IN_PAST'
+  | 'BOOKING_DUPLICATE_ACTIVE_BOOKING'
+  | 'BOOKING_DUPLICATE_WAITLIST_ENTRY'
+  | 'BOOKING_CAPACITY_FULL'
+  | 'BOOKING_NOT_FOUND'
+  | 'BOOKING_ACCESS_DENIED'
+  | 'BOOKING_ALREADY_CANCELLED'
+  | 'BOOKING_ALREADY_COMPLETED'
+  | 'BOOKING_INVALID_STATUS_TRANSITION'
+  | 'BOOKING_PAYMENT_REQUIRED'
+  | 'BOOKING_WAITLIST_NOT_FOUND'
+  | 'BOOKING_WAITLIST_PROMOTION_FAILED'
+  | 'BOOKING_CONFLICT_RETRY_REQUIRED'
+  | 'BOOKING_DATABASE_TRANSACTION_FAILED';
 
 export type AppErrorDetails = Record<string, unknown>;
 
@@ -1059,6 +1076,192 @@ export class AppError extends Error {
       'Pilates class image deletion failed. Please try again later.',
       cause,
     );
+  }
+
+  static bookingScheduleNotFound(
+    publicMessage = 'The requested Pilates schedule was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'BOOKING_SCHEDULE_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingClassNotActive(
+    publicMessage = 'This Pilates class is not active for booking.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_CLASS_NOT_ACTIVE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingScheduleNotBookable(
+    publicMessage = 'This Pilates schedule is not available for booking.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_SCHEDULE_NOT_BOOKABLE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingScheduleInPast(
+    publicMessage = 'Past Pilates schedules cannot be booked.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'BOOKING_SCHEDULE_IN_PAST',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingDuplicateActiveBooking(
+    publicMessage = 'You already have an active booking for this schedule.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_DUPLICATE_ACTIVE_BOOKING',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingDuplicateWaitlistEntry(
+    publicMessage = 'You already have an active waitlist entry for this schedule.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_DUPLICATE_WAITLIST_ENTRY',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingCapacityFull(
+    publicMessage = 'This Pilates schedule is full.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_CAPACITY_FULL',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingNotFound(
+    publicMessage = 'The requested booking was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'BOOKING_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingAccessDenied(
+    publicMessage = 'You are not allowed to access this booking.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createAuthorizationError(
+      'BOOKING_ACCESS_DENIED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingAlreadyCancelled(
+    publicMessage = 'This booking is already cancelled.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_ALREADY_CANCELLED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingAlreadyCompleted(
+    publicMessage = 'This booking is already completed.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_ALREADY_COMPLETED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingInvalidStatusTransition(
+    publicMessage = 'This booking cannot move to the requested status.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_INVALID_STATUS_TRANSITION',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingPaymentRequired(
+    publicMessage = 'Payment is required before this booking can be confirmed.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_PAYMENT_REQUIRED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingWaitlistNotFound(
+    publicMessage = 'The requested waitlist entry was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'BOOKING_WAITLIST_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingWaitlistPromotionFailed(
+    publicMessage = 'Waitlist promotion failed because the schedule state changed.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_WAITLIST_PROMOTION_FAILED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingConflictRetryRequired(
+    publicMessage = 'The booking state changed while processing this request. Please try again.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_CONFLICT_RETRY_REQUIRED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingDatabaseTransactionFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'BOOKING_DATABASE_TRANSACTION_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage: 'Booking transaction failed. Please try again later.',
+      cause,
+    });
   }
 }
 
