@@ -1,3 +1,7 @@
+"use client";
+
+import Link from "next/link";
+import { useAuth } from "@/hooks/useAuth";
 import { Avatar } from "./reuseable_ui_components/avatar";
 import { Button } from "./reuseable_ui_components/button";
 import { ThemeSwitcher } from "./theme_switcher";
@@ -14,6 +18,8 @@ export function TopBar({
   description?: string;
   title?: string;
 }) {
+  const { avatarUrl, user } = useAuth();
+
   return (
     <header className="flex flex-wrap items-center justify-between gap-4 border-b border-background-secondary bg-card-bg-primary px-5 py-4">
       <div>
@@ -33,12 +39,34 @@ export function TopBar({
           <Button size="sm">{actionLabel}</Button>
         )}
         <ThemeSwitcher />
-        <button aria-label="Notifications" className="rounded-lg p-2 text-text-secondary hover:bg-background-secondary" type="button">
-          <svg aria-hidden="true" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24">
+        <button
+          aria-label="Notifications"
+          className="rounded-lg p-2 text-text-secondary hover:bg-background-secondary"
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            className="size-5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            viewBox="0 0 24 24"
+          >
             <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
           </svg>
         </button>
-        <Avatar alt="Admin profile" name="Admin User" size="sm" />
+        <Link
+          aria-label="Open profile settings"
+          className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          href="/admin/settings"
+        >
+          <Avatar
+            alt={`${user?.full_name ?? "Account"} profile`}
+            name={user?.full_name ?? user?.email ?? "Account"}
+            size="sm"
+            src={avatarUrl ?? undefined}
+          />
+        </Link>
       </div>
     </header>
   );

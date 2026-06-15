@@ -1,6 +1,7 @@
 "use client";
 
 import React, { Suspense, type FormEvent, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
@@ -55,7 +56,17 @@ function LoginForm() {
         }}
       >
         <div className="relative z-10 flex w-full max-w-md flex-col items-center justify-center rounded-3xl border border-text-secondary/10 bg-card-bg-primary/80 p-12 text-center shadow-xl backdrop-blur-md">
-          <h1 className="mb-4 font-serif text-5xl font-bold tracking-wide text-primary">
+          <div className="mb-5 flex size-24 items-center justify-center rounded-3xl bg-primary shadow-lg shadow-primary/20">
+            <Image
+              alt="LAFAM"
+              className="size-20 object-contain"
+              height={80}
+              priority
+              src="/logo.png"
+              width={80}
+            />
+          </div>
+          <h1 className="mb-3 font-serif text-4xl font-bold tracking-[0.18em] text-primary">
             LAFAM
           </h1>
 
@@ -68,6 +79,12 @@ function LoginForm() {
       <div className="flex w-full flex-col justify-center bg-background px-6 py-12 sm:px-16 lg:w-1/2 lg:px-24 xl:px-32">
         <div className="mx-auto w-full max-w-md">
           <div className="mb-10">
+            <div className="mb-8 flex items-center gap-3 lg:hidden">
+              <span className="flex size-11 items-center justify-center rounded-xl bg-primary">
+                <Image alt="" className="size-9 object-contain" height={36} priority src="/logo.png" width={36} />
+              </span>
+              <strong className="tracking-[0.16em] text-primary">LAFAM</strong>
+            </div>
             <h2 className="mb-3 text-4xl font-semibold tracking-tight text-text-primary">
               Welcome Back
             </h2>
