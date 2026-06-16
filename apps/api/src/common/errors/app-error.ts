@@ -100,6 +100,9 @@ export type AppErrorCode =
   | 'PILATES_SCHEDULE_ALREADY_DELETED'
   | 'PILATES_SCHEDULE_ALREADY_COMPLETED'
   | 'PILATES_SCHEDULE_EMPTY_UPDATE'
+  | 'RECURRENCE_RANGE_TOO_LARGE'
+  | 'RECURRENCE_GENERATED_TOO_MANY_OCCURRENCES'
+  | 'RECURRENCE_CONFLICT_FOUND'
   | 'PILATES_TRAINER_REQUIRED'
   | 'PILATES_TRAINER_NOT_FOUND'
   | 'PILATES_TRAINER_INACTIVE'
@@ -127,7 +130,14 @@ export type AppErrorCode =
   | 'BOOKING_WAITLIST_NOT_FOUND'
   | 'BOOKING_WAITLIST_PROMOTION_FAILED'
   | 'BOOKING_CONFLICT_RETRY_REQUIRED'
-  | 'BOOKING_DATABASE_TRANSACTION_FAILED';
+  | 'BOOKING_DATABASE_TRANSACTION_FAILED'
+  | 'TRAINER_PRIVATE_SLOT_UNAVAILABLE'
+  | 'PRIVATE_BOOKING_NOT_FOUND'
+  | 'PRIVATE_BOOKING_ACCESS_DENIED'
+  | 'PRIVATE_BOOKING_CONFLICT'
+  | 'PRIVATE_BOOKING_INVALID_STATUS'
+  | 'PRIVATE_BOOKING_DATABASE_TRANSACTION_FAILED'
+  | 'CALENDAR_RANGE_TOO_LARGE';
 
 export type AppErrorDetails = Record<string, unknown>;
 
@@ -971,6 +981,39 @@ export class AppError extends Error {
     );
   }
 
+  static recurrenceRangeTooLarge(
+    publicMessage = 'The recurrence date range is too large.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'RECURRENCE_RANGE_TOO_LARGE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static recurrenceGeneratedTooManyOccurrences(
+    publicMessage = 'The recurrence rule generates too many schedule occurrences.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'RECURRENCE_GENERATED_TOO_MANY_OCCURRENCES',
+      publicMessage,
+      details,
+    );
+  }
+
+  static recurrenceConflictFound(
+    publicMessage = 'One or more generated schedule occurrences conflict with existing trainer schedules.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'RECURRENCE_CONFLICT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
   static pilatesTrainerRequired(
     publicMessage = 'A Pilates trainer is required for this schedule.',
     details?: AppErrorDetails,
@@ -1272,6 +1315,83 @@ export class AppError extends Error {
       publicMessage: 'Booking transaction failed. Please try again later.',
       cause,
     });
+  }
+
+  static trainerPrivateSlotUnavailable(
+    publicMessage = 'The selected trainer is not available for this private session time slot.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'TRAINER_PRIVATE_SLOT_UNAVAILABLE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static privateBookingNotFound(
+    publicMessage = 'The requested private trainer booking was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'PRIVATE_BOOKING_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static privateBookingAccessDenied(
+    publicMessage = 'You are not allowed to access this private trainer booking.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createAuthorizationError(
+      'PRIVATE_BOOKING_ACCESS_DENIED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static privateBookingConflict(
+    publicMessage = 'The private trainer booking conflicts with the current trainer schedule.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PRIVATE_BOOKING_CONFLICT',
+      publicMessage,
+      details,
+    );
+  }
+
+  static privateBookingInvalidStatus(
+    publicMessage = 'This private trainer booking cannot move to the requested status.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PRIVATE_BOOKING_INVALID_STATUS',
+      publicMessage,
+      details,
+    );
+  }
+
+  static privateBookingDatabaseTransactionFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'PRIVATE_BOOKING_DATABASE_TRANSACTION_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage:
+        'Private trainer booking transaction failed. Please try again later.',
+      cause,
+    });
+  }
+
+  static calendarRangeTooLarge(
+    publicMessage = 'The requested calendar date range is too large.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'CALENDAR_RANGE_TOO_LARGE',
+      publicMessage,
+      details,
+    );
   }
 }
 

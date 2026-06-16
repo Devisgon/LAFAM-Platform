@@ -6,11 +6,13 @@
  * - Validates admin Pilates schedule list filters.
  * - Validates public/customer Pilates schedule list filters.
  * - Applies safe defaults for pagination and sorting.
+ * - Supports filtering schedules by recurrence series and generation source.
  *
  * Important:
  * - Admin query can include cancelled, completed, deleted, and scheduled records.
  * - Public query must only be used by service logic to expose future scheduled/customer-safe schedules.
  * - Availability is returned by service layer, not trusted from query params.
+ * - series_id and generation_source are query filters only; clients must not mutate recurrence metadata directly.
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -42,9 +44,11 @@ import {
   PILATES_CLASS_SCHEDULE_STATUSES,
   PILATES_CLASS_SORT_DIRECTIONS,
   PILATES_CLASS_STUDIO_MAX_LENGTH,
+  PILATES_SCHEDULE_GENERATION_SOURCES,
   type PilatesClassScheduleSortField,
   type PilatesClassScheduleStatus,
   type PilatesClassSortDirection,
+  type PilatesScheduleGenerationSource,
 } from '../constants/pilates-class.constants';
 
 function optionalTrimmedString({ value }: TransformFnParams): unknown {
@@ -133,6 +137,30 @@ export class ListPilatesSchedulesQueryDto {
     message: 'trainer_staff_profile_id must be a valid UUID.',
   })
   readonly trainer_staff_profile_id?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter schedules by recurring schedule series identifier.',
+    example: 'e3a30cb2-47d5-49e7-900e-2a34b6a9ef4d',
+    format: 'uuid',
+  })
+  @Transform(optionalTrimmedString)
+  @IsOptional()
+  @IsUUID('4', {
+    message: 'series_id must be a valid UUID.',
+  })
+  readonly series_id?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter schedules by generation source.',
+    enum: PILATES_SCHEDULE_GENERATION_SOURCES,
+    example: 'recurring',
+  })
+  @Transform(optionalTrimmedString)
+  @IsOptional()
+  @IsIn(PILATES_SCHEDULE_GENERATION_SOURCES, {
+    message: 'generation_source must be either single or recurring.',
+  })
+  readonly generation_source?: PilatesScheduleGenerationSource;
 
   @ApiPropertyOptional({
     description: 'Filter schedules by status.',
@@ -241,7 +269,7 @@ export class ListPilatesSchedulesQueryDto {
   @IsOptional()
   @IsIn(PILATES_CLASS_SCHEDULE_SORT_FIELDS, {
     message:
-      'sort_by must be one of: class_date, start_time, status, created_at, updated_at.',
+      'sort_by must be one of: class_date, start_time, status, generation_source, created_at, updated_at.',
   })
   readonly sort_by: PilatesClassScheduleSortField =
     PILATES_CLASS_SCHEDULE_DEFAULT_SORT_FIELD;
@@ -285,6 +313,31 @@ export class ListPublicPilatesSchedulesQueryDto {
     message: 'trainer_staff_profile_id must be a valid UUID.',
   })
   readonly trainer_staff_profile_id?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Filter public schedules by recurring schedule series identifier.',
+    example: 'e3a30cb2-47d5-49e7-900e-2a34b6a9ef4d',
+    format: 'uuid',
+  })
+  @Transform(optionalTrimmedString)
+  @IsOptional()
+  @IsUUID('4', {
+    message: 'series_id must be a valid UUID.',
+  })
+  readonly series_id?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter public schedules by generation source.',
+    enum: PILATES_SCHEDULE_GENERATION_SOURCES,
+    example: 'recurring',
+  })
+  @Transform(optionalTrimmedString)
+  @IsOptional()
+  @IsIn(PILATES_SCHEDULE_GENERATION_SOURCES, {
+    message: 'generation_source must be either single or recurring.',
+  })
+  readonly generation_source?: PilatesScheduleGenerationSource;
 
   @ApiPropertyOptional({
     description: 'Filter public schedules by studio name.',
@@ -383,7 +436,7 @@ export class ListPublicPilatesSchedulesQueryDto {
   @IsOptional()
   @IsIn(PILATES_CLASS_SCHEDULE_SORT_FIELDS, {
     message:
-      'sort_by must be one of: class_date, start_time, status, created_at, updated_at.',
+      'sort_by must be one of: class_date, start_time, status, generation_source, created_at, updated_at.',
   })
   readonly sort_by: PilatesClassScheduleSortField =
     PILATES_CLASS_SCHEDULE_DEFAULT_SORT_FIELD;

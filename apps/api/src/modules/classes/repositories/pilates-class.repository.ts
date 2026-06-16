@@ -30,6 +30,8 @@ import type {
   PilatesClassScheduleRow,
   PilatesClassScheduleUpdate,
   PilatesClassUpdate,
+  PilatesScheduleSeriesInsert,
+  PilatesScheduleSeriesRow,
   StaffAvailabilityRuleRow,
   StaffProfileRow,
 } from '../../../database/database.types';
@@ -58,6 +60,9 @@ import type {
   PilatesClassScheduleListQuery,
   PilatesClassSchedulePublicListQuery,
   PilatesClassScheduleWithRelations,
+  PilatesGeneratedScheduleConflict,
+  PilatesScheduleGeneratedOccurrence,
+  PilatesScheduleSeriesWithRelations,
   PilatesTrainerAvailabilityLookupInput,
   PilatesTrainerScheduleConflictLookupInput,
 } from '../types/pilates-class.types';
@@ -93,7 +98,11 @@ interface SoftDeleteScheduleInput {
   readonly updated_by_admin_id: string;
   readonly deleted_at: string;
 }
-
+interface PilatesGeneratedScheduleConflictLookupInput {
+  readonly trainer_staff_profile_id: string;
+  readonly occurrences: readonly PilatesScheduleGeneratedOccurrence[];
+  readonly exclude_schedule_id?: string;
+}
 function isProviderDatabaseError(
   error: unknown,
 ): error is ProviderDatabaseError {
@@ -202,7 +211,43 @@ function todayIsoDate(): string {
 function uniqueValues(values: readonly string[]): readonly string[] {
   return [...new Set(values)];
 }
+function resolveOccurrenceDateRange(
+  occurrences: readonly PilatesScheduleGeneratedOccurrence[],
+): { readonly from_date: string; readonly to_date: string } | null {
+  let fromDate: string | null = null;
+  let toDate: string | null = null;
 
+  for (const occurrence of occurrences) {
+    if (fromDate === null || occurrence.class_date < fromDate) {
+      fromDate = occurrence.class_date;
+    }
+
+    if (toDate === null || occurrence.class_date > toDate) {
+      toDate = occurrence.class_date;
+    }
+  }
+
+  if (fromDate === null || toDate === null) {
+    return null;
+  }
+
+  return {
+    from_date: fromDate,
+    to_date: toDate,
+  };
+}
+
+function timeWindowsOverlap(input: {
+  readonly first_start_time: string;
+  readonly first_end_time: string;
+  readonly second_start_time: string;
+  readonly second_end_time: string;
+}): boolean {
+  return (
+    input.first_start_time < input.second_end_time &&
+    input.first_end_time > input.second_start_time
+  );
+}
 @Injectable()
 export class PilatesClassRepository {
   constructor(
@@ -466,7 +511,40 @@ export class PilatesClassRepository {
 
     return data;
   }
+  async createSchedules(
+    payloads: readonly PilatesClassScheduleInsert[],
+  ): Promise<readonly PilatesClassScheduleRow[]> {
+    if (payloads.length === 0) {
+      return [];
+    }
 
+    const { data, error } = await this.adminClient
+      .from('pilates_class_schedules')
+      .insert(payloads.map((payload) => ({ ...payload })))
+      .select('*');
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return data ?? [];
+  }
+
+  async createScheduleSeries(
+    payload: PilatesScheduleSeriesInsert,
+  ): Promise<PilatesScheduleSeriesRow> {
+    const { data, error } = await this.adminClient
+      .from('pilates_schedule_series')
+      .insert(payload)
+      .select('*')
+      .single();
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return data;
+  }
   async updateSchedule(
     scheduleId: string,
     patch: PilatesClassScheduleUpdate,
@@ -622,7 +700,75 @@ export class PilatesClassRepository {
 
     return hydratedSchedules[0] ?? null;
   }
+  async findScheduleSeriesById(
+    seriesId: string,
+  ): Promise<PilatesScheduleSeriesRow | null> {
+    const { data, error } = await this.adminClient
+      .from('pilates_schedule_series')
+      .select('*')
+      .eq('id', seriesId)
+      .maybeSingle();
 
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return data;
+  }
+
+  async findScheduleSeriesWithRelationsById(
+    seriesId: string,
+  ): Promise<PilatesScheduleSeriesWithRelations | null> {
+    const series = await this.findScheduleSeriesById(seriesId);
+
+    if (!series) {
+      return null;
+    }
+
+    const [classesById, trainersById, generatedSchedules] = await Promise.all([
+      this.fetchClassesByIds([series.class_id]),
+      this.fetchStaffProfilesByIds([series.trainer_staff_profile_id]),
+      this.findSchedulesBySeriesId(series.id),
+    ]);
+
+    const classRecord = classesById.get(series.class_id);
+    const trainer = trainersById.get(series.trainer_staff_profile_id);
+
+    if (!classRecord) {
+      throw AppError.pilatesClassNotFound(
+        'The related Pilates class was not found.',
+        {
+          class_id: series.class_id,
+          series_id: series.id,
+        },
+      );
+    }
+
+    if (!trainer) {
+      throw AppError.pilatesTrainerNotFound(
+        'The related Pilates trainer was not found.',
+        {
+          trainer_staff_profile_id: series.trainer_staff_profile_id,
+          series_id: series.id,
+        },
+      );
+    }
+
+    return {
+      series,
+      class: classRecord,
+      trainer,
+      generated_schedules: generatedSchedules,
+    };
+  }
+
+  async findSchedulesBySeriesId(
+    seriesId: string,
+  ): Promise<readonly PilatesClassScheduleWithRelations[]> {
+    const schedules = await this.fetchSchedulesBySeriesId(seriesId);
+
+    return this.hydrateSchedules(schedules);
+  }
   async findPublicScheduleWithRelationsById(
     scheduleId: string,
   ): Promise<PilatesClassScheduleWithRelations | null> {
@@ -687,6 +833,14 @@ export class PilatesClassRepository {
         'trainer_staff_profile_id',
         input.trainer_staff_profile_id,
       );
+    }
+
+    if (input.series_id) {
+      query = query.eq('series_id', input.series_id);
+    }
+
+    if (input.generation_source) {
+      query = query.eq('generation_source', input.generation_source);
     }
 
     if (input.status) {
@@ -765,6 +919,14 @@ export class PilatesClassRepository {
         'trainer_staff_profile_id',
         input.trainer_staff_profile_id,
       );
+    }
+
+    if (input.series_id) {
+      query = query.eq('series_id', input.series_id);
+    }
+
+    if (input.generation_source) {
+      query = query.eq('generation_source', input.generation_source);
     }
 
     if (input.studio) {
@@ -873,7 +1035,78 @@ export class PilatesClassRepository {
 
     return (data ?? []).length > 0;
   }
+  async findGeneratedScheduleConflicts(
+    input: PilatesGeneratedScheduleConflictLookupInput,
+  ): Promise<readonly PilatesGeneratedScheduleConflict[]> {
+    const dateRange = resolveOccurrenceDateRange(input.occurrences);
 
+    if (dateRange === null) {
+      return [];
+    }
+
+    let query = this.adminClient
+      .from('pilates_class_schedules')
+      .select('id, class_date, start_time, end_time')
+      .eq('trainer_staff_profile_id', input.trainer_staff_profile_id)
+      .eq('status', PILATES_CLASS_SCHEDULE_STATUS_SCHEDULED)
+      .is('deleted_at', null)
+      .gte('class_date', dateRange.from_date)
+      .lte('class_date', dateRange.to_date);
+
+    if (input.exclude_schedule_id) {
+      query = query.neq('id', input.exclude_schedule_id);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    const schedulesByDate = new Map<
+      string,
+      readonly {
+        readonly id: string;
+        readonly class_date: string;
+        readonly start_time: string;
+        readonly end_time: string;
+      }[]
+    >();
+
+    for (const schedule of data ?? []) {
+      const schedulesForDate = schedulesByDate.get(schedule.class_date) ?? [];
+
+      schedulesByDate.set(schedule.class_date, [...schedulesForDate, schedule]);
+    }
+
+    const conflicts: PilatesGeneratedScheduleConflict[] = [];
+
+    for (const occurrence of input.occurrences) {
+      const schedulesForDate = schedulesByDate.get(occurrence.class_date) ?? [];
+
+      const conflictingSchedule = schedulesForDate.find((schedule) =>
+        timeWindowsOverlap({
+          first_start_time: occurrence.start_time,
+          first_end_time: occurrence.end_time,
+          second_start_time: schedule.start_time,
+          second_end_time: schedule.end_time,
+        }),
+      );
+
+      if (conflictingSchedule) {
+        conflicts.push({
+          occurrence_index: occurrence.occurrence_index,
+          class_date: occurrence.class_date,
+          start_time: occurrence.start_time,
+          end_time: occurrence.end_time,
+          reason: 'trainer_schedule_overlap',
+          conflicting_schedule_id: conflictingSchedule.id,
+        });
+      }
+    }
+
+    return conflicts;
+  }
   async countScheduledSchedulesByClassId(classId: string): Promise<number> {
     const { error, count } = await this.adminClient
       .from('pilates_class_schedules')
@@ -959,15 +1192,25 @@ export class PilatesClassRepository {
     const trainerIds = uniqueValues(
       schedules.map((schedule) => schedule.trainer_staff_profile_id),
     );
+    const seriesIds = uniqueValues(
+      schedules
+        .map((schedule) => schedule.series_id)
+        .filter((seriesId): seriesId is string => typeof seriesId === 'string'),
+    );
 
-    const [classesById, trainersById] = await Promise.all([
+    const [classesById, trainersById, seriesById] = await Promise.all([
       this.fetchClassesByIds(classIds),
       this.fetchStaffProfilesByIds(trainerIds),
+      this.fetchScheduleSeriesByIds(seriesIds),
     ]);
 
     return schedules.map((schedule) => {
       const classRecord = classesById.get(schedule.class_id);
       const trainer = trainersById.get(schedule.trainer_staff_profile_id);
+      const series =
+        schedule.series_id !== null
+          ? (seriesById.get(schedule.series_id) ?? null)
+          : null;
 
       if (!classRecord) {
         throw AppError.pilatesClassNotFound(
@@ -993,6 +1236,7 @@ export class PilatesClassRepository {
         schedule,
         class: classRecord,
         trainer,
+        series,
       };
     });
   }
@@ -1033,5 +1277,40 @@ export class PilatesClassRepository {
     }
 
     return new Map((data ?? []).map((record) => [record.id, record]));
+  }
+  private async fetchScheduleSeriesByIds(
+    seriesIds: readonly string[],
+  ): Promise<ReadonlyMap<string, PilatesScheduleSeriesRow>> {
+    if (seriesIds.length === 0) {
+      return new Map<string, PilatesScheduleSeriesRow>();
+    }
+
+    const { data, error } = await this.adminClient
+      .from('pilates_schedule_series')
+      .select('*')
+      .in('id', seriesIds);
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return new Map((data ?? []).map((record) => [record.id, record]));
+  }
+
+  private async fetchSchedulesBySeriesId(
+    seriesId: string,
+  ): Promise<readonly PilatesClassScheduleRow[]> {
+    const { data, error } = await this.adminClient
+      .from('pilates_class_schedules')
+      .select('*')
+      .eq('series_id', seriesId)
+      .order('class_date', { ascending: true })
+      .order('start_time', { ascending: true });
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return data ?? [];
   }
 }

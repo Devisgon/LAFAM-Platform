@@ -49,10 +49,14 @@ import { AuthGuard } from '../../auth/guards/auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import type { AuthInternalContext } from '../../auth/types/auth-context.types';
 import { BookingAdminService } from '../application/booking-admin.service';
+import { BookingCalendarService } from '../application/booking-calendar.service';
 import {
+  BOOKING_ADMIN_CALENDAR_ROUTE_PREFIX,
+  BOOKING_ADMIN_PRIVATE_ROUTE_PREFIX,
   BOOKING_ADMIN_ROUTE_PREFIX,
   BOOKING_ADMIN_SCHEDULE_WAITLIST_ROUTE_PREFIX,
   BOOKING_ADMIN_WAITLIST_ROUTE_PREFIX,
+  PRIVATE_BOOKING_ID_PARAM_NAME,
 } from '../constants/booking.constants';
 import {
   BookingParamDto,
@@ -63,13 +67,24 @@ import { AdminCancelBookingDto } from '../dto/admin-cancel-booking.dto';
 import { AdminOverrideBookingDto } from '../dto/admin-override-booking.dto';
 import { ListAdminBookingsQueryDto } from '../dto/list-admin-bookings-query.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
+import { CreatePrivateBookingDto } from '../dto/create-private-booking.dto';
+import { ListAdminCalendarQueryDto } from '../dto/list-admin-calendar-query.dto';
+import { ListAdminPrivateBookingsQueryDto } from '../dto/list-private-bookings-query.dto';
+import { PrivateBookingParamDto } from '../dto/private-booking-param.dto';
+import { ReschedulePrivateBookingDto } from '../dto/reschedule-private-booking.dto';
 import type {
+  BookingCalendarResult,
   BookingCancelResult,
   BookingDetail,
   BookingListResult,
   BookingRescheduleResult,
   BookingWaitlistListItem,
   BookingWaitlistListResult,
+  PrivateBookingCancelResult,
+  PrivateBookingCreateResult,
+  PrivateBookingDetail,
+  PrivateBookingListResult,
+  PrivateBookingRescheduleResult,
 } from '../types/booking.types';
 
 function resolveAuthContext(
@@ -92,7 +107,10 @@ function resolveAuthenticatedAdminId(
 @UseGuards(AuthGuard, ActiveSessionGuard, RolesGuard)
 @Roles(AUTH_ADMIN_ROLE, AUTH_SUPER_ADMIN_ROLE)
 export class BookingAdminController {
-  constructor(private readonly bookingAdminService: BookingAdminService) {}
+  constructor(
+    private readonly bookingAdminService: BookingAdminService,
+    private readonly bookingCalendarService: BookingCalendarService,
+  ) {}
 
   @Get(BOOKING_ADMIN_ROUTE_PREFIX)
   async listBookings(
@@ -134,6 +152,112 @@ export class BookingAdminController {
     return createApiSuccessResponse({
       status: HttpStatus.OK,
       message: 'Waitlist entry removed successfully.',
+      data,
+    });
+  }
+
+  @Get(BOOKING_ADMIN_CALENDAR_ROUTE_PREFIX)
+  async listAdminCalendar(
+    @Query() query: ListAdminCalendarQueryDto,
+  ): Promise<ApiSuccessResponse<BookingCalendarResult>> {
+    const data = await this.bookingCalendarService.listAdminCalendar(query);
+
+    return createApiSuccessResponse({
+      status: HttpStatus.OK,
+      message: 'Booking calendar retrieved successfully.',
+      data,
+    });
+  }
+
+  @Post(BOOKING_ADMIN_PRIVATE_ROUTE_PREFIX)
+  @HttpCode(HttpStatus.CREATED)
+  async createPrivateBooking(
+    @CurrentAuth() auth: AuthInternalContext | undefined,
+    @Body() body: CreatePrivateBookingDto,
+  ): Promise<ApiSuccessResponse<PrivateBookingCreateResult>> {
+    const data = await this.bookingAdminService.createPrivateBooking(
+      resolveAuthenticatedAdminId(auth),
+      body,
+    );
+
+    return createApiSuccessResponse({
+      status: HttpStatus.CREATED,
+      message: 'Private trainer booking request processed successfully.',
+      data,
+    });
+  }
+
+  @Get(BOOKING_ADMIN_PRIVATE_ROUTE_PREFIX)
+  async listPrivateBookings(
+    @Query() query: ListAdminPrivateBookingsQueryDto,
+  ): Promise<ApiSuccessResponse<PrivateBookingListResult>> {
+    const data = await this.bookingAdminService.listPrivateBookings(query);
+
+    return createApiSuccessResponse({
+      status: HttpStatus.OK,
+      message: 'Private trainer bookings retrieved successfully.',
+      data,
+    });
+  }
+
+  @Get(
+    `${BOOKING_ADMIN_PRIVATE_ROUTE_PREFIX}/:${PRIVATE_BOOKING_ID_PARAM_NAME}`,
+  )
+  async getPrivateBookingById(
+    @Param() params: PrivateBookingParamDto,
+  ): Promise<ApiSuccessResponse<PrivateBookingDetail>> {
+    const data = await this.bookingAdminService.getPrivateBookingById(
+      params[PRIVATE_BOOKING_ID_PARAM_NAME],
+    );
+
+    return createApiSuccessResponse({
+      status: HttpStatus.OK,
+      message: 'Private trainer booking retrieved successfully.',
+      data,
+    });
+  }
+
+  @Post(
+    `${BOOKING_ADMIN_PRIVATE_ROUTE_PREFIX}/:${PRIVATE_BOOKING_ID_PARAM_NAME}/cancel`,
+  )
+  @HttpCode(HttpStatus.OK)
+  async cancelPrivateBooking(
+    @CurrentAuth() auth: AuthInternalContext | undefined,
+    @Param() params: PrivateBookingParamDto,
+    @Body() body: AdminCancelBookingDto,
+  ): Promise<ApiSuccessResponse<PrivateBookingCancelResult>> {
+    const data = await this.bookingAdminService.cancelPrivateBooking(
+      resolveAuthenticatedAdminId(auth),
+      params[PRIVATE_BOOKING_ID_PARAM_NAME],
+      body,
+    );
+
+    return createApiSuccessResponse({
+      status: HttpStatus.OK,
+      message: 'Private trainer booking cancelled successfully.',
+      data,
+    });
+  }
+
+  @Post(
+    `${BOOKING_ADMIN_PRIVATE_ROUTE_PREFIX}/:${PRIVATE_BOOKING_ID_PARAM_NAME}/reschedule`,
+  )
+  @HttpCode(HttpStatus.OK)
+  async reschedulePrivateBooking(
+    @CurrentAuth() auth: AuthInternalContext | undefined,
+    @Param() params: PrivateBookingParamDto,
+    @Body() body: ReschedulePrivateBookingDto,
+  ): Promise<ApiSuccessResponse<PrivateBookingRescheduleResult>> {
+    const data = await this.bookingAdminService.reschedulePrivateBooking(
+      resolveAuthenticatedAdminId(auth),
+      params[PRIVATE_BOOKING_ID_PARAM_NAME],
+      body,
+    );
+
+    return createApiSuccessResponse({
+      status: HttpStatus.OK,
+      message:
+        'Private trainer booking reschedule request processed successfully.',
       data,
     });
   }

@@ -4,7 +4,8 @@
  *
  * Role:
  * - Defines Booking Module statuses, payment states, sources, waitlist states,
- *   route prefixes, validation limits, pagination defaults, RPC action results,
+ *   private trainer booking states, route prefixes, validation limits,
+ *   pagination defaults, RPC action results, calendar event types,
  *   domain event names, and role access rules.
  * - Keeps DTOs, services, repositories, controllers, and Swagger aligned.
  *
@@ -14,7 +15,7 @@
  * - Do not place service logic here.
  * - Do not place secrets or environment-derived values here.
  * - Booking is the source of truth for real schedule availability.
- * - Pilates and Salon booking flows must remain separate.
+ * - Pilates class bookings and private trainer bookings must remain separate flows.
  */
 
 import {
@@ -31,10 +32,22 @@ export const BOOKING_CUSTOMER_ROUTE_PREFIX = 'bookings' as const;
 export const BOOKING_CUSTOMER_WAITLIST_ROUTE_PREFIX =
   'bookings/waitlist' as const;
 
+export const BOOKING_CUSTOMER_PRIVATE_ROUTE_PREFIX =
+  'bookings/private-trainer' as const;
+
+export const BOOKING_CUSTOMER_PRIVATE_AVAILABILITY_ROUTE_PREFIX =
+  'bookings/private-trainer/availability' as const;
+
 export const BOOKING_ADMIN_ROUTE_PREFIX = 'admin/bookings' as const;
 
 export const BOOKING_ADMIN_WAITLIST_ROUTE_PREFIX =
   'admin/bookings/waitlist' as const;
+
+export const BOOKING_ADMIN_PRIVATE_ROUTE_PREFIX =
+  'admin/bookings/private-trainer' as const;
+
+export const BOOKING_ADMIN_CALENDAR_ROUTE_PREFIX =
+  'admin/bookings/calendar' as const;
 
 export const BOOKING_ADMIN_SCHEDULE_WAITLIST_ROUTE_PREFIX =
   'admin/pilates/schedules' as const;
@@ -103,6 +116,51 @@ export const BOOKING_CANCELLABLE_STATUSES = [
 export const BOOKING_RESCHEDULABLE_STATUSES = [
   BOOKING_STATUS_CONFIRMED,
 ] as const satisfies readonly BookingStatus[];
+
+export const PRIVATE_BOOKING_ACTIVE_STATUSES = [
+  BOOKING_STATUS_PENDING_PAYMENT,
+  BOOKING_STATUS_CONFIRMED,
+] as const satisfies readonly BookingStatus[];
+
+export const PRIVATE_BOOKING_VISIBLE_HISTORY_STATUSES = [
+  BOOKING_STATUS_CONFIRMED,
+  BOOKING_STATUS_CANCELLED,
+  BOOKING_STATUS_COMPLETED,
+  BOOKING_STATUS_NO_SHOW,
+  BOOKING_STATUS_EXPIRED,
+  BOOKING_STATUS_RESCHEDULED,
+] as const satisfies readonly BookingStatus[];
+
+export const PRIVATE_BOOKING_TERMINAL_STATUSES = [
+  BOOKING_STATUS_CANCELLED,
+  BOOKING_STATUS_COMPLETED,
+  BOOKING_STATUS_NO_SHOW,
+  BOOKING_STATUS_EXPIRED,
+  BOOKING_STATUS_RESCHEDULED,
+  BOOKING_STATUS_DELETED,
+] as const satisfies readonly BookingStatus[];
+
+export const PRIVATE_BOOKING_CANCELLABLE_STATUSES = [
+  BOOKING_STATUS_PENDING_PAYMENT,
+  BOOKING_STATUS_CONFIRMED,
+] as const satisfies readonly BookingStatus[];
+
+export const PRIVATE_BOOKING_RESCHEDULABLE_STATUSES = [
+  BOOKING_STATUS_PENDING_PAYMENT,
+  BOOKING_STATUS_CONFIRMED,
+] as const satisfies readonly BookingStatus[];
+
+export type PrivateBookingActiveStatus =
+  (typeof PRIVATE_BOOKING_ACTIVE_STATUSES)[number];
+
+export type PrivateBookingTerminalStatus =
+  (typeof PRIVATE_BOOKING_TERMINAL_STATUSES)[number];
+
+export type PrivateBookingCancellableStatus =
+  (typeof PRIVATE_BOOKING_CANCELLABLE_STATUSES)[number];
+
+export type PrivateBookingReschedulableStatus =
+  (typeof PRIVATE_BOOKING_RESCHEDULABLE_STATUSES)[number];
 
 export const BOOKING_PAYMENT_STATUSES = [
   'not_required',
@@ -240,6 +298,44 @@ export const BOOKING_HISTORY_ACTION_WAITLIST_CANCELLED =
 export const BOOKING_HISTORY_ACTION_ADMIN_OVERRIDE =
   'admin_override' satisfies BookingHistoryAction;
 
+export const PRIVATE_BOOKING_HISTORY_ACTIONS = [
+  'private_booking_created',
+  'private_booking_confirmed',
+  'private_booking_cancelled',
+  'private_booking_completed',
+  'private_booking_no_show',
+  'private_booking_expired',
+  'private_booking_rescheduled',
+  'private_booking_admin_override',
+] as const;
+
+export type PrivateBookingHistoryAction =
+  (typeof PRIVATE_BOOKING_HISTORY_ACTIONS)[number];
+
+export const PRIVATE_BOOKING_HISTORY_ACTION_CREATED =
+  'private_booking_created' satisfies PrivateBookingHistoryAction;
+
+export const PRIVATE_BOOKING_HISTORY_ACTION_CONFIRMED =
+  'private_booking_confirmed' satisfies PrivateBookingHistoryAction;
+
+export const PRIVATE_BOOKING_HISTORY_ACTION_CANCELLED =
+  'private_booking_cancelled' satisfies PrivateBookingHistoryAction;
+
+export const PRIVATE_BOOKING_HISTORY_ACTION_COMPLETED =
+  'private_booking_completed' satisfies PrivateBookingHistoryAction;
+
+export const PRIVATE_BOOKING_HISTORY_ACTION_NO_SHOW =
+  'private_booking_no_show' satisfies PrivateBookingHistoryAction;
+
+export const PRIVATE_BOOKING_HISTORY_ACTION_EXPIRED =
+  'private_booking_expired' satisfies PrivateBookingHistoryAction;
+
+export const PRIVATE_BOOKING_HISTORY_ACTION_RESCHEDULED =
+  'private_booking_rescheduled' satisfies PrivateBookingHistoryAction;
+
+export const PRIVATE_BOOKING_HISTORY_ACTION_ADMIN_OVERRIDE =
+  'private_booking_admin_override' satisfies PrivateBookingHistoryAction;
+
 export const BOOKING_RPC_ACTION_RESULTS = [
   'existing_booking',
   'booked',
@@ -274,6 +370,28 @@ export const BOOKING_RPC_ACTION_TARGET_WAITLISTED =
 export const BOOKING_RPC_ACTION_RESCHEDULED =
   'rescheduled' satisfies BookingRpcActionResult;
 
+export const PRIVATE_BOOKING_RPC_ACTION_RESULTS = [
+  'existing_private_booking',
+  'private_booked',
+  'private_cancelled',
+  'private_rescheduled',
+] as const;
+
+export type PrivateBookingRpcActionResult =
+  (typeof PRIVATE_BOOKING_RPC_ACTION_RESULTS)[number];
+
+export const PRIVATE_BOOKING_RPC_ACTION_EXISTING_PRIVATE_BOOKING =
+  'existing_private_booking' satisfies PrivateBookingRpcActionResult;
+
+export const PRIVATE_BOOKING_RPC_ACTION_BOOKED =
+  'private_booked' satisfies PrivateBookingRpcActionResult;
+
+export const PRIVATE_BOOKING_RPC_ACTION_CANCELLED =
+  'private_cancelled' satisfies PrivateBookingRpcActionResult;
+
+export const PRIVATE_BOOKING_RPC_ACTION_RESCHEDULED =
+  'private_rescheduled' satisfies PrivateBookingRpcActionResult;
+
 export const BOOKING_DOMAIN_EVENTS = [
   'booking.created',
   'booking.cancelled',
@@ -282,6 +400,12 @@ export const BOOKING_DOMAIN_EVENTS = [
   'waitlist.joined',
   'waitlist.promoted',
   'availability.changed',
+  'private_booking.created',
+  'private_booking.cancelled',
+  'private_booking.rescheduled',
+  'private_booking.expired',
+  'private_booking.completed',
+  'private_booking.no_show',
 ] as const;
 
 export type BookingDomainEventName = (typeof BOOKING_DOMAIN_EVENTS)[number];
@@ -307,6 +431,46 @@ export const BOOKING_EVENT_WAITLIST_PROMOTED =
 export const BOOKING_EVENT_AVAILABILITY_CHANGED =
   'availability.changed' satisfies BookingDomainEventName;
 
+export const BOOKING_EVENT_PRIVATE_BOOKING_CREATED =
+  'private_booking.created' satisfies BookingDomainEventName;
+
+export const BOOKING_EVENT_PRIVATE_BOOKING_CANCELLED =
+  'private_booking.cancelled' satisfies BookingDomainEventName;
+
+export const BOOKING_EVENT_PRIVATE_BOOKING_RESCHEDULED =
+  'private_booking.rescheduled' satisfies BookingDomainEventName;
+
+export const BOOKING_EVENT_PRIVATE_BOOKING_EXPIRED =
+  'private_booking.expired' satisfies BookingDomainEventName;
+
+export const BOOKING_EVENT_PRIVATE_BOOKING_COMPLETED =
+  'private_booking.completed' satisfies BookingDomainEventName;
+
+export const BOOKING_EVENT_PRIVATE_BOOKING_NO_SHOW =
+  'private_booking.no_show' satisfies BookingDomainEventName;
+
+export const BOOKING_CALENDAR_EVENT_TYPES = [
+  'pilates_schedule',
+  'pilates_booking',
+  'waitlist_entry',
+  'private_trainer_booking',
+] as const;
+
+export type BookingCalendarEventType =
+  (typeof BOOKING_CALENDAR_EVENT_TYPES)[number];
+
+export const BOOKING_CALENDAR_EVENT_TYPE_PILATES_SCHEDULE =
+  'pilates_schedule' satisfies BookingCalendarEventType;
+
+export const BOOKING_CALENDAR_EVENT_TYPE_PILATES_BOOKING =
+  'pilates_booking' satisfies BookingCalendarEventType;
+
+export const BOOKING_CALENDAR_EVENT_TYPE_WAITLIST_ENTRY =
+  'waitlist_entry' satisfies BookingCalendarEventType;
+
+export const BOOKING_CALENDAR_EVENT_TYPE_PRIVATE_TRAINER_BOOKING =
+  'private_trainer_booking' satisfies BookingCalendarEventType;
+
 export const BOOKING_CUSTOMER_ACCESS_ROLES = [
   AUTH_CUSTOMER_ROLE,
 ] as const satisfies readonly AuthUserRole[];
@@ -324,6 +488,14 @@ export const BOOKING_ADMIN_DEFAULT_LIMIT = 50 as const;
 export const BOOKING_ADMIN_MAX_LIMIT = 100 as const;
 export const BOOKING_ADMIN_DEFAULT_OFFSET = 0 as const;
 
+export const PRIVATE_BOOKING_DEFAULT_LIMIT = 20 as const;
+export const PRIVATE_BOOKING_MAX_LIMIT = 100 as const;
+export const PRIVATE_BOOKING_DEFAULT_OFFSET = 0 as const;
+
+export const PRIVATE_BOOKING_ADMIN_DEFAULT_LIMIT = 50 as const;
+export const PRIVATE_BOOKING_ADMIN_MAX_LIMIT = 100 as const;
+export const PRIVATE_BOOKING_ADMIN_DEFAULT_OFFSET = 0 as const;
+
 export const BOOKING_IDEMPOTENCY_KEY_MAX_LENGTH = 160 as const;
 export const BOOKING_CANCEL_REASON_MAX_LENGTH = 1000 as const;
 export const BOOKING_ADMIN_NOTES_MAX_LENGTH = 2000 as const;
@@ -334,13 +506,41 @@ export const BOOKING_PAYMENT_HOLD_TTL_MINUTES = 15 as const;
 
 export const BOOKING_DEFAULT_PAYMENT_REQUIRED = false as const;
 
+export const PRIVATE_BOOKING_DEFAULT_PAYMENT_REQUIRED = false as const;
+
+export const PRIVATE_BOOKING_DEFAULT_STUDIO = 'LAFAM Pilates Studio' as const;
+export const PRIVATE_BOOKING_STUDIO_MIN_LENGTH = 2 as const;
+export const PRIVATE_BOOKING_STUDIO_MAX_LENGTH = 120 as const;
+
+export const PRIVATE_BOOKING_DURATION_MIN_MINUTES = 15 as const;
+export const PRIVATE_BOOKING_DURATION_MAX_MINUTES = 240 as const;
+export const PRIVATE_BOOKING_DEFAULT_DURATION_MINUTES = 60 as const;
+
+export const PRIVATE_BOOKING_AVAILABILITY_SLOT_INTERVAL_MINUTES = 15 as const;
+export const PRIVATE_BOOKING_AVAILABILITY_MAX_RANGE_DAYS = 31 as const;
+
+export const BOOKING_ADMIN_CALENDAR_MAX_RANGE_DAYS = 93 as const;
+export const BOOKING_ADMIN_CALENDAR_DEFAULT_INCLUDE_CLASS_SCHEDULES =
+  true as const;
+export const BOOKING_ADMIN_CALENDAR_DEFAULT_INCLUDE_CLASS_BOOKINGS =
+  false as const;
+export const BOOKING_ADMIN_CALENDAR_DEFAULT_INCLUDE_WAITLIST = false as const;
+export const BOOKING_ADMIN_CALENDAR_DEFAULT_INCLUDE_PRIVATE_BOOKINGS =
+  true as const;
+
 export const BOOKING_UUID_VERSION = '4' as const;
 
 export const BOOKING_ID_PARAM_NAME = 'bookingId' as const;
 export const BOOKING_WAITLIST_ID_PARAM_NAME = 'waitlistId' as const;
 export const BOOKING_SCHEDULE_ID_PARAM_NAME = 'scheduleId' as const;
+export const PRIVATE_BOOKING_ID_PARAM_NAME = 'privateBookingId' as const;
+export const PRIVATE_BOOKING_TRAINER_ID_PARAM_NAME = 'trainerId' as const;
 
 export const BOOKING_SEARCH_MAX_LENGTH = 254 as const;
+
+export const BOOKING_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
+
+export const BOOKING_TIME_VALUE_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/u;
 
 export const BOOKING_SORT_FIELDS = [
   'created_at',
@@ -354,6 +554,31 @@ export type BookingSortField = (typeof BOOKING_SORT_FIELDS)[number];
 export const BOOKING_DEFAULT_SORT_FIELD =
   'created_at' satisfies BookingSortField;
 
+export const PRIVATE_BOOKING_SORT_FIELDS = [
+  'created_at',
+  'session_date',
+  'start_time',
+  'status',
+] as const;
+
+export type PrivateBookingSortField =
+  (typeof PRIVATE_BOOKING_SORT_FIELDS)[number];
+
+export const PRIVATE_BOOKING_DEFAULT_SORT_FIELD =
+  'created_at' satisfies PrivateBookingSortField;
+
+export const BOOKING_CALENDAR_SORT_FIELDS = [
+  'start_at',
+  'event_type',
+  'status',
+] as const;
+
+export type BookingCalendarSortField =
+  (typeof BOOKING_CALENDAR_SORT_FIELDS)[number];
+
+export const BOOKING_CALENDAR_DEFAULT_SORT_FIELD =
+  'start_at' satisfies BookingCalendarSortField;
+
 export const BOOKING_SORT_DIRECTIONS = ['asc', 'desc'] as const;
 
 export type BookingSortDirection = (typeof BOOKING_SORT_DIRECTIONS)[number];
@@ -361,8 +586,75 @@ export type BookingSortDirection = (typeof BOOKING_SORT_DIRECTIONS)[number];
 export const BOOKING_DEFAULT_SORT_DIRECTION =
   'desc' satisfies BookingSortDirection;
 
+export const BOOKING_CALENDAR_DEFAULT_SORT_DIRECTION =
+  'asc' satisfies BookingSortDirection;
+
 export function isBookingStatus(value: string): value is BookingStatus {
   return BOOKING_STATUSES.includes(value as BookingStatus);
+}
+
+export function isBookingActiveStatus(
+  value: string,
+): value is (typeof BOOKING_ACTIVE_STATUSES)[number] {
+  return BOOKING_ACTIVE_STATUSES.includes(
+    value as (typeof BOOKING_ACTIVE_STATUSES)[number],
+  );
+}
+
+export function isBookingTerminalStatus(
+  value: string,
+): value is (typeof BOOKING_TERMINAL_STATUSES)[number] {
+  return BOOKING_TERMINAL_STATUSES.includes(
+    value as (typeof BOOKING_TERMINAL_STATUSES)[number],
+  );
+}
+
+export function isBookingCancellableStatus(
+  value: string,
+): value is (typeof BOOKING_CANCELLABLE_STATUSES)[number] {
+  return BOOKING_CANCELLABLE_STATUSES.includes(
+    value as (typeof BOOKING_CANCELLABLE_STATUSES)[number],
+  );
+}
+
+export function isBookingReschedulableStatus(
+  value: string,
+): value is (typeof BOOKING_RESCHEDULABLE_STATUSES)[number] {
+  return BOOKING_RESCHEDULABLE_STATUSES.includes(
+    value as (typeof BOOKING_RESCHEDULABLE_STATUSES)[number],
+  );
+}
+
+export function isPrivateBookingActiveStatus(
+  value: string,
+): value is PrivateBookingActiveStatus {
+  return PRIVATE_BOOKING_ACTIVE_STATUSES.includes(
+    value as PrivateBookingActiveStatus,
+  );
+}
+
+export function isPrivateBookingTerminalStatus(
+  value: string,
+): value is PrivateBookingTerminalStatus {
+  return PRIVATE_BOOKING_TERMINAL_STATUSES.includes(
+    value as PrivateBookingTerminalStatus,
+  );
+}
+
+export function isPrivateBookingCancellableStatus(
+  value: string,
+): value is PrivateBookingCancellableStatus {
+  return PRIVATE_BOOKING_CANCELLABLE_STATUSES.includes(
+    value as PrivateBookingCancellableStatus,
+  );
+}
+
+export function isPrivateBookingReschedulableStatus(
+  value: string,
+): value is PrivateBookingReschedulableStatus {
+  return PRIVATE_BOOKING_RESCHEDULABLE_STATUSES.includes(
+    value as PrivateBookingReschedulableStatus,
+  );
 }
 
 export function isBookingPaymentStatus(
@@ -387,14 +679,62 @@ export function isBookingHistoryAction(
   return BOOKING_HISTORY_ACTIONS.includes(value as BookingHistoryAction);
 }
 
+export function isPrivateBookingHistoryAction(
+  value: string,
+): value is PrivateBookingHistoryAction {
+  return PRIVATE_BOOKING_HISTORY_ACTIONS.includes(
+    value as PrivateBookingHistoryAction,
+  );
+}
+
 export function isBookingRpcActionResult(
   value: string,
 ): value is BookingRpcActionResult {
   return BOOKING_RPC_ACTION_RESULTS.includes(value as BookingRpcActionResult);
 }
 
+export function isPrivateBookingRpcActionResult(
+  value: string,
+): value is PrivateBookingRpcActionResult {
+  return PRIVATE_BOOKING_RPC_ACTION_RESULTS.includes(
+    value as PrivateBookingRpcActionResult,
+  );
+}
+
 export function isBookingDomainEventName(
   value: string,
 ): value is BookingDomainEventName {
   return BOOKING_DOMAIN_EVENTS.includes(value as BookingDomainEventName);
+}
+
+export function isBookingCalendarEventType(
+  value: string,
+): value is BookingCalendarEventType {
+  return BOOKING_CALENDAR_EVENT_TYPES.includes(
+    value as BookingCalendarEventType,
+  );
+}
+
+export function isBookingSortField(value: string): value is BookingSortField {
+  return BOOKING_SORT_FIELDS.includes(value as BookingSortField);
+}
+
+export function isPrivateBookingSortField(
+  value: string,
+): value is PrivateBookingSortField {
+  return PRIVATE_BOOKING_SORT_FIELDS.includes(value as PrivateBookingSortField);
+}
+
+export function isBookingCalendarSortField(
+  value: string,
+): value is BookingCalendarSortField {
+  return BOOKING_CALENDAR_SORT_FIELDS.includes(
+    value as BookingCalendarSortField,
+  );
+}
+
+export function isBookingSortDirection(
+  value: string,
+): value is BookingSortDirection {
+  return BOOKING_SORT_DIRECTIONS.includes(value as BookingSortDirection);
 }

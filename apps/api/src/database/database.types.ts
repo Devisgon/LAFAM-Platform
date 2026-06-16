@@ -122,6 +122,28 @@ export type DatabaseBookingHistoryAction =
   | 'waitlist_promoted'
   | 'waitlist_cancelled'
   | 'admin_override';
+
+export type DatabasePilatesScheduleSeriesFrequency = 'weekly' | 'monthly';
+
+export type DatabasePilatesScheduleMonthlyRule = 'day_of_month';
+
+export type DatabasePilatesScheduleSeriesStatus =
+  | 'active'
+  | 'cancelled'
+  | 'deleted';
+
+export type DatabasePilatesScheduleGenerationSource = 'single' | 'recurring';
+
+export type DatabasePrivateBookingHistoryAction =
+  | 'private_booking_created'
+  | 'private_booking_confirmed'
+  | 'private_booking_cancelled'
+  | 'private_booking_completed'
+  | 'private_booking_no_show'
+  | 'private_booking_expired'
+  | 'private_booking_rescheduled'
+  | 'private_booking_admin_override';
+
 export interface Database {
   public: {
     Tables: {
@@ -544,6 +566,114 @@ export interface Database {
         ];
       };
 
+      pilates_schedule_series: {
+        Row: {
+          id: string;
+          class_id: string;
+          trainer_staff_profile_id: string;
+          studio: string;
+          frequency: DatabasePilatesScheduleSeriesFrequency;
+          days_of_week: number[];
+          monthly_rule: DatabasePilatesScheduleMonthlyRule | null;
+          day_of_month: number | null;
+          start_date: string;
+          end_date: string;
+          start_time: string;
+          end_time: string;
+          duration_minutes: number;
+          capacity: number;
+          excluded_dates: string[];
+          status: DatabasePilatesScheduleSeriesStatus;
+          created_by_admin_id: string | null;
+          updated_by_admin_id: string | null;
+          created_at: string;
+          updated_at: string;
+          cancelled_at: string | null;
+          deleted_at: string | null;
+          realtime_version: number;
+        };
+        Insert: {
+          id?: string;
+          class_id: string;
+          trainer_staff_profile_id: string;
+          studio?: string;
+          frequency: DatabasePilatesScheduleSeriesFrequency;
+          days_of_week?: number[];
+          monthly_rule?: DatabasePilatesScheduleMonthlyRule | null;
+          day_of_month?: number | null;
+          start_date: string;
+          end_date: string;
+          start_time: string;
+          end_time: string;
+          duration_minutes: number;
+          capacity: number;
+          excluded_dates?: string[];
+          status?: DatabasePilatesScheduleSeriesStatus;
+          created_by_admin_id?: string | null;
+          updated_by_admin_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          cancelled_at?: string | null;
+          deleted_at?: string | null;
+          realtime_version?: number;
+        };
+        Update: {
+          id?: string;
+          class_id?: string;
+          trainer_staff_profile_id?: string;
+          studio?: string;
+          frequency?: DatabasePilatesScheduleSeriesFrequency;
+          days_of_week?: number[];
+          monthly_rule?: DatabasePilatesScheduleMonthlyRule | null;
+          day_of_month?: number | null;
+          start_date?: string;
+          end_date?: string;
+          start_time?: string;
+          end_time?: string;
+          duration_minutes?: number;
+          capacity?: number;
+          excluded_dates?: string[];
+          status?: DatabasePilatesScheduleSeriesStatus;
+          created_by_admin_id?: string | null;
+          updated_by_admin_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          cancelled_at?: string | null;
+          deleted_at?: string | null;
+          realtime_version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'pilates_schedule_series_class_id_fkey';
+            columns: ['class_id'];
+            isOneToOne: false;
+            referencedRelation: 'pilates_classes';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'pilates_schedule_series_trainer_staff_profile_id_fkey';
+            columns: ['trainer_staff_profile_id'];
+            isOneToOne: false;
+            referencedRelation: 'staff_profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'pilates_schedule_series_created_by_admin_id_fkey';
+            columns: ['created_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'pilates_schedule_series_updated_by_admin_id_fkey';
+            columns: ['updated_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
       pilates_class_schedules: {
         Row: {
           id: string;
@@ -565,6 +695,9 @@ export interface Database {
           completed_at: string | null;
           deleted_at: string | null;
           realtime_version: number;
+          series_id: string | null;
+          series_occurrence_index: number | null;
+          generation_source: DatabasePilatesScheduleGenerationSource;
         };
         Insert: {
           id?: string;
@@ -586,6 +719,9 @@ export interface Database {
           completed_at?: string | null;
           deleted_at?: string | null;
           realtime_version?: number;
+          series_id?: string | null;
+          series_occurrence_index?: number | null;
+          generation_source?: DatabasePilatesScheduleGenerationSource;
         };
         Update: {
           id?: string;
@@ -607,6 +743,9 @@ export interface Database {
           completed_at?: string | null;
           deleted_at?: string | null;
           realtime_version?: number;
+          series_id?: string | null;
+          series_occurrence_index?: number | null;
+          generation_source?: DatabasePilatesScheduleGenerationSource;
         };
         Relationships: [
           {
@@ -637,8 +776,16 @@ export interface Database {
             referencedRelation: 'app_users';
             referencedColumns: ['id'];
           },
+          {
+            foreignKeyName: 'pilates_class_schedules_series_id_fkey';
+            columns: ['series_id'];
+            isOneToOne: false;
+            referencedRelation: 'pilates_schedule_series';
+            referencedColumns: ['id'];
+          },
         ];
       };
+
       bookings: {
         Row: {
           id: string;
@@ -787,6 +934,234 @@ export interface Database {
           {
             foreignKeyName: 'bookings_cancelled_by_admin_id_fkey';
             columns: ['cancelled_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      private_trainer_bookings: {
+        Row: {
+          id: string;
+          booking_number: string;
+          user_id: string;
+          trainer_staff_profile_id: string;
+          session_date: string;
+          start_time: string;
+          end_time: string;
+          duration_minutes: number;
+          studio: string;
+          status: DatabaseBookingStatus;
+          source: DatabaseBookingSource;
+          payment_status: DatabaseBookingPaymentStatus;
+          payment_required: boolean;
+          idempotency_key: string | null;
+          seat_hold_expires_at: string | null;
+          confirmed_at: string | null;
+          cancelled_at: string | null;
+          completed_at: string | null;
+          no_show_at: string | null;
+          rescheduled_at: string | null;
+          rescheduled_from_private_booking_id: string | null;
+          rescheduled_to_private_booking_id: string | null;
+          created_by_user_id: string | null;
+          created_by_admin_id: string | null;
+          cancelled_by_user_id: string | null;
+          cancelled_by_admin_id: string | null;
+          cancellation_reason: string | null;
+          admin_notes: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+          realtime_version: number;
+        };
+        Insert: {
+          id?: string;
+          booking_number: string;
+          user_id: string;
+          trainer_staff_profile_id: string;
+          session_date: string;
+          start_time: string;
+          end_time: string;
+          duration_minutes: number;
+          studio?: string;
+          status?: DatabaseBookingStatus;
+          source?: DatabaseBookingSource;
+          payment_status?: DatabaseBookingPaymentStatus;
+          payment_required?: boolean;
+          idempotency_key?: string | null;
+          seat_hold_expires_at?: string | null;
+          confirmed_at?: string | null;
+          cancelled_at?: string | null;
+          completed_at?: string | null;
+          no_show_at?: string | null;
+          rescheduled_at?: string | null;
+          rescheduled_from_private_booking_id?: string | null;
+          rescheduled_to_private_booking_id?: string | null;
+          created_by_user_id?: string | null;
+          created_by_admin_id?: string | null;
+          cancelled_by_user_id?: string | null;
+          cancelled_by_admin_id?: string | null;
+          cancellation_reason?: string | null;
+          admin_notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+          realtime_version?: number;
+        };
+        Update: {
+          id?: string;
+          booking_number?: string;
+          user_id?: string;
+          trainer_staff_profile_id?: string;
+          session_date?: string;
+          start_time?: string;
+          end_time?: string;
+          duration_minutes?: number;
+          studio?: string;
+          status?: DatabaseBookingStatus;
+          source?: DatabaseBookingSource;
+          payment_status?: DatabaseBookingPaymentStatus;
+          payment_required?: boolean;
+          idempotency_key?: string | null;
+          seat_hold_expires_at?: string | null;
+          confirmed_at?: string | null;
+          cancelled_at?: string | null;
+          completed_at?: string | null;
+          no_show_at?: string | null;
+          rescheduled_at?: string | null;
+          rescheduled_from_private_booking_id?: string | null;
+          rescheduled_to_private_booking_id?: string | null;
+          created_by_user_id?: string | null;
+          created_by_admin_id?: string | null;
+          cancelled_by_user_id?: string | null;
+          cancelled_by_admin_id?: string | null;
+          cancellation_reason?: string | null;
+          admin_notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+          realtime_version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'private_trainer_bookings_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'private_trainer_bookings_trainer_staff_profile_id_fkey';
+            columns: ['trainer_staff_profile_id'];
+            isOneToOne: false;
+            referencedRelation: 'staff_profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'private_trainer_bookings_rescheduled_from_private_booking_id_fkey';
+            columns: ['rescheduled_from_private_booking_id'];
+            isOneToOne: false;
+            referencedRelation: 'private_trainer_bookings';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'private_trainer_bookings_rescheduled_to_private_booking_id_fkey';
+            columns: ['rescheduled_to_private_booking_id'];
+            isOneToOne: false;
+            referencedRelation: 'private_trainer_bookings';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'private_trainer_bookings_created_by_user_id_fkey';
+            columns: ['created_by_user_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'private_trainer_bookings_created_by_admin_id_fkey';
+            columns: ['created_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'private_trainer_bookings_cancelled_by_user_id_fkey';
+            columns: ['cancelled_by_user_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'private_trainer_bookings_cancelled_by_admin_id_fkey';
+            columns: ['cancelled_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      private_trainer_booking_history: {
+        Row: {
+          id: string;
+          private_booking_id: string;
+          actor_user_id: string | null;
+          actor_admin_id: string | null;
+          actor_role: string | null;
+          action: DatabasePrivateBookingHistoryAction;
+          from_status: DatabaseBookingStatus | null;
+          to_status: DatabaseBookingStatus | null;
+          notes: string | null;
+          metadata: DatabaseJsonObject;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          private_booking_id: string;
+          actor_user_id?: string | null;
+          actor_admin_id?: string | null;
+          actor_role?: string | null;
+          action: DatabasePrivateBookingHistoryAction;
+          from_status?: DatabaseBookingStatus | null;
+          to_status?: DatabaseBookingStatus | null;
+          notes?: string | null;
+          metadata?: DatabaseJsonObject;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          private_booking_id?: string;
+          actor_user_id?: string | null;
+          actor_admin_id?: string | null;
+          actor_role?: string | null;
+          action?: DatabasePrivateBookingHistoryAction;
+          from_status?: DatabaseBookingStatus | null;
+          to_status?: DatabaseBookingStatus | null;
+          notes?: string | null;
+          metadata?: DatabaseJsonObject;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'private_trainer_booking_history_private_booking_id_fkey';
+            columns: ['private_booking_id'];
+            isOneToOne: false;
+            referencedRelation: 'private_trainer_bookings';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'private_trainer_booking_history_actor_user_id_fkey';
+            columns: ['actor_user_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'private_trainer_booking_history_actor_admin_id_fkey';
+            columns: ['actor_admin_id'];
             isOneToOne: false;
             referencedRelation: 'app_users';
             referencedColumns: ['id'];
@@ -953,6 +1328,7 @@ export interface Database {
           schedule_id: string | null;
           booking_id: string | null;
           waitlist_id: string | null;
+          private_booking_id: string | null;
           payload: DatabaseJsonObject;
           created_at: string;
           published_at: string | null;
@@ -963,6 +1339,7 @@ export interface Database {
           schedule_id?: string | null;
           booking_id?: string | null;
           waitlist_id?: string | null;
+          private_booking_id?: string | null;
           payload?: DatabaseJsonObject;
           created_at?: string;
           published_at?: string | null;
@@ -973,6 +1350,7 @@ export interface Database {
           schedule_id?: string | null;
           booking_id?: string | null;
           waitlist_id?: string | null;
+          private_booking_id?: string | null;
           payload?: DatabaseJsonObject;
           created_at?: string;
           published_at?: string | null;
@@ -997,6 +1375,13 @@ export interface Database {
             columns: ['waitlist_id'];
             isOneToOne: false;
             referencedRelation: 'booking_waitlist';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'booking_domain_events_private_booking_id_fkey';
+            columns: ['private_booking_id'];
+            isOneToOne: false;
+            referencedRelation: 'private_trainer_bookings';
             referencedColumns: ['id'];
           },
         ];
@@ -1096,17 +1481,139 @@ export interface Database {
           schedule_id: string;
         }[];
       };
+      lafam_is_valid_weekday_array: {
+        Args: {
+          p_days: number[];
+        };
+        Returns: boolean;
+      };
+
+      is_staff_available_for_time: {
+        Args: {
+          p_staff_profile_id: string;
+          p_session_date: string;
+          p_start_time: string;
+          p_end_time: string;
+        };
+        Returns: boolean;
+      };
+
+      has_trainer_class_schedule_conflict: {
+        Args: {
+          p_trainer_staff_profile_id: string;
+          p_session_date: string;
+          p_start_time: string;
+          p_end_time: string;
+          p_ignore_schedule_id?: string | null;
+        };
+        Returns: boolean;
+      };
+
+      has_trainer_private_booking_conflict: {
+        Args: {
+          p_trainer_staff_profile_id: string;
+          p_session_date: string;
+          p_start_time: string;
+          p_end_time: string;
+          p_ignore_private_booking_id?: string | null;
+        };
+        Returns: boolean;
+      };
+
+      expire_private_trainer_booking_holds_atomic: {
+        Args: Record<string, never>;
+        Returns: {
+          expired_count: number;
+        }[];
+      };
+
+      create_private_trainer_booking_atomic: {
+        Args: {
+          p_user_id: string;
+          p_trainer_staff_profile_id: string;
+          p_session_date: string;
+          p_start_time: string;
+          p_duration_minutes: number;
+          p_studio?: string;
+          p_payment_required?: boolean;
+          p_idempotency_key?: string | null;
+          p_created_by_admin_id?: string | null;
+          p_source?: DatabaseBookingSource;
+          p_rescheduled_from_private_booking_id?: string | null;
+        };
+        Returns: {
+          action_result: string;
+          private_booking_id: string;
+          booking_number: string;
+          trainer_staff_profile_id: string;
+          session_date: string;
+          start_time: string;
+          end_time: string;
+          status: DatabaseBookingStatus;
+          payment_status: DatabaseBookingPaymentStatus;
+          realtime_version: number;
+        }[];
+      };
+
+      cancel_private_trainer_booking_atomic: {
+        Args: {
+          p_private_booking_id: string;
+          p_actor_user_id?: string | null;
+          p_actor_admin_id?: string | null;
+          p_reason?: string | null;
+        };
+        Returns: {
+          action_result: string;
+          private_booking_id: string;
+          status: DatabaseBookingStatus;
+          payment_status: DatabaseBookingPaymentStatus;
+          realtime_version: number;
+        }[];
+      };
+
+      reschedule_private_trainer_booking_atomic: {
+        Args: {
+          p_private_booking_id: string;
+          p_target_session_date: string;
+          p_target_start_time: string;
+          p_target_duration_minutes: number;
+          p_studio?: string | null;
+          p_actor_user_id?: string | null;
+          p_actor_admin_id?: string | null;
+          p_reason?: string | null;
+          p_idempotency_key?: string | null;
+          p_payment_required?: boolean;
+        };
+        Returns: {
+          action_result: string;
+          old_private_booking_id: string;
+          new_private_booking_id: string;
+          new_booking_number: string;
+          trainer_staff_profile_id: string;
+          session_date: string;
+          start_time: string;
+          end_time: string;
+          old_status: DatabaseBookingStatus;
+          new_status: DatabaseBookingStatus;
+          new_payment_status: DatabaseBookingPaymentStatus;
+        }[];
+      };
     };
     Enums: {
       staff_profile_status: DatabaseStaffProfileStatus;
       pilates_class_status: DatabasePilatesClassStatus;
       pilates_class_schedule_status: DatabasePilatesClassScheduleStatus;
       pilates_class_level: DatabasePilatesClassLevel;
+      pilates_schedule_series_frequency: DatabasePilatesScheduleSeriesFrequency;
+      pilates_schedule_monthly_rule: DatabasePilatesScheduleMonthlyRule;
+      pilates_schedule_series_status: DatabasePilatesScheduleSeriesStatus;
+      pilates_schedule_generation_source: DatabasePilatesScheduleGenerationSource;
       booking_status: DatabaseBookingStatus;
       booking_payment_status: DatabaseBookingPaymentStatus;
       booking_source: DatabaseBookingSource;
       waitlist_status: DatabaseWaitlistStatus;
       booking_history_action: DatabaseBookingHistoryAction;
+      private_booking_history_action: DatabasePrivateBookingHistoryAction;
     };
     CompositeTypes: Record<string, never>;
   };
@@ -1158,16 +1665,36 @@ export type PilatesClassInsert =
 export type PilatesClassUpdate =
   Database['public']['Tables']['pilates_classes']['Update'];
 
+export type PilatesScheduleSeriesRow =
+  Database['public']['Tables']['pilates_schedule_series']['Row'];
+export type PilatesScheduleSeriesInsert =
+  Database['public']['Tables']['pilates_schedule_series']['Insert'];
+export type PilatesScheduleSeriesUpdate =
+  Database['public']['Tables']['pilates_schedule_series']['Update'];
+
 export type PilatesClassScheduleRow =
   Database['public']['Tables']['pilates_class_schedules']['Row'];
 export type PilatesClassScheduleInsert =
   Database['public']['Tables']['pilates_class_schedules']['Insert'];
 export type PilatesClassScheduleUpdate =
   Database['public']['Tables']['pilates_class_schedules']['Update'];
+
 export type BookingRow = Database['public']['Tables']['bookings']['Row'];
 export type BookingInsert = Database['public']['Tables']['bookings']['Insert'];
 export type BookingUpdate = Database['public']['Tables']['bookings']['Update'];
+export type PrivateTrainerBookingRow =
+  Database['public']['Tables']['private_trainer_bookings']['Row'];
+export type PrivateTrainerBookingInsert =
+  Database['public']['Tables']['private_trainer_bookings']['Insert'];
+export type PrivateTrainerBookingUpdate =
+  Database['public']['Tables']['private_trainer_bookings']['Update'];
 
+export type PrivateTrainerBookingHistoryRow =
+  Database['public']['Tables']['private_trainer_booking_history']['Row'];
+export type PrivateTrainerBookingHistoryInsert =
+  Database['public']['Tables']['private_trainer_booking_history']['Insert'];
+export type PrivateTrainerBookingHistoryUpdate =
+  Database['public']['Tables']['private_trainer_booking_history']['Update'];
 export type BookingHistoryRow =
   Database['public']['Tables']['booking_history']['Row'];
 export type BookingHistoryInsert =
@@ -1203,6 +1730,18 @@ export type ReschedulePilatesBookingAtomicRpcRow =
 
 export type ExpireBookingHoldsAtomicRpcRow =
   Database['public']['Functions']['expire_booking_holds_atomic']['Returns'][number];
+export type ExpirePrivateTrainerBookingHoldsAtomicRpcRow =
+  Database['public']['Functions']['expire_private_trainer_booking_holds_atomic']['Returns'][number];
+
+export type CreatePrivateTrainerBookingAtomicRpcRow =
+  Database['public']['Functions']['create_private_trainer_booking_atomic']['Returns'][number];
+
+export type CancelPrivateTrainerBookingAtomicRpcRow =
+  Database['public']['Functions']['cancel_private_trainer_booking_atomic']['Returns'][number];
+
+export type ReschedulePrivateTrainerBookingAtomicRpcRow =
+  Database['public']['Functions']['reschedule_private_trainer_booking_atomic']['Returns'][number];
+
 export type LAFAMSupabaseClient = SupabaseClient<Database>;
 
 export interface DatabaseConnectionInfo {

@@ -62,6 +62,7 @@ import { PilatesScheduleParamDto } from '../dto/schedule-param.dto';
 import { UpdatePilatesClassDto } from '../dto/update-pilates-class.dto';
 import { UpdatePilatesScheduleDto } from '../dto/update-pilates-schedule.dto';
 import type {
+  CreatePilatesClassScheduleResult,
   PilatesClassAdminDetail,
   PilatesClassAdminSummary,
   PilatesClassImageUploadFile,
@@ -239,7 +240,7 @@ export class PilatesScheduleAdminController {
   async createSchedule(
     @CurrentAuth() auth: AuthInternalContext | undefined,
     @Body() body: CreatePilatesScheduleDto,
-  ): Promise<ApiSuccessResponse<PilatesScheduleMutationResult>> {
+  ): Promise<ApiSuccessResponse<CreatePilatesClassScheduleResult>> {
     const data = await this.pilatesClassAdminService.createSchedule(
       resolveAuthContext(auth),
       body,

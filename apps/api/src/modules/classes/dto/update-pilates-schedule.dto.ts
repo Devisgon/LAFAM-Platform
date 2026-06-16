@@ -5,18 +5,21 @@
  * Role:
  * - Validates admin request body for updating bookable Pilates class occurrences.
  * - Allows partial schedule updates while keeping lifecycle changes controlled.
+ * - Accepts update_scope for recurring schedule awareness.
  *
  * Important:
  * - end_time is not accepted from the client.
  * - Backend recalculates end_time from start_time + duration_minutes.
  * - status is not accepted through normal update.
  * - Cancel, complete, and delete actions must use dedicated endpoints/service methods.
+ * - For now, service logic may enforce occurrence-level updates only.
  * - Trainer availability and trainer overlap checks are handled in service/repository logic.
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, type TransformFnParams } from 'class-transformer';
 import {
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -38,7 +41,10 @@ import {
   PILATES_CLASS_STUDIO_MAX_LENGTH,
   PILATES_CLASS_STUDIO_MIN_LENGTH,
   PILATES_CLASS_TIME_VALUE_PATTERN,
+  PILATES_SCHEDULE_DEFAULT_UPDATE_SCOPE,
+  PILATES_SCHEDULE_UPDATE_SCOPES,
 } from '../constants/pilates-class.constants';
+import type { PilatesScheduleUpdateScope } from '../constants/pilates-class.constants';
 
 function optionalTrimmedString({ value }: TransformFnParams): unknown {
   if (typeof value === 'undefined' || value === null) {
@@ -77,6 +83,22 @@ function optionalInteger({ value }: TransformFnParams): unknown {
 }
 
 export class UpdatePilatesScheduleDto {
+  @ApiPropertyOptional({
+    description:
+      'Recurring update scope. Omit this field for backward-compatible occurrence-level updates.',
+    enum: PILATES_SCHEDULE_UPDATE_SCOPES,
+    default: PILATES_SCHEDULE_DEFAULT_UPDATE_SCOPE,
+    example: PILATES_SCHEDULE_DEFAULT_UPDATE_SCOPE,
+  })
+  @Transform(optionalTrimmedString)
+  @IsOptional()
+  @IsIn(PILATES_SCHEDULE_UPDATE_SCOPES, {
+    message:
+      'update_scope must be this_occurrence, this_and_following, or entire_series.',
+  })
+  readonly update_scope?: PilatesScheduleUpdateScope =
+    PILATES_SCHEDULE_DEFAULT_UPDATE_SCOPE;
+
   @ApiPropertyOptional({
     description:
       'Reusable Pilates class identifier. Changing this moves the schedule to another class template.',
@@ -165,7 +187,7 @@ export class UpdatePilatesScheduleDto {
 
   @ApiPropertyOptional({
     description:
-      'Schedule capacity. Existing confirmed bookings will be validated by service logic later when Booking module exists.',
+      'Schedule capacity. Existing confirmed bookings will be validated by service logic before update.',
     example: 8,
     minimum: PILATES_CLASS_CAPACITY_MIN,
     maximum: PILATES_CLASS_CAPACITY_MAX,

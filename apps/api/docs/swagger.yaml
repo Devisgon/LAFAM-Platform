@@ -36,9 +36,9 @@ tags:
   - name: Pilates - Admin
     description: Protected admin Pilates class and schedule management endpoints
   - name: Bookings - Customer
-    description: Protected customer Pilates booking and waitlist endpoints
+    description: Protected customer Pilates booking, private trainer booking, availability, and waitlist endpoints
   - name: Bookings - Admin
-    description: Protected admin booking, override, and waitlist management endpoints
+    description: Protected admin booking, private trainer booking, calendar, override, and waitlist management endpoints
 paths:
   /:
     get:
@@ -1954,6 +1954,289 @@ paths:
         '403':
           $ref: '#/components/responses/AuthorizationDenied'
 
+  /bookings/private-trainer:
+    post:
+      summary: Create customer private trainer booking
+      description: Creates a private one-on-one trainer booking for the authenticated customer. The customer id is taken from the authenticated session, not from the request body.
+      operationId: bookingCustomerCreatePrivateBooking
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePrivateBookingRequest'
+      responses:
+        '201':
+          description: Private trainer booking request processed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateBookingCreateSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      summary: List customer private trainer bookings
+      description: Lists private trainer bookings owned by the authenticated customer.
+      operationId: bookingCustomerListPrivateBookings
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BookingStatus'
+        - name: trainer_staff_profile_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: from_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: '2026-06-15'
+        - name: to_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: '2026-06-30'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PrivateBookingSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BookingSortDirection'
+      responses:
+        '200':
+          description: Private trainer bookings retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateBookingListSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+
+  /bookings/private-trainer/availability/{trainerId}:
+    get:
+      summary: Get private trainer availability
+      description: Returns available private trainer booking slots for a trainer over a date range.
+      operationId: bookingCustomerGetPrivateTrainerAvailability
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: trainerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Trainer staff profile id.
+        - name: from_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2026-06-15'
+        - name: to_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2026-06-30'
+        - name: duration_minutes
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 15
+            maximum: 240
+            default: 60
+        - name: studio
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 120
+            example: LAFAM Pilates Studio
+      responses:
+        '200':
+          description: Private trainer availability retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateBookingAvailabilitySuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /bookings/private-trainer/{privateBookingId}:
+    get:
+      summary: Get customer private trainer booking
+      description: Returns one private trainer booking owned by the authenticated customer.
+      operationId: bookingCustomerGetPrivateBookingById
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: privateBookingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Private trainer booking id.
+      responses:
+        '200':
+          description: Private trainer booking retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateBookingDetailSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /bookings/private-trainer/{privateBookingId}/cancel:
+    post:
+      summary: Cancel customer private trainer booking
+      description: Cancels a private trainer booking owned by the authenticated customer.
+      operationId: bookingCustomerCancelPrivateBooking
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: privateBookingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Private trainer booking id.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelBookingRequest'
+      responses:
+        '200':
+          description: Private trainer booking cancelled successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateBookingCancelSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /bookings/private-trainer/{privateBookingId}/reschedule:
+    post:
+      summary: Reschedule customer private trainer booking
+      description: Reschedules a private trainer booking owned by the authenticated customer.
+      operationId: bookingCustomerReschedulePrivateBooking
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: privateBookingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Private trainer booking id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReschedulePrivateBookingRequest'
+      responses:
+        '200':
+          description: Private trainer booking reschedule request processed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateBookingRescheduleSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
   /bookings/waitlist:
     get:
       summary: List customer waitlist entries
@@ -2233,6 +2516,333 @@ paths:
           $ref: '#/components/responses/AuthenticationRequired'
         '403':
           $ref: '#/components/responses/AuthorizationDenied'
+
+  /admin/bookings/calendar:
+    get:
+      summary: List admin booking calendar
+      description: Returns a normalized calendar feed combining Pilates schedules, optional class bookings, optional waitlist entries, and private trainer bookings.
+      operationId: bookingAdminListCalendar
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: from_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2026-06-15'
+        - name: to_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2026-06-30'
+        - name: trainer_staff_profile_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: class_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: include_class_schedules
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: include_class_bookings
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: include_waitlist
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: include_private_bookings
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BookingCalendarSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BookingSortDirection'
+      responses:
+        '200':
+          description: Booking calendar retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingCalendarSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+
+  /admin/bookings/private-trainer:
+    post:
+      summary: Create admin private trainer booking
+      description: Creates a private one-on-one trainer booking from the admin dashboard. Admin-created private bookings require an explicit customer user_id.
+      operationId: bookingAdminCreatePrivateBooking
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePrivateBookingRequest'
+      responses:
+        '201':
+          description: Private trainer booking request processed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateBookingCreateSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      summary: List admin private trainer bookings
+      description: Lists private trainer bookings for the admin dashboard.
+      operationId: bookingAdminListPrivateBookings
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 254
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BookingStatus'
+        - name: payment_status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BookingPaymentStatus'
+        - name: trainer_staff_profile_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: from_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: '2026-06-15'
+        - name: to_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: '2026-06-30'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PrivateBookingSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BookingSortDirection'
+      responses:
+        '200':
+          description: Private trainer bookings retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateBookingListSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+
+  /admin/bookings/private-trainer/{privateBookingId}:
+    get:
+      summary: Get admin private trainer booking
+      description: Returns one private trainer booking for the admin dashboard.
+      operationId: bookingAdminGetPrivateBookingById
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: privateBookingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Private trainer booking id.
+      responses:
+        '200':
+          description: Private trainer booking retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateBookingDetailSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/bookings/private-trainer/{privateBookingId}/cancel:
+    post:
+      summary: Cancel private trainer booking as admin
+      description: Cancels a private trainer booking from the admin dashboard with a required audit reason.
+      operationId: bookingAdminCancelPrivateBooking
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: privateBookingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Private trainer booking id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCancelBookingRequest'
+      responses:
+        '200':
+          description: Private trainer booking cancelled successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateBookingCancelSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/bookings/private-trainer/{privateBookingId}/reschedule:
+    post:
+      summary: Reschedule private trainer booking as admin
+      description: Reschedules a private trainer booking from the admin dashboard.
+      operationId: bookingAdminReschedulePrivateBooking
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: privateBookingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Private trainer booking id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReschedulePrivateBookingRequest'
+      responses:
+        '200':
+          description: Private trainer booking reschedule request processed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateBookingRescheduleSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /admin/pilates/schedules/{scheduleId}/waitlist:
     get:
@@ -5256,6 +5866,149 @@ components:
         - target_waitlisted
       example: rescheduled
 
+    PrivateBookingCreateActionResult:
+      type: string
+      enum:
+        - existing_private_booking
+        - private_booked
+      example: private_booked
+
+    PrivateBookingCancelActionResult:
+      type: string
+      enum:
+        - private_cancelled
+      example: private_cancelled
+
+    PrivateBookingRescheduleActionResult:
+      type: string
+      enum:
+        - private_rescheduled
+      example: private_rescheduled
+
+    PrivateBookingHistoryAction:
+      type: string
+      enum:
+        - private_booking_created
+        - private_booking_confirmed
+        - private_booking_cancelled
+        - private_booking_completed
+        - private_booking_no_show
+        - private_booking_expired
+        - private_booking_rescheduled
+        - private_booking_admin_override
+      example: private_booking_created
+
+    PrivateBookingSortField:
+      type: string
+      enum:
+        - created_at
+        - session_date
+        - start_time
+        - status
+      default: created_at
+      example: session_date
+
+    BookingCalendarEventType:
+      type: string
+      enum:
+        - pilates_schedule
+        - pilates_booking
+        - waitlist_entry
+        - private_trainer_booking
+      example: private_trainer_booking
+
+    BookingCalendarSortField:
+      type: string
+      enum:
+        - start_at
+        - event_type
+        - status
+      default: start_at
+      example: start_at
+
+    CreatePrivateBookingRequest:
+      type: object
+      required:
+        - trainer_staff_profile_id
+        - session_date
+        - start_time
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: Required only for admin-created private bookings. Customer routes ignore this and use the authenticated user.
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+          description: Trainer staff profile id.
+        session_date:
+          type: string
+          format: date
+          example: '2026-06-20'
+        start_time:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          example: '11:00'
+        duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 240
+          default: 60
+          description: Backend calculates end_time from start_time and duration_minutes.
+        studio:
+          type: string
+          minLength: 2
+          maxLength: 120
+          default: LAFAM Pilates Studio
+          example: LAFAM Pilates Studio
+        payment_required:
+          type: boolean
+          default: false
+        idempotency_key:
+          type: string
+          maxLength: 160
+          example: private-booking-20260620-1100
+
+    ReschedulePrivateBookingRequest:
+      type: object
+      required:
+        - target_session_date
+        - target_start_time
+      properties:
+        target_session_date:
+          type: string
+          format: date
+          example: '2026-06-21'
+        target_start_time:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          example: '12:00'
+        target_duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 240
+          description: If omitted, the existing private booking duration is preserved.
+        studio:
+          type: string
+          minLength: 2
+          maxLength: 120
+          nullable: true
+          description: If omitted, the existing private booking studio is preserved.
+          example: LAFAM Pilates Studio
+        reason:
+          type: string
+          maxLength: 1000
+          nullable: true
+          example: Customer requested a later time.
+        idempotency_key:
+          type: string
+          maxLength: 160
+          example: private-reschedule-20260621-1200
+        payment_required:
+          type: boolean
+          nullable: true
+          description: If omitted, the existing private booking payment behavior is preserved.
+
     CreateBookingRequest:
       type: object
       required:
@@ -6034,6 +6787,479 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/BookingWaitlistListItem'
+    PrivateBookingHistoryEntry:
+      type: object
+      required:
+        - id
+        - private_booking_id
+        - actor_user_id
+        - actor_admin_id
+        - actor_role
+        - action
+        - from_status
+        - to_status
+        - notes
+        - metadata
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        private_booking_id:
+          type: string
+          format: uuid
+        actor_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        actor_admin_id:
+          type: string
+          format: uuid
+          nullable: true
+        actor_role:
+          type: string
+          nullable: true
+          example: customer
+        action:
+          $ref: '#/components/schemas/PrivateBookingHistoryAction'
+        from_status:
+          allOf:
+            - $ref: '#/components/schemas/BookingStatus'
+          nullable: true
+        to_status:
+          allOf:
+            - $ref: '#/components/schemas/BookingStatus'
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+
+    PrivateBooking:
+      type: object
+      required:
+        - id
+        - booking_number
+        - user_id
+        - trainer_staff_profile_id
+        - session_date
+        - start_time
+        - end_time
+        - duration_minutes
+        - studio
+        - status
+        - source
+        - payment_status
+        - payment_required
+        - seat_hold_expires_at
+        - confirmed_at
+        - cancelled_at
+        - completed_at
+        - no_show_at
+        - rescheduled_at
+        - rescheduled_from_private_booking_id
+        - rescheduled_to_private_booking_id
+        - cancellation_reason
+        - admin_notes
+        - created_at
+        - updated_at
+        - realtime_version
+      properties:
+        id:
+          type: string
+          format: uuid
+        booking_number:
+          type: string
+          example: LAFAM-PVT-20260620-ABC12345
+        user_id:
+          type: string
+          format: uuid
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+        session_date:
+          type: string
+          format: date
+          example: '2026-06-20'
+        start_time:
+          type: string
+          example: '11:00'
+        end_time:
+          type: string
+          example: '12:00'
+        duration_minutes:
+          type: integer
+          example: 60
+        studio:
+          type: string
+          example: LAFAM Pilates Studio
+        status:
+          $ref: '#/components/schemas/BookingStatus'
+        source:
+          $ref: '#/components/schemas/BookingSource'
+        payment_status:
+          $ref: '#/components/schemas/BookingPaymentStatus'
+        payment_required:
+          type: boolean
+          example: false
+        seat_hold_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        confirmed_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        no_show_at:
+          type: string
+          format: date-time
+          nullable: true
+        rescheduled_at:
+          type: string
+          format: date-time
+          nullable: true
+        rescheduled_from_private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        rescheduled_to_private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        cancellation_reason:
+          type: string
+          nullable: true
+        admin_notes:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        realtime_version:
+          type: integer
+          format: int64
+          minimum: 1
+
+    PrivateBookingListItem:
+      allOf:
+        - $ref: '#/components/schemas/PrivateBooking'
+        - type: object
+          required:
+            - customer
+            - trainer
+          properties:
+            customer:
+              allOf:
+                - $ref: '#/components/schemas/BookingSafeUserSnapshot'
+              nullable: true
+            trainer:
+              allOf:
+                - $ref: '#/components/schemas/BookingTrainerSnapshot'
+              nullable: true
+
+    PrivateBookingDetail:
+      allOf:
+        - $ref: '#/components/schemas/PrivateBookingListItem'
+        - type: object
+          required:
+            - history
+          properties:
+            history:
+              type: array
+              items:
+                $ref: '#/components/schemas/PrivateBookingHistoryEntry'
+
+    PrivateBookingAvailabilitySlot:
+      type: object
+      required:
+        - trainer_staff_profile_id
+        - session_date
+        - start_time
+        - end_time
+        - duration_minutes
+        - available
+        - unavailable_reason
+      properties:
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+        session_date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          example: '11:00'
+        end_time:
+          type: string
+          example: '12:00'
+        duration_minutes:
+          type: integer
+          example: 60
+        available:
+          type: boolean
+          example: true
+        unavailable_reason:
+          type: string
+          nullable: true
+          example: private_booking_conflict
+
+    PrivateBookingAvailabilityData:
+      type: object
+      required:
+        - trainer_staff_profile_id
+        - from_date
+        - to_date
+        - duration_minutes
+        - slots
+      properties:
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+        from_date:
+          type: string
+          format: date
+        to_date:
+          type: string
+          format: date
+        duration_minutes:
+          type: integer
+          example: 60
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrivateBookingAvailabilitySlot'
+
+    PrivateBookingListData:
+      type: object
+      required:
+        - private_bookings
+        - total
+        - limit
+        - offset
+      properties:
+        private_bookings:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrivateBookingListItem'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+
+    PrivateBookingCreateData:
+      type: object
+      required:
+        - result
+        - private_booking
+      properties:
+        result:
+          $ref: '#/components/schemas/PrivateBookingCreateActionResult'
+        private_booking:
+          $ref: '#/components/schemas/PrivateBookingListItem'
+
+    PrivateBookingCancelData:
+      type: object
+      required:
+        - result
+        - private_booking
+      properties:
+        result:
+          $ref: '#/components/schemas/PrivateBookingCancelActionResult'
+        private_booking:
+          $ref: '#/components/schemas/PrivateBookingListItem'
+
+    PrivateBookingRescheduleData:
+      type: object
+      required:
+        - result
+        - old_private_booking
+        - new_private_booking
+      properties:
+        result:
+          $ref: '#/components/schemas/PrivateBookingRescheduleActionResult'
+        old_private_booking:
+          $ref: '#/components/schemas/PrivateBookingListItem'
+        new_private_booking:
+          $ref: '#/components/schemas/PrivateBookingListItem'
+
+    BookingCalendarEvent:
+      type: object
+      required:
+        - id
+        - event_type
+        - title
+        - status
+        - starts_at
+        - ends_at
+        - date
+        - start_time
+        - end_time
+        - trainer_staff_profile_id
+        - user_id
+        - class_id
+        - schedule_id
+        - booking_id
+        - waitlist_id
+        - private_booking_id
+        - source
+      properties:
+        id:
+          type: string
+          example: private_trainer_booking:9cfe43c6-7df7-48a2-8f90-c9c6d681aa4c
+        event_type:
+          $ref: '#/components/schemas/BookingCalendarEventType'
+        title:
+          type: string
+          example: Private trainer booking LAFAM-PVT-20260620-ABC12345
+        status:
+          type: string
+          example: confirmed
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          example: '11:00'
+        end_time:
+          type: string
+          example: '12:00'
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+          nullable: true
+        user_id:
+          type: string
+          format: uuid
+          nullable: true
+        class_id:
+          type: string
+          format: uuid
+          nullable: true
+        schedule_id:
+          type: string
+          format: uuid
+          nullable: true
+        booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        waitlist_id:
+          type: string
+          format: uuid
+          nullable: true
+        private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        source:
+          type: object
+          additionalProperties: true
+
+    BookingCalendarData:
+      type: object
+      required:
+        - events
+        - from_date
+        - to_date
+        - total
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookingCalendarEvent'
+        from_date:
+          type: string
+          format: date
+        to_date:
+          type: string
+          format: date
+        total:
+          type: integer
+          minimum: 0
+
+    PrivateBookingAvailabilitySuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PrivateBookingAvailabilityData'
+
+    PrivateBookingListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PrivateBookingListData'
+
+    PrivateBookingDetailSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PrivateBookingDetail'
+
+    PrivateBookingCreateSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PrivateBookingCreateData'
+
+    PrivateBookingCancelSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PrivateBookingCancelData'
+
+    PrivateBookingRescheduleSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PrivateBookingRescheduleData'
+
+    BookingCalendarSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BookingCalendarData'
+
   securitySchemes:
     BearerAuth:
       type: http
