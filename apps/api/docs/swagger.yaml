@@ -1571,6 +1571,18 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: series_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filter generated schedules by recurring schedule series id.
+        - name: generation_source
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PilatesScheduleGenerationSource'
         - name: status
           in: query
           required: false
@@ -1643,7 +1655,7 @@ paths:
 
     post:
       summary: Create Pilates schedule
-      description: Creates a bookable Pilates class occurrence. Backend calculates end_time from start_time and duration_minutes.
+      description: Creates either one Pilates schedule occurrence or a recurring schedule series that generates concrete bookable schedule rows. Backend calculates end_time from start_time and duration_minutes.
       operationId: pilatesAdminCreateSchedule
       tags:
         - Pilates - Admin
@@ -1655,13 +1667,62 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CreatePilatesScheduleRequest'
+            examples:
+              single:
+                summary: Create one schedule occurrence
+                value:
+                  mode: single
+                  class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
+                  trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
+                  studio: LAFAM Pilates Studio
+                  class_date: '2026-06-22'
+                  start_time: '10:00'
+                  duration_minutes: 60
+                  capacity: 8
+              recurringWeekly:
+                summary: Create weekly recurring schedules
+                value:
+                  mode: recurring
+                  class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
+                  trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
+                  studio: LAFAM Pilates Studio
+                  start_date: '2026-06-22'
+                  end_date: '2026-07-22'
+                  start_time: '10:00'
+                  duration_minutes: 60
+                  capacity: 8
+                  recurrence:
+                    frequency: weekly
+                    days_of_week:
+                      - 1
+                      - 3
+                      - 5
+                    excluded_dates:
+                      - '2026-07-01'
+              recurringMonthly:
+                summary: Create monthly recurring schedules
+                value:
+                  mode: recurring
+                  class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
+                  trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
+                  studio: LAFAM Pilates Studio
+                  start_date: '2026-06-22'
+                  end_date: '2026-09-22'
+                  start_time: '11:00'
+                  duration_minutes: 60
+                  capacity: 8
+                  recurrence:
+                    frequency: monthly
+                    monthly_rule: day_of_month
+                    day_of_month: 22
+                    excluded_dates: []
       responses:
         '201':
           description: Pilates schedule created successfully.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PilatesScheduleAdminMutationSuccessResponse'
+                $ref: '#/components/schemas/CreatePilatesScheduleSuccessResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -3082,7 +3143,7 @@ components:
           example: 200
         message:
           type: string
-          example: Health check successful
+          example: Request successful.
         timestamp_ms:
           type: integer
           format: int64
@@ -4926,6 +4987,97 @@ components:
         - asc
         - desc
       example: asc
+    PilatesScheduleCreateMode:
+      type: string
+      enum:
+        - single
+        - recurring
+      default: single
+      example: recurring
+
+    PilatesScheduleSeriesFrequency:
+      type: string
+      enum:
+        - weekly
+        - monthly
+      example: weekly
+
+    PilatesScheduleMonthlyRule:
+      type: string
+      enum:
+        - day_of_month
+      example: day_of_month
+
+    PilatesScheduleSeriesStatus:
+      type: string
+      enum:
+        - active
+        - cancelled
+        - deleted
+      example: active
+
+    PilatesScheduleGenerationSource:
+      type: string
+      enum:
+        - single
+        - recurring
+      example: recurring
+
+    PilatesScheduleUpdateScope:
+      type: string
+      enum:
+        - this_occurrence
+      default: this_occurrence
+      example: this_occurrence
+      description: Current backend support is occurrence-level only. Series-wide update or cancel is not implemented yet.
+
+    PilatesScheduleRecurrenceInput:
+      type: object
+      required:
+        - frequency
+      properties:
+        frequency:
+          $ref: '#/components/schemas/PilatesScheduleSeriesFrequency'
+        days_of_week:
+          type: array
+          minItems: 1
+          maxItems: 7
+          uniqueItems: true
+          description: Required for weekly recurrence. 0 is Sunday and 6 is Saturday.
+          items:
+            type: integer
+            enum:
+              - 0
+              - 1
+              - 2
+              - 3
+              - 4
+              - 5
+              - 6
+          example:
+            - 1
+            - 3
+            - 5
+        monthly_rule:
+          allOf:
+            - $ref: '#/components/schemas/PilatesScheduleMonthlyRule'
+          nullable: true
+          description: Required for monthly recurrence. Current supported value is day_of_month.
+        day_of_month:
+          type: integer
+          minimum: 1
+          maximum: 31
+          nullable: true
+          description: Required for monthly day_of_month recurrence.
+          example: 22
+        excluded_dates:
+          type: array
+          description: Dates that should be skipped during recurring schedule generation.
+          items:
+            type: string
+            format: date
+          example:
+            - '2026-07-01'
 
     PilatesTrainerSummary:
       type: object
@@ -5129,6 +5281,137 @@ components:
     PilatesClassPublicDetail:
       allOf:
         - $ref: '#/components/schemas/PilatesClassPublicSummary'
+    PilatesScheduleSeriesAdminSummary:
+      type: object
+      required:
+        - id
+        - class_id
+        - trainer_staff_profile_id
+        - studio
+        - frequency
+        - days_of_week
+        - monthly_rule
+        - day_of_month
+        - start_date
+        - end_date
+        - start_time
+        - end_time
+        - duration_minutes
+        - capacity
+        - excluded_dates
+        - status
+        - created_by_admin_id
+        - updated_by_admin_id
+        - created_at
+        - updated_at
+        - cancelled_at
+        - deleted_at
+        - realtime_version
+      properties:
+        id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+        studio:
+          type: string
+          example: LAFAM Pilates Studio
+        frequency:
+          $ref: '#/components/schemas/PilatesScheduleSeriesFrequency'
+        days_of_week:
+          type: array
+          items:
+            type: integer
+            enum:
+              - 0
+              - 1
+              - 2
+              - 3
+              - 4
+              - 5
+              - 6
+          example:
+            - 1
+            - 3
+            - 5
+        monthly_rule:
+          allOf:
+            - $ref: '#/components/schemas/PilatesScheduleMonthlyRule'
+          nullable: true
+        day_of_month:
+          type: integer
+          minimum: 1
+          maximum: 31
+          nullable: true
+          example: null
+        start_date:
+          type: string
+          format: date
+          example: '2026-06-22'
+        end_date:
+          type: string
+          format: date
+          example: '2026-07-22'
+        start_time:
+          type: string
+          example: '10:00'
+        end_time:
+          type: string
+          example: '11:00'
+        duration_minutes:
+          type: integer
+          example: 60
+        capacity:
+          type: integer
+          example: 8
+        excluded_dates:
+          type: array
+          items:
+            type: string
+            format: date
+          example:
+            - '2026-07-01'
+        status:
+          $ref: '#/components/schemas/PilatesScheduleSeriesStatus'
+        created_by_admin_id:
+          type: string
+          format: uuid
+          nullable: true
+        updated_by_admin_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          example: '2026-06-16T09:30:00.000Z'
+        updated_at:
+          type: string
+          format: date-time
+          example: '2026-06-16T09:30:00.000Z'
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        realtime_version:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 1
+        generated_schedule_count:
+          type: integer
+          minimum: 0
+          example: 12
 
     PilatesScheduleAdminSummary:
       type: object
@@ -5152,8 +5435,12 @@ components:
         - completed_at
         - deleted_at
         - realtime_version
+        - series_id
+        - series_occurrence_index
+        - generation_source
         - class
         - trainer
+        - series
         - availability
       properties:
         id:
@@ -5171,7 +5458,7 @@ components:
         class_date:
           type: string
           format: date
-          example: '2026-06-15'
+          example: '2026-06-22'
         start_time:
           type: string
           example: '10:00'
@@ -5193,40 +5480,63 @@ components:
         cancellation_reason:
           type: string
           nullable: true
-          example: Trainer is unavailable due to emergency.
+          example: null
         created_by_admin_id:
           type: string
           format: uuid
+          nullable: true
         updated_by_admin_id:
           type: string
           format: uuid
+          nullable: true
         created_at:
           type: string
           format: date-time
+          example: '2026-06-16T09:30:00.000Z'
         updated_at:
           type: string
           format: date-time
+          example: '2026-06-16T09:30:00.000Z'
         cancelled_at:
           type: string
           format: date-time
           nullable: true
+          example: null
         completed_at:
           type: string
           format: date-time
           nullable: true
+          example: null
         deleted_at:
           type: string
           format: date-time
           nullable: true
+          example: null
         realtime_version:
           type: integer
           format: int64
           minimum: 1
-          example: 3
+          example: 1
+        series_id:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+        series_occurrence_index:
+          type: integer
+          minimum: 1
+          nullable: true
+          example: null
+        generation_source:
+          $ref: '#/components/schemas/PilatesScheduleGenerationSource'
         class:
           $ref: '#/components/schemas/PilatesClassAdminSummary'
         trainer:
           $ref: '#/components/schemas/PilatesTrainerSummary'
+        series:
+          allOf:
+            - $ref: '#/components/schemas/PilatesScheduleSeriesAdminSummary'
+          nullable: true
         availability:
           $ref: '#/components/schemas/PilatesAvailabilitySnapshot'
 
@@ -5434,6 +5744,11 @@ components:
           format: binary
           description: 'Optional Pilates class replacement cover image. Allowed MIME types: image/jpeg, image/png, image/webp. Max size: 5 MB.'
     CreatePilatesScheduleRequest:
+      oneOf:
+        - $ref: '#/components/schemas/CreateSinglePilatesScheduleRequest'
+        - $ref: '#/components/schemas/CreateRecurringPilatesScheduleRequest'
+
+    CreateSinglePilatesScheduleRequest:
       type: object
       required:
         - class_id
@@ -5441,6 +5756,11 @@ components:
         - class_date
         - start_time
       properties:
+        mode:
+          allOf:
+            - $ref: '#/components/schemas/PilatesScheduleCreateMode'
+          description: Optional. Missing mode is treated as single for backward compatibility.
+          example: single
         class_id:
           type: string
           format: uuid
@@ -5456,7 +5776,7 @@ components:
         class_date:
           type: string
           pattern: '^\d{4}-\d{2}-\d{2}$'
-          example: '2026-06-15'
+          example: '2026-06-22'
         start_time:
           type: string
           pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
@@ -5473,10 +5793,66 @@ components:
           maximum: 100
           example: 8
 
+    CreateRecurringPilatesScheduleRequest:
+      type: object
+      required:
+        - mode
+        - class_id
+        - trainer_staff_profile_id
+        - start_date
+        - end_date
+        - start_time
+        - recurrence
+      properties:
+        mode:
+          type: string
+          enum:
+            - recurring
+          example: recurring
+        class_id:
+          type: string
+          format: uuid
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+        studio:
+          type: string
+          minLength: 1
+          maxLength: 120
+          default: LAFAM Pilates Studio
+          example: LAFAM Pilates Studio
+        start_date:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-06-22'
+        end_date:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-07-22'
+        start_time:
+          type: string
+          pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
+          example: '10:00'
+        duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 240
+          default: 60
+          example: 60
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 8
+        recurrence:
+          $ref: '#/components/schemas/PilatesScheduleRecurrenceInput'
+
     UpdatePilatesScheduleRequest:
       type: object
       minProperties: 1
       properties:
+        update_scope:
+          $ref: '#/components/schemas/PilatesScheduleUpdateScope'
         class_id:
           type: string
           format: uuid
@@ -5491,11 +5867,11 @@ components:
         class_date:
           type: string
           pattern: '^\d{4}-\d{2}-\d{2}$'
-          example: '2026-06-15'
+          example: '2026-06-23'
         start_time:
           type: string
           pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
-          example: '10:00'
+          example: '11:00'
         duration_minutes:
           type: integer
           minimum: 15
@@ -5517,6 +5893,8 @@ components:
           minLength: 1
           maxLength: 500
           example: Trainer is unavailable due to emergency.
+        update_scope:
+          $ref: '#/components/schemas/PilatesScheduleUpdateScope'
 
     PilatesClassAdminListData:
       type: object
@@ -5649,6 +6027,56 @@ components:
       properties:
         schedule:
           $ref: '#/components/schemas/PilatesScheduleAdminSummary'
+    CreatePilatesScheduleSingleData:
+      type: object
+      required:
+        - mode
+        - schedule
+      properties:
+        mode:
+          type: string
+          enum:
+            - single
+          example: single
+        schedule:
+          $ref: '#/components/schemas/PilatesScheduleAdminSummary'
+
+    CreatePilatesScheduleRecurringData:
+      type: object
+      required:
+        - mode
+        - series
+        - generated_schedules
+        - generated_count
+        - skipped_dates
+      properties:
+        mode:
+          type: string
+          enum:
+            - recurring
+          example: recurring
+        series:
+          $ref: '#/components/schemas/PilatesScheduleSeriesAdminSummary'
+        generated_schedules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PilatesScheduleAdminSummary'
+        generated_count:
+          type: integer
+          minimum: 0
+          example: 12
+        skipped_dates:
+          type: array
+          items:
+            type: string
+            format: date
+          example:
+            - '2026-07-01'
+
+    CreatePilatesScheduleData:
+      oneOf:
+        - $ref: '#/components/schemas/CreatePilatesScheduleSingleData'
+        - $ref: '#/components/schemas/CreatePilatesScheduleRecurringData'
 
     PilatesScheduleAdminDetailData:
       type: object
@@ -5743,6 +6171,52 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/PilatesScheduleAdminMutationData'
+    CreatePilatesScheduleSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CreatePilatesScheduleData'
+      example:
+        status: 201
+        message: Pilates schedule created successfully.
+        timestamp_ms: 1780918065292
+        data:
+          mode: recurring
+          series:
+            id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            class_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            trainer_staff_profile_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            studio: LAFAM Pilates Studio
+            frequency: weekly
+            days_of_week:
+              - 1
+              - 3
+              - 5
+            monthly_rule: null
+            day_of_month: null
+            start_date: '2026-06-22'
+            end_date: '2026-07-22'
+            start_time: '10:00'
+            end_time: '11:00'
+            duration_minutes: 60
+            capacity: 8
+            excluded_dates:
+              - '2026-07-01'
+            status: active
+            created_by_admin_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            updated_by_admin_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            created_at: '2026-06-16T09:30:00.000Z'
+            updated_at: '2026-06-16T09:30:00.000Z'
+            cancelled_at: null
+            deleted_at: null
+            realtime_version: 1
+            generated_schedule_count: 12
+          generated_schedules: []
+          generated_count: 12
+          skipped_dates:
+            - '2026-07-01'
 
     PilatesScheduleAdminDetailSuccessResponse:
       allOf:
@@ -7219,6 +7693,58 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/PrivateBookingListData'
+      example:
+        status: 200
+        message: Private trainer bookings retrieved successfully.
+        timestamp_ms: 1780918065292
+        data:
+          private_bookings:
+            - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              booking_number: LAFAM-PVT-20260620-ABC12345
+              user_id: 4fa85f64-5717-4562-b3fc-2c963f66afa6
+              trainer_staff_profile_id: 5fa85f64-5717-4562-b3fc-2c963f66afa6
+              session_date: '2026-06-20'
+              start_time: '11:00'
+              end_time: '12:00'
+              duration_minutes: 60
+              studio: LAFAM Pilates Studio
+              status: confirmed
+              source: customer_web
+              payment_status: not_required
+              payment_required: false
+              seat_hold_expires_at: null
+              confirmed_at: '2026-06-16T09:30:00.000Z'
+              cancelled_at: null
+              completed_at: null
+              no_show_at: null
+              rescheduled_at: null
+              rescheduled_from_private_booking_id: null
+              rescheduled_to_private_booking_id: null
+              cancellation_reason: null
+              admin_notes: null
+              created_at: '2026-06-16T09:30:00.000Z'
+              updated_at: '2026-06-16T09:30:00.000Z'
+              realtime_version: 1
+              customer:
+                id: 4fa85f64-5717-4562-b3fc-2c963f66afa6
+                email: customer@example.com
+                phone: '+96550000000'
+                full_name: Fatima Al-Sabah
+                role: customer
+                status: active
+                is_guest: false
+                avatar_path: null
+              trainer:
+                staff_profile_id: 5fa85f64-5717-4562-b3fc-2c963f66afa6
+                app_user_id: 6fa85f64-5717-4562-b3fc-2c963f66afa6
+                display_name: Sarah Pilates Trainer
+                post_title: Pilates Trainer
+                email: trainer@example.com
+                phone: '+96551111111'
+                avatar_path: null
+          total: 1
+          limit: 20
+          offset: 0
 
     PrivateBookingDetailSuccessResponse:
       allOf:
@@ -7259,6 +7785,37 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/BookingCalendarData'
+      example:
+        status: 200
+        message: Booking calendar retrieved successfully.
+        timestamp_ms: 1780918065292
+        data:
+          events:
+            - id: private_trainer_booking:3fa85f64-5717-4562-b3fc-2c963f66afa6
+              event_type: private_trainer_booking
+              title: Private trainer booking LAFAM-PVT-20260620-ABC12345
+              status: confirmed
+              starts_at: '2026-06-20T11:00:00.000Z'
+              ends_at: '2026-06-20T12:00:00.000Z'
+              date: '2026-06-20'
+              start_time: '11:00'
+              end_time: '12:00'
+              trainer_staff_profile_id: 5fa85f64-5717-4562-b3fc-2c963f66afa6
+              user_id: 4fa85f64-5717-4562-b3fc-2c963f66afa6
+              class_id: null
+              schedule_id: null
+              booking_id: null
+              waitlist_id: null
+              private_booking_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              source:
+                source_table: private_trainer_bookings
+                private_booking_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                booking_number: LAFAM-PVT-20260620-ABC12345
+                customer_full_name: Fatima Al-Sabah
+                trainer_display_name: Sarah Pilates Trainer
+          from_date: '2026-06-20'
+          to_date: '2026-06-30'
+          total: 1
 
   securitySchemes:
     BearerAuth:
