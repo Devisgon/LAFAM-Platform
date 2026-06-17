@@ -6,6 +6,7 @@ import { Badge } from "@/components/reuseable_ui_components/badge";
 import { Card } from "@/components/reuseable_ui_components/cards";
 import { Sidebar } from "@/components/sidebar";
 import { TopBar } from "@/components/top_bar";
+import { PageHeader } from "@/components/page_header";
 
 export type BookingCategory = "Pilates" ;
 export type BookingStatus = "Upcoming" | "Pending" | "Completed" | "Cancelled";
@@ -284,19 +285,20 @@ export function BookingExplorer({
 
 export default function BookingsPage() {
   return (
-    <div className="min-h-screen bg-background-primary md:flex">
-      <Sidebar activeItem="Bookings" />
-
-      <div className="min-w-0 flex-1">
-        <TopBar
-          dateLabel="8 Jun - 14 Jun 2026"
-          description="Manage appointments"
-          title="Bookings"
-        />
-
-        <main className="p-4 lg:p-6">
-          <BookingExplorer bookings={bookingsData}  />
-        </main>
+    <div className="min-h-screen bg-background-primary">
+      <TopBar
+        dateLabel="8 Jun - 14 Jun 2026"
+        description="Manage appointments"
+        title="Bookings"
+      />
+      <div className="md:flex">
+        <Sidebar activeItem="Bookings" />
+        <div className="min-w-0 flex-1">
+          <PageHeader title="Bookings" />
+          <main className="p-4 lg:p-6">
+            <BookingExplorer bookings={bookingsData}  />
+          </main>
+        </div>
       </div>
     </div>
   );

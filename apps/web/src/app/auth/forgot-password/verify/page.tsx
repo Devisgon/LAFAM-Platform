@@ -1,17 +1,16 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight } from "lucide-react";
-import {
-  PasswordResetError,
-  PasswordResetShell,
-} from "@/components/password_reset_shell";
+import { ArrowRight, ShieldCheck } from "lucide-react";
+import { PasswordResetError } from "@/components/password_reset_shell";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function VerifyResetOtpPage() {
   const router = useRouter();
+
   const {
     passwordResetEmail,
     verifyResetOtp,
@@ -19,6 +18,7 @@ export default function VerifyResetOtpPage() {
     error,
     clearError,
   } = useAuth();
+
   const [otp, setOtp] = useState("");
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -34,63 +34,100 @@ export default function VerifyResetOtpPage() {
   };
 
   return (
-    <PasswordResetShell
-      title="Enter reset code"
-      description={
-        passwordResetEmail ? (
-          <>
-            Enter the code sent to{" "}
-            <strong className="text-text-primary">{passwordResetEmail}</strong>.
-          </>
-        ) : (
-          "Request a password reset code before continuing."
-        )
-      }
-    >
-      {passwordResetEmail ? (
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="flex flex-col gap-2">
-            <label
-              htmlFor="otp"
-              className="text-xs font-semibold text-text-secondary"
-            >
-              Reset code
-            </label>
-            <input
-              id="otp"
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              minLength={4}
-              maxLength={10}
-              value={otp}
-              onChange={(event) => setOtp(event.target.value)}
-              className="w-full rounded-2xl border border-text-secondary/10 bg-background-primary px-4 py-4 text-center text-lg font-semibold tracking-[0.3em] outline-none transition-all focus:border-primary/40 focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
-              disabled={isVerifyingResetOtp}
-              required
-              autoFocus
-            />
+    <main className="flex h-screen w-full items-center justify-center bg-[#f4dddd] px-4 py-10 font-sans text-black">
+      <section className="flex w-full flex-col items-center">
+        <div className="mb-10 flex flex-col items-center text-center">
+          <Image
+            src="/login-logo.svg"
+            alt="LA FORME"
+            width={150}
+            height={150}
+            priority
+            className="h-auto w-[150px] object-contain"
+          />
+        </div>
+
+        <div className="w-full max-w-[560px] overflow-hidden rounded-md bg-white shadow-2xl">
+          <div className="flex h-20 items-center justify-center gap-3 bg-[#e9caca] text-black">
+            <ShieldCheck size={30} strokeWidth={2.5} />
+
+            <h1 className="text-xl font-bold uppercase tracking-wide">
+              Enter Reset Code
+            </h1>
           </div>
 
-          {error ? <PasswordResetError message={error} /> : null}
+          {passwordResetEmail ? (
+            <form onSubmit={handleSubmit} className="space-y-5 px-10 py-12">
+              <p className="text-center text-[15px] font-medium leading-relaxed text-gray-500">
+                Enter the code sent to{" "}
+                <strong className="text-black">{passwordResetEmail}</strong>.
+              </p>
 
-          <button
-            type="submit"
-            disabled={isVerifyingResetOtp}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-button-primary py-4 text-sm font-semibold text-white transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isVerifyingResetOtp ? "Verifying..." : "Verify reset code"}
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </form>
-      ) : (
-        <Link
-          href="/auth/forgot-password"
-          className="block rounded-2xl bg-button-primary py-4 text-center text-sm font-semibold text-white"
-        >
-          Request a new code
-        </Link>
-      )}
-    </PasswordResetShell>
+              <div>
+                <label
+                  htmlFor="otp"
+                  className="mb-1 block text-[16px] font-medium text-gray-500"
+                >
+                  Reset Code
+                </label>
+
+                <input
+                  id="otp"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  minLength={4}
+                  maxLength={10}
+                  value={otp}
+                  onChange={(event) => setOtp(event.target.value)}
+                  disabled={isVerifyingResetOtp}
+                  required
+                  autoFocus
+                  className="h-[58px] w-full rounded border border-gray-300 bg-white px-4 text-center text-lg font-semibold tracking-[0.35em] text-black outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                />
+              </div>
+
+              {error ? <PasswordResetError message={error} /> : null}
+
+              <button
+                type="submit"
+                disabled={isVerifyingResetOtp}
+                className="flex w-full items-center justify-center gap-2 rounded bg-[#e9caca] px-5 py-3.5 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isVerifyingResetOtp ? "Verifying..." : "Verify Reset Code"}
+                <ArrowRight size={18} />
+              </button>
+
+              <p className="pt-2 text-center text-[15px] text-gray-500">
+                Wrong email?{" "}
+                <Link
+                  href="/auth/forgot-password"
+                  className="font-semibold text-[#d8abab] transition hover:text-black"
+                >
+                  Request New Code
+                </Link>
+              </p>
+            </form>
+          ) : (
+            <div className="space-y-5 px-10 py-12">
+              <p className="text-center text-[15px] font-medium leading-relaxed text-gray-500">
+                Request a password reset code before continuing.
+              </p>
+
+              <Link
+                href="/auth/forgot-password"
+                className="block w-full rounded bg-[#e9caca] px-5 py-3.5 text-center text-[16px] font-semibold text-white transition hover:bg-black"
+              >
+                Request New Code
+              </Link>
+            </div>
+          )}
+        </div>
+
+        <p className="mt-7 text-center text-[16px] text-black/45">
+          © Copyright 2026. All Rights Reserved.
+        </p>
+      </section>
+    </main>
   );
 }

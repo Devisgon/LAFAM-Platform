@@ -1,16 +1,15 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Lock } from "lucide-react";
-import {
-  PasswordResetError,
-  PasswordResetShell,
-} from "@/components/password_reset_shell";
+import { Eye, EyeOff, LockKeyhole } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
+
   const {
     passwordResetEmail,
     resetPassword,
@@ -18,6 +17,7 @@ export default function ResetPasswordPage() {
     error,
     clearError,
   } = useAuth();
+
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -38,6 +38,7 @@ export default function ResetPasswordPage() {
         password,
         confirm_password: confirmPassword,
       });
+
       router.replace("/?passwordReset=1");
     } catch {
       // The shared auth error is rendered below.
@@ -45,52 +46,89 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <PasswordResetShell
-      title="Set a new password"
-      description={
-        passwordResetEmail ? (
-          <>
-            Create a new password for{" "}
-            <strong className="text-text-primary">{passwordResetEmail}</strong>.
-          </>
-        ) : (
-          "Verify your password reset code before setting a new password."
-        )
-      }
-    >
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <ResetPasswordInput
-          id="password"
-          label="New Password"
-          value={password}
-          onChange={setPassword}
-          showPassword={showPassword}
-          setShowPassword={setShowPassword}
-          disabled={isResettingPassword}
-        />
-        <ResetPasswordInput
-          id="confirmPassword"
-          label="Confirm New Password"
-          value={confirmPassword}
-          onChange={setConfirmPassword}
-          showPassword={showPassword}
-          setShowPassword={setShowPassword}
-          disabled={isResettingPassword}
-        />
+    <main className="flex h-screen w-full items-center justify-center bg-[#f4dddd] px-4 py-10 font-sans text-black">
+      <section className="flex w-full flex-col items-center">
+        <div className="mb-10 flex flex-col items-center text-center">
+          <Image
+            src="/login-logo.svg"
+            alt="LA FORME"
+            width={150}
+            height={150}
+            priority
+            className="h-auto w-[150px] object-contain"
+          />
+        </div>
 
-        {formError || error ? (
-          <PasswordResetError message={formError ?? error ?? ""} />
-        ) : null}
+        <div className="w-full max-w-[500px] overflow-hidden rounded-md bg-white shadow-2xl">
+          <div className="flex h-20 items-center justify-center gap-3 bg-[#e9caca] text-black">
+            <LockKeyhole size={30} strokeWidth={2.5} />
 
-        <button
-          type="submit"
-          disabled={isResettingPassword}
-          className="flex w-full items-center justify-center rounded-2xl bg-button-primary py-4 text-sm font-semibold text-white transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isResettingPassword ? "Updating Password..." : "Update Password"}
-        </button>
-      </form>
-    </PasswordResetShell>
+            <h1 className="text-xl font-bold uppercase tracking-wide">
+              Set New Password
+            </h1>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5 px-10 py-12">
+            <p className="text-center text-[15px] font-medium leading-relaxed text-gray-500">
+              {passwordResetEmail ? (
+                <>
+                  Create a new password for{" "}
+                  <strong className="text-black">{passwordResetEmail}</strong>.
+                </>
+              ) : (
+                "Verify your password reset code before setting a new password."
+              )}
+            </p>
+
+            <ResetPasswordInput
+              id="password"
+              label="New Password"
+              value={password}
+              onChange={setPassword}
+              showPassword={showPassword}
+              setShowPassword={setShowPassword}
+              disabled={isResettingPassword}
+            />
+
+            <ResetPasswordInput
+              id="confirmPassword"
+              label="Confirm New Password"
+              value={confirmPassword}
+              onChange={setConfirmPassword}
+              showPassword={showPassword}
+              setShowPassword={setShowPassword}
+              disabled={isResettingPassword}
+            />
+
+            {formError || error ? (
+              <ResetPasswordError message={formError ?? error ?? ""} />
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={isResettingPassword}
+              className="w-full rounded bg-[#e9caca] px-5 py-3.5 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isResettingPassword ? "Updating Password..." : "Update Password"}
+            </button>
+
+            <p className="pt-2 text-center text-[15px] text-gray-500">
+              Back to{" "}
+              <Link
+                href="/"
+                className="font-semibold text-[#d8abab] transition hover:text-black"
+              >
+                Sign In
+              </Link>
+            </p>
+          </form>
+        </div>
+
+        <p className="mt-7 text-center text-[16px] text-black/45">
+          © Copyright 2026. All Rights Reserved.
+        </p>
+      </section>
+    </main>
   );
 }
 
@@ -114,12 +152,15 @@ function ResetPasswordInput({
   disabled,
 }: ResetPasswordInputProps) {
   return (
-    <div className="flex flex-col gap-2">
-      <label htmlFor={id} className="text-xs font-semibold text-text-secondary">
+    <div>
+      <label
+        htmlFor={id}
+        className="mb-1 block text-[16px] font-medium text-gray-500"
+      >
         {label}
       </label>
-      <div className="relative flex items-center">
-        <Lock className="absolute left-4 h-5 w-5 text-text-secondary/60" />
+
+      <div className="flex h-[48px] overflow-hidden rounded border border-gray-300 bg-white">
         <input
           id={id}
           type={showPassword ? "text" : "password"}
@@ -128,24 +169,36 @@ function ResetPasswordInput({
           maxLength={128}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="w-full rounded-2xl border border-text-secondary/10 bg-background-primary py-4 pl-12 pr-12 text-sm outline-none transition-all focus:border-primary/40 focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
           disabled={disabled}
           required
+          className="h-full flex-1 px-4 text-base text-black outline-none disabled:cursor-not-allowed disabled:opacity-60"
         />
+
         <button
           type="button"
           onClick={() => setShowPassword(!showPassword)}
-          className="absolute right-4 text-text-secondary/60 hover:text-text-primary"
           disabled={disabled}
           aria-label={showPassword ? "Hide password" : "Show password"}
+          className="flex h-full w-14 items-center justify-center border-l border-gray-300 bg-gray-100 text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
         >
           {showPassword ? (
-            <EyeOff className="h-5 w-5" />
+            <EyeOff size={22} strokeWidth={2} />
           ) : (
-            <Eye className="h-5 w-5" />
+            <Eye size={22} strokeWidth={2} />
           )}
         </button>
       </div>
     </div>
+  );
+}
+
+function ResetPasswordError({ message }: { message: string }) {
+  return (
+    <p
+      role="alert"
+      className="border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-600"
+    >
+      {message}
+    </p>
   );
 }

@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/sidebar";
 import { TopBar } from "@/components/top_bar";
+import { PageHeader } from "@/components/page_header";
 import { Avatar } from "@/components/reuseable_ui_components/avatar";
 import { Badge } from "@/components/reuseable_ui_components/badge";
 import { Card } from "@/components/reuseable_ui_components/cards";
@@ -63,13 +64,13 @@ export default function AdminDashboardPage() {
   ] as const;
 
   return (
-    <div className="min-h-screen bg-background-primary md:flex">
-      <Sidebar activeItem="Dashboard" />
-
-      <div className="min-w-0 flex-1">
-        <TopBar />
-
-        <main className="p-4 lg:p-5">
+    <div className="min-h-screen bg-background-primary">
+      <TopBar />
+      <div className="md:flex">
+        <Sidebar activeItem="Dashboard" />
+        <div className="min-w-0 flex-1">
+          <PageHeader title="Dashboard" />
+          <main className="p-4 lg:p-5">
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Dashboard metrics">
             {metrics.map((metric) => (
               <Card className="p-4" key={metric.label}>
@@ -197,7 +198,8 @@ export default function AdminDashboardPage() {
               </div>
             </Card>
           </section>
-        </main>
+          </main>
+        </div>
       </div>
     </div>
   );

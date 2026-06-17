@@ -4,7 +4,7 @@ import React, { Suspense, type FormEvent, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
+import { LockKeyhole, UserRound } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { resolvePostLoginRedirect } from "@/lib/auth";
 
@@ -19,14 +19,15 @@ export default function LoginScreen() {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const emailVerified = searchParams.get("verified") === "1";
   const passwordReset = searchParams.get("passwordReset") === "1";
 
   const { login, isLoggingIn, error, clearError } = useAuth();
 
-  const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -42,171 +43,149 @@ function LoginForm() {
       const nextPath = resolvePostLoginRedirect(result.user.role, redirectPath);
 
       router.replace(nextPath);
-    } catch {}
+    } catch {
+    }
   };
 
   return (
-    <div className="flex min-h-screen w-full bg-background font-sans antialiased text-text-primary transition-colors duration-300">
+    <main className="relative flex h-screen w-full items-center justify-center overflow-hidden px-4 py-10 font-sans text-black">
       <div
-        className="relative hidden w-2/2 flex-col items-center justify-center border-r border-text-secondary/10 p-8 lg:flex"
+        className="absolute inset-0 bg-cover bg-center  scale-100"
         style={{
-          backgroundImage: `linear-gradient(to bottom, color-mix(in srgb, var(--primary) 30%, transparent), color-mix(in srgb, var(--background-secondary) 80%, transparent)), url('/login_screen_side_image.png')`,
-          backgroundSize: "contain",
-          backgroundPosition: "center",
+          backgroundImage: "url('/login_bg.jpg')",
         }}
-      >
-        <div className="relative z-10 flex w-full max-w-md flex-col items-center justify-center rounded-3xl border border-text-secondary/10 bg-card-bg-primary/80 p-12 text-center shadow-xl backdrop-blur-md">
-          <div className="mb-5 flex size-24 items-center justify-center rounded-3xl bg-primary shadow-lg shadow-primary/20">
-            <Image
-              alt="LAFAM"
-              className="size-20 object-contain"
-              height={80}
-              priority
-              src="/logo.png"
-              width={80}
-            />
-          </div>
-          <h1 className="mb-3 font-serif text-4xl font-bold tracking-[0.18em] text-primary">
-            LAFAM
-          </h1>
+      />
 
-          <p className="text-lg font-medium italic text-text-secondary">
-            Elevate your practice. Nourish your soul.
-          </p>
+      <div className="absolute inset-0 bg-black/55" />
+
+      <section className="relative z-10 flex w-full flex-col items-center">
+        <div className="mb-10 flex flex-col items-center text-center">
+          <Image
+            src="/login-logo.svg"
+            alt="LA FORME"
+            width={200}
+            height={200}
+            priority
+            className="h-auto w-[200px] object-contain"
+          />
         </div>
-      </div>
 
-      <div className="flex w-full flex-col justify-center bg-background px-6 py-12 sm:px-16 lg:w-1/2 lg:px-24 xl:px-32">
-        <div className="mx-auto w-full max-w-md">
-          <div className="mb-10">
-            <div className="mb-8 flex items-center gap-3 lg:hidden">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary">
-                <Image alt="" className="size-9 object-contain" height={36} priority src="/logo.png" width={36} />
-              </span>
-              <strong className="tracking-[0.16em] text-primary">LAFAM</strong>
-            </div>
-            <h2 className="mb-3 text-4xl font-semibold tracking-tight text-text-primary">
-              Welcome Back
-            </h2>
-
-            <p className="text-sm leading-relaxed text-text-secondary">
-              Sign in to book sessions, manage your wellness wallet, and access
-              your profile.
-            </p>
+        <div className="w-full max-w-[500px] overflow-hidden rounded-md bg-white shadow-2xl">
+          <div className="flex h-16 items-center justify-center gap-3 bg-[#e9caca] text-black">
+            <UserRound size={30} strokeWidth={2.5} />
+            <h1 className="text-xl font-bold uppercase tracking-wide">
+              Sign In
+            </h1>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-3 px-10 py-6">
             {emailVerified ? (
-              <p className="rounded-xl border border-success/20 bg-success/10 px-4 py-3 text-sm text-success">
+              <p className="border border-green-500/20 bg-green-500/10 px-4 py-3 text-sm font-medium text-green-700">
                 Email verified. You can sign in now.
               </p>
             ) : null}
+
             {passwordReset ? (
-              <p className="rounded-xl border border-success/20 bg-success/10 px-4 py-3 text-sm text-success">
+              <p className="border border-green-500/20 bg-green-500/10 px-4 py-3 text-sm font-medium text-green-700">
                 Password updated. Sign in with your new password.
               </p>
             ) : null}
-            <div className="flex flex-col gap-2">
+
+            <div>
               <label
                 htmlFor="email"
-                className="text-xs font-semibold text-text-secondary"
+                className="mb-1 block text-[16px] font-medium text-gray-500"
               >
-                Email Address
+                Username
               </label>
 
-              <div className="relative flex items-center">
-                <Mail className="absolute left-4 h-5 w-5 text-text-secondary/60" />
-
+              <div className="flex h-[48px] overflow-hidden rounded border border-gray-300 bg-white">
                 <input
                   id="email"
                   type="email"
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-2xl border border-text-secondary/10 bg-background-primary py-4 pl-12 pr-4 text-sm text-text-primary outline-none transition-all placeholder:text-text-secondary/50 focus:border-primary/40 focus:bg-card-bg-primary focus:ring-4 focus:ring-primary/10"
-                  placeholder="name@example.com"
                   disabled={isLoggingIn}
                   required
+                  className="h-full flex-1 px-4 text-base text-black outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 />
+
+                <span className="flex h-full w-14 items-center justify-center border-l border-gray-300 bg-gray-100 text-black">
+                  <UserRound size={24} strokeWidth={2} />
+                </span>
               </div>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
+            <div>
+              <div className="mb-1 flex items-center justify-between">
                 <label
                   htmlFor="password"
-                  className="text-xs font-semibold text-text-secondary"
+                  className="block text-[16px] font-medium text-gray-500"
                 >
                   Password
                 </label>
 
                 <Link
                   href="/auth/forgot-password"
-                  className="text-xs font-semibold text-primary hover:underline"
+                  className="text-[15px] font-medium text-[#e9caca] transition hover:text-black"
                 >
-                  Forgot Password?
+                  Lost Password?
                 </Link>
               </div>
 
-              <div className="relative flex items-center">
-                <Lock className="absolute left-4 h-5 w-5 text-text-secondary/60" />
-
+              <div className="flex h-[48px] overflow-hidden rounded border border-gray-300 bg-white">
                 <input
                   id="password"
-                  type={showPassword ? "text" : "password"}
+                  type="password"
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-2xl border border-text-secondary/10 bg-background-primary py-4 pl-12 pr-12 text-sm text-text-primary outline-none transition-all placeholder:text-text-secondary/50 focus:border-primary/40 focus:bg-card-bg-primary focus:ring-4 focus:ring-primary/10"
-                  placeholder="••••••••"
                   disabled={isLoggingIn}
                   required
+                  className="h-full flex-1 px-4 text-base text-black outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 />
 
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((value) => !value)}
-                  className="absolute right-4 text-text-secondary/60 transition-colors hover:text-text-primary"
-                  disabled={isLoggingIn}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
-                </button>
+                <span className="flex h-full w-14 items-center justify-center border-l border-gray-300 bg-gray-100 text-black">
+                  <LockKeyhole size={22} strokeWidth={2} />
+                </span>
               </div>
             </div>
 
             {error ? (
-              <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
+              <p className="border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-600">
                 {error}
               </p>
             ) : null}
 
-            <button
-              type="submit"
-              disabled={isLoggingIn}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-button-primary py-4 text-sm font-semibold text-white shadow-md shadow-primary/10 transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isLoggingIn ? "Signing In..." : "Sign In"}
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </form>
+            <div className="flex items-center justify-between pt-1">
+              <label className="flex items-center gap-3 text-[17px] font-medium text-gray-500">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  disabled={isLoggingIn}
+                  className="size-5 rounded border-gray-300 accent-black"
+                />
+                Remember Me
+              </label>
 
-          <p className="mt-10 text-center text-sm text-text-secondary">
-            Don&apos;t have an account?{" "}
-            <Link
-              href="/signup"
-              className="font-semibold text-primary hover:underline"
-            >
-              Sign Up
-            </Link>
-          </p>
+              <button
+                type="submit"
+                disabled={isLoggingIn}
+                className="min-w-[86px] rounded bg-[#e9caca] px-5 py-3 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isLoggingIn ? "Signing..." : "Sign In"}
+              </button>
+            </div>
+          </form>
         </div>
-      </div>
-    </div>
+
+        <p className="mt-7 text-center text-[16px] text-white/60">
+          © Copyright 2026. All Rights Reserved.
+        </p>
+      </section>
+    </main>
   );
 }
 
