@@ -11,10 +11,10 @@ export interface ToastProps extends HTMLAttributes<HTMLDivElement> {
 
 export function Toast({ children, className, onDismiss, title, tone = "info", ...props }: ToastProps) {
   const tones: Record<Tone, string> = {
-    neutral: "border-secondary text-text-secondary",
+    neutral: "border-secondary text-txt-secondary",
     info: "border-primary text-primary",
     success: "border-success text-success",
-    warning: "border-warning text-text-primary",
+    warning: "border-warning text-txt-primary",
     error: "border-error text-error",
   };
 
@@ -32,7 +32,7 @@ export function Toast({ children, className, onDismiss, title, tone = "info", ..
       {onDismiss && (
         <button
           aria-label="Dismiss notification"
-          className="flex size-6 shrink-0 items-center justify-center rounded text-text-secondary hover:bg-background-secondary hover:text-text-primary"
+          className="flex size-6 shrink-0 items-center justify-center rounded text-txt-secondary hover:bg-background-secondary hover:text-txt-primary"
           onClick={onDismiss}
           type="button"
         >

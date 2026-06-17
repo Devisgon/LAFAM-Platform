@@ -37,7 +37,7 @@ export function ThemeSwitcher() {
     <button
       aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
       aria-pressed={theme === "dark"}
-      className="inline-flex size-9 items-center justify-center rounded-lg border border-background-secondary bg-background text-text-secondary hover:text-primary"
+      className="inline-flex size-9 items-center justify-center rounded-lg border border-background-secondary bg-background text-txt-secondary hover:text-primary"
       onClick={toggleTheme}
       title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
       type="button"

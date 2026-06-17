@@ -191,8 +191,8 @@ function LoginForm() {
 
 function LoginScreenFallback() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-6 text-text-primary">
-      <p className="text-sm text-text-secondary">Loading sign in...</p>
+    <main className="flex min-h-screen items-center justify-center bg-background px-6 text-txt-primary">
+      <p className="text-sm text-txt-secondary">Loading sign in...</p>
     </main>
   );
 }

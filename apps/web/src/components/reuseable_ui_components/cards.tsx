@@ -25,7 +25,7 @@ export function Card({
   return (
     <article
       className={cn(
-        "rounded-xl border border-background-secondary bg-card-bg-primary p-5 text-text-primary shadow-sm",
+        "rounded-xl border border-background-secondary bg-card-bg-primary p-5 text-txt-primary shadow-sm",
         variant === "secondary" && "bg-card-bg-secondary",
         variant === "outlined" && "bg-transparent shadow-none",
         interactive && "transition-transform hover:-translate-y-0.5",
@@ -34,7 +34,7 @@ export function Card({
       {...props}
     >
       {title && <h3 className="m-0 text-lg font-bold">{title}</h3>}
-      {description && <p className="mt-2 text-text-secondary">{description}</p>}
+      {description && <p className="mt-2 text-txt-secondary">{description}</p>}
       <div className={title || description ? "mt-4" : undefined}>{children}</div>
       {footer && <footer className="mt-5 flex items-center gap-3">{footer}</footer>}
     </article>

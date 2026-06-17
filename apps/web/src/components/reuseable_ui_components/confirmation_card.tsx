@@ -33,7 +33,7 @@ export function ConfirmationCard({
   return (
     <article
       className={cn(
-        "max-w-lg rounded-xl border border-background-secondary bg-card-bg-primary p-5 text-center text-text-primary shadow-sm",
+        "max-w-lg rounded-xl border border-background-secondary bg-card-bg-primary p-5 text-center text-txt-primary shadow-sm",
         className,
       )}
       {...props}
@@ -45,7 +45,7 @@ export function ConfirmationCard({
         {icon}
       </span>
       <h3 className="m-0 text-lg font-bold">{title}</h3>
-      <p className="mt-2 text-text-secondary">{description}</p>
+      <p className="mt-2 text-txt-secondary">{description}</p>
       <div className="mt-5 flex justify-center gap-3">
         <Button disabled={loading} onClick={onCancel} variant="outline">
           {cancelLabel}

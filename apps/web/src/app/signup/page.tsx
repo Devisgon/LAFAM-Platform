@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, type ReactNode, useState } from "react";
 import {
   ArrowRight,
-  Eye,
   EyeOff,
   LockKeyhole,
   Mail,

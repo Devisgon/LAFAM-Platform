@@ -190,7 +190,7 @@ export function BookingExplorer({
   return (
     <section className="mt-7" aria-labelledby="all-bookings-heading">
       <div className="mb-4">
-        <h2 className="mt-1 text-xl font-bold text-text-primary" id="all-bookings-heading">
+        <h2 className="mt-1 text-xl font-bold text-txt-primary" id="all-bookings-heading">
           {heading}
         </h2>
       </div>
@@ -199,7 +199,7 @@ export function BookingExplorer({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-background-secondary text-text-secondary">
+              <tr className="border-b border-background-secondary text-txt-secondary">
                 {["Customer", "Service & staff", "Date & time", "Status", "Booking ID", ...(previousOnly ? [] : ["Actions"])].map((heading) => (
                   <th className="px-5 py-3 font-semibold" key={heading}>
                     {heading}
@@ -214,7 +214,7 @@ export function BookingExplorer({
                   key={booking.id}
                 >
                   <td className="px-5 py-4">
-                    <span className="flex items-center gap-3 font-bold text-text-primary">
+                    <span className="flex items-center gap-3 font-bold text-txt-primary">
                       <Avatar
                         alt={`${booking.customer} avatar`}
                         className={booking.avatarTone}
@@ -224,20 +224,20 @@ export function BookingExplorer({
                       {booking.customer}
                     </span>
                   </td>
-                  <td className="px-5 py-4 text-text-primary">
+                  <td className="px-5 py-4 text-txt-primary">
                     <strong>{booking.service}</strong>
-                    <span className="mt-0.5 block text-text-secondary">{booking.staff}</span>
+                    <span className="mt-0.5 block text-txt-secondary">{booking.staff}</span>
                   </td>
-                  <td className="px-5 py-4 text-text-primary">
+                  <td className="px-5 py-4 text-txt-primary">
                     <strong>
                       {booking.day}, {booking.date}
                     </strong>
-                    <span className="mt-0.5 block text-text-secondary">{booking.time}</span>
+                    <span className="mt-0.5 block text-txt-secondary">{booking.time}</span>
                   </td>
                   <td className="px-5 py-4">
                     <Badge tone={statusTone[booking.status]}>{booking.status}</Badge>
                   </td>
-                  <td className="px-5 py-4 font-mono text-text-secondary">{booking.id}</td>
+                  <td className="px-5 py-4 font-mono text-txt-secondary">{booking.id}</td>
                   {!previousOnly && (
                     <td className="px-5 py-4">
                       <div className="flex gap-3">
@@ -253,7 +253,7 @@ export function BookingExplorer({
         </div>
 
         {filteredBookings.length === 0 && (
-          <p className="p-8 text-center text-sm text-text-secondary">No bookings match these filters.</p>
+          <p className="p-8 text-center text-sm text-txt-secondary">No bookings match these filters.</p>
         )}
      
       </Card>
@@ -261,10 +261,10 @@ export function BookingExplorer({
       {editing && (
         <section aria-labelledby="edit-booking-title" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog">
           <button aria-label="Close booking editor" className="absolute inset-0" onClick={() => setEditing(null)} type="button" />
-          <form action={updateBooking} className="relative z-10 w-full max-w-2xl rounded-2xl border border-background-secondary bg-card-bg-primary p-6 text-text-primary shadow-2xl">
+          <form action={updateBooking} className="relative z-10 w-full max-w-2xl rounded-2xl border border-background-secondary bg-card-bg-primary p-6 text-txt-primary shadow-2xl">
             <button aria-label="Close booking editor" className="absolute right-4 top-4 size-8 rounded-full bg-background-secondary" onClick={() => setEditing(null)} type="button">X</button>
             <h2 className="text-xl font-bold" id="edit-booking-title">Edit or reschedule booking</h2>
-            <p className="mt-1 text-sm text-text-secondary">{editing.id} | Update booking details and timing.</p>
+            <p className="mt-1 text-sm text-txt-secondary">{editing.id} | Update booking details and timing.</p>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <label className="grid gap-1.5 text-xs font-bold">Customer<input className="min-h-10 rounded-lg border border-background-secondary bg-background px-3" defaultValue={editing.customer} name="customer" required /></label>
               <label className="grid gap-1.5 text-xs font-bold">Service<input className="min-h-10 rounded-lg border border-background-secondary bg-background px-3" defaultValue={editing.service} name="service" required /></label>

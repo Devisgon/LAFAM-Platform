@@ -33,7 +33,7 @@ export function AdminSettings() {
           ].map((item) => (
             <button
               aria-current={view === item.id ? "page" : undefined}
-              className={`min-h-11 rounded-xl px-4 py-2.5 text-left text-sm font-semibold transition-colors lg:w-full ${view === item.id ? "bg-primary/15 text-primary" : "text-text-primary hover:bg-card-bg-primary"}`}
+              className={`min-h-11 rounded-xl px-4 py-2.5 text-left text-sm font-semibold transition-colors lg:w-full ${view === item.id ? "bg-primary/15 text-primary" : "text-txt-primary hover:bg-card-bg-primary"}`}
               key={item.id}
               onClick={() => setView(item.id)}
               type="button"
@@ -55,23 +55,16 @@ export function AdminSettings() {
           <ProfileSettings />
         ) : view === "users" ? (
           <>
-            <header className="mb-6 flex flex-wrap items-end justify-between gap-3 border-b border-background-secondary pb-5">
-              <div>
-                <h2 className="text-xl font-bold text-text-primary">Users</h2>
-                <p className="mt-1 text-sm text-text-secondary">
-                  Filter and manage all platform user accounts.
-                </p>
-              </div>
-            </header>
+           
             <AdminUserManager />
           </>
         ) : (
           <>
             <header className="border-b border-background-secondary pb-5">
-              <h2 className="text-xl font-bold text-text-primary">
+              <h2 className="text-xl font-bold text-txt-primary">
                 Booking history
               </h2>
-              <p className="mt-1 text-sm text-text-secondary">
+              <p className="mt-1 text-sm text-txt-secondary">
                 Completed and cancelled booking records.
               </p>
             </header>

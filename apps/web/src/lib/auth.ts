@@ -2,6 +2,7 @@ export type AuthRole =
   | "super_admin"
   | "admin"
   | "trainer"
+  | "stylist"
   | "staff"
   | "customer"
   | "user"
@@ -371,25 +372,11 @@ function getApiErrorMessage(payload: unknown): string {
 }
 
 export function getDashboardPath(role?: string | null): string {
-  switch (role) {
-    case "super_admin":
-    case "admin":
-      return "/admin";
+  if (role === "super_admin" || role === "admin") return "/admin";
 
-    case "staff":
-    case "trainer":
-      return "/staff";
+  if (role) return "/user";
 
-    case "customer":
-    case "user":
-      return "/user";
-
-    case "guest":
-      return "/guest";
-
-    default:
-      return "/";
-  }
+  return "/";
 }
 
 function getSafeRedirectPath(path: string | null): string | null {
@@ -402,11 +389,33 @@ function getSafeRedirectPath(path: string | null): string | null {
   return path;
 }
 
+function isRouteMatch(path: string, route: string): boolean {
+  return path === route || path.startsWith(`${route}/`);
+}
+
+function canRoleAccessPath(
+  role: string | null | undefined,
+  path: string,
+): boolean {
+  const isAdmin = role === "super_admin" || role === "admin";
+
+  if (isRouteMatch(path, "/admin")) return isAdmin;
+  if (isRouteMatch(path, "/user")) return Boolean(role) && !isAdmin;
+
+  return false;
+}
+
 export function resolvePostLoginRedirect(
   role: string | null | undefined,
   redirectPath: string | null,
 ): string {
-  return getSafeRedirectPath(redirectPath) ?? getDashboardPath(role);
+  const safeRedirectPath = getSafeRedirectPath(redirectPath);
+
+  if (safeRedirectPath && canRoleAccessPath(role, safeRedirectPath)) {
+    return safeRedirectPath;
+  }
+
+  return getDashboardPath(role);
 }
 
 export function getBrowserDeviceInfo() {

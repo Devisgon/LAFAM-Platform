@@ -14,11 +14,12 @@ import {
   type PilatesClassStatus,
 } from "@/lib/pilates";
 import { Badge } from "./reuseable_ui_components/badge";
+import { CreateActionBar } from "./reuseable_ui_components/create_action_bar";
 import { LoadingState } from "./reuseable_ui_components/loading_state";
 import { Toast } from "./reuseable_ui_components/toast";
 
 const fieldClass =
-  "min-h-10 w-full rounded-lg border border-background-secondary bg-background px-3 py-2 text-sm text-text-primary outline-none focus:border-primary disabled:opacity-60";
+  "min-h-10 w-full rounded-lg border border-background-secondary bg-background px-3 py-2 text-sm text-txt-primary outline-none focus:border-primary disabled:opacity-60";
 const buttonClass =
   "inline-flex min-h-10 items-center justify-center rounded-lg border border-background-secondary px-4 py-2 text-xs font-bold transition hover:bg-background-secondary";
 
@@ -81,13 +82,12 @@ export function PilatesClassManager() {
 
   return (
     <>
-      <section className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm text-text-secondary">
-            {api.classes.length} class definitions ·{" "}
-            {api.classes.filter((item) => item.status === "active").length} active
-          </p>
-        </div>
+      <section className="mb-10 px-8">
+        <CreateActionBar
+          actionHref="#create-class"
+          actionLabel="Add New Class"
+          title="Add New Class"
+        />
       </section>
 
       {api.error ? (
@@ -100,7 +100,7 @@ export function PilatesClassManager() {
       <section className="grid gap-5" aria-labelledby="pilates-classes-heading">
         <h2 className="sr-only" id="pilates-classes-heading">Pilates classes</h2>
         {api.classes.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-background-secondary bg-card-bg-primary p-10 text-center text-sm text-text-secondary">
+          <div className="rounded-2xl border border-dashed border-background-secondary bg-card-bg-primary p-10 text-center text-sm text-txt-secondary">
             Create your first Pilates class.
           </div>
         ) : (
@@ -110,11 +110,11 @@ export function PilatesClassManager() {
 
       <section aria-labelledby="create-class-title" aria-modal="true" className="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-slate-950/60 p-4 target:flex" id="create-class" role="dialog">
         <a aria-label="Close create class form" className="absolute inset-0" href="#pilates-classes-heading" />
-        <article className="relative z-10 my-auto w-full max-w-2xl rounded-2xl border border-background-secondary bg-card-bg-primary p-6 text-text-primary shadow-2xl">
+        <article className="relative z-10 my-auto w-full max-w-2xl rounded-2xl border border-background-secondary bg-card-bg-primary p-6 text-txt-primary shadow-2xl">
           <a aria-label="Close create class form" className="absolute right-4 top-4" href="#pilates-classes-heading">X</a>
           <h2 className="text-xl font-bold" id="create-class-title">Create Pilates class</h2>
           <form onSubmit={createClass}>
-            <p className="mt-1 text-sm text-text-secondary">
+            <p className="mt-1 text-sm text-txt-secondary">
               After creation, open the class page to edit it and add schedules.
             </p>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -167,13 +167,13 @@ function ClassListCard({ item }: { item: PilatesClassDefinition }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={statusTone(item.status)}>{label(item.status)}</Badge>
-            <span className="text-xs text-text-secondary">◇ Pilates</span>
+            <span className="text-xs text-txt-secondary">◇ Pilates</span>
           </div>
-          <h3 className="mt-2 text-xl font-bold text-text-primary">{item.title}</h3>
-          <p className="mt-1 line-clamp-2 text-sm text-text-secondary">
+          <h3 className="mt-2 text-xl font-bold text-txt-primary">{item.title}</h3>
+          <p className="mt-1 line-clamp-2 text-sm text-txt-secondary">
             {item.description ?? "No description provided."}
           </p>
-          <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-text-primary">
+          <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-txt-primary">
             <span className="rounded-lg bg-primary/10 px-3 py-2">◷ {item.default_duration_minutes} minutes</span>
             <span className="rounded-lg bg-primary/10 px-3 py-2">♙ {item.default_capacity} capacity</span>
             <span className="rounded-lg bg-primary/10 px-3 py-2">Level: {label(item.level)}</span>

@@ -23,7 +23,7 @@ import { LoadingState } from "./reuseable_ui_components/loading_state";
 import { Toast } from "./reuseable_ui_components/toast";
 
 const fieldClass =
-  "min-h-10 w-full rounded-lg border border-background-secondary bg-background px-3 py-2 text-sm text-text-primary outline-none focus:border-primary disabled:opacity-60";
+  "min-h-10 w-full rounded-lg border border-background-secondary bg-background px-3 py-2 text-sm text-txt-primary outline-none focus:border-primary disabled:opacity-60";
 const buttonClass =
   "inline-flex min-h-10 items-center justify-center rounded-lg border border-background-secondary px-4 py-2 text-xs font-bold transition hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-50";
 const detailCacheKey = (classId: string) => `lafam:admin:pilates:class:${classId}`;
@@ -251,7 +251,7 @@ export function PilatesClassDetailManager({ classId }: { classId: string }) {
 
   return (
     <>
-      <nav className="mb-5 text-sm text-text-secondary" aria-label="Breadcrumb">
+      <nav className="mb-5 text-sm text-txt-secondary" aria-label="Breadcrumb">
         <Link className="inline-flex items-center gap-2 font-semibold text-primary hover:underline" href="/admin/services/pilates">
           <span aria-hidden="true">&larr;</span>
           Back to Pilates classes
@@ -335,8 +335,8 @@ function ClassDetailCard({
                 <Badge tone={classTone(detail.status)}>{label(detail.status)}</Badge>
                 <Badge tone="info">{label(detail.level)}</Badge>
               </div>
-              <h1 className="mt-4 text-3xl font-bold tracking-tight text-text-primary">{detail.title}</h1>
-              <p className="mt-3 text-sm leading-6 text-text-secondary">
+              <h1 className="mt-4 text-3xl font-bold tracking-tight text-txt-primary">{detail.title}</h1>
+              <p className="mt-3 text-sm leading-6 text-txt-secondary">
                 {detail.description ?? "No description provided."}
               </p>
             </div>
@@ -355,7 +355,7 @@ function ClassDetailCard({
       <section className="border-t border-background-secondary px-6 py-6 lg:px-8" aria-labelledby="class-schedules-heading">
         
         {schedules.length === 0 ? (
-          <p className="mt-6 border-t border-dashed border-background-secondary py-8 text-center text-sm text-text-secondary">
+          <p className="mt-6 border-t border-dashed border-background-secondary py-8 text-center text-sm text-txt-secondary">
             No schedules have been created for this class.
           </p>
         ) : (
@@ -397,17 +397,17 @@ function ScheduleRow({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={scheduleTone(item.status)}>{label(item.status)}</Badge>
-            <span className="text-xs font-semibold text-text-secondary">{item.studio}</span>
+            <span className="text-xs font-semibold text-txt-secondary">{item.studio}</span>
           </div>
-          <h3 className="mt-3 text-lg font-bold text-text-primary">{formatDate(item.class_date)}</h3>
-          <p className="mt-1 text-sm text-text-secondary">
-            Trainer: <strong className="text-text-primary">{item.trainer?.display_name ?? "Assigned trainer"}</strong>
+          <h3 className="mt-3 text-lg font-bold text-txt-primary">{formatDate(item.class_date)}</h3>
+          <p className="mt-1 text-sm text-txt-secondary">
+            Trainer: <strong className="text-txt-primary">{item.trainer?.display_name ?? "Assigned trainer"}</strong>
           </p>
-          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs font-semibold text-text-secondary">
-            <span><strong className="text-text-primary">{formatTime(item.start_time)} - {formatTime(item.end_time)}</strong> time</span>
-            <span><strong className="text-text-primary">{item.duration_minutes} min</strong> duration</span>
-            <span><strong className="text-text-primary">{item.availability.booked_count}/{item.capacity}</strong> booked</span>
-            <span><strong className="text-text-primary">{item.availability.available_seats}</strong> seats left</span>
+          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs font-semibold text-txt-secondary">
+            <span><strong className="text-txt-primary">{formatTime(item.start_time)} - {formatTime(item.end_time)}</strong> time</span>
+            <span><strong className="text-txt-primary">{item.duration_minutes} min</strong> duration</span>
+            <span><strong className="text-txt-primary">{item.availability.booked_count}/{item.capacity}</strong> booked</span>
+            <span><strong className="text-txt-primary">{item.availability.available_seats}</strong> seats left</span>
           </div>
           {item.cancellation_reason ? <p className="mt-3 text-xs text-error">{item.cancellation_reason}</p> : null}
         </div>
@@ -483,7 +483,7 @@ function ScheduleForm({
 }
 
 function Modal({ children, onClose, title }: { children: ReactNode; onClose: () => void; title: string }) {
-  return <section aria-modal="true" className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4" role="dialog"><button aria-label="Close dialog" className="absolute inset-0" onClick={onClose} type="button" /><article className="relative z-10 my-auto max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-background-secondary bg-card-bg-primary p-6 text-text-primary shadow-2xl"><button aria-label="Close dialog" className="absolute right-4 top-4" onClick={onClose} type="button">X</button><h2 className="pr-10 text-xl font-bold">{title}</h2>{children}</article></section>;
+  return <section aria-modal="true" className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4" role="dialog"><button aria-label="Close dialog" className="absolute inset-0" onClick={onClose} type="button" /><article className="relative z-10 my-auto max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-background-secondary bg-card-bg-primary p-6 text-txt-primary shadow-2xl"><button aria-label="Close dialog" className="absolute right-4 top-4" onClick={onClose} type="button">X</button><h2 className="pr-10 text-xl font-bold">{title}</h2>{children}</article></section>;
 }
 
 function ModalFooter({ isSaving, onClose, submitLabel }: { isSaving: boolean; onClose: () => void; submitLabel: string }) {
@@ -501,8 +501,8 @@ function Select({ defaultValue, label: selectLabel, name, options }: { defaultVa
 function HeroStat({ label: statLabel, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-card-bg-secondary p-4">
-      <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-text-secondary">{statLabel}</dt>
-      <dd className="mt-1 text-base font-bold text-text-primary">{value}</dd>
+      <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-txt-secondary">{statLabel}</dt>
+      <dd className="mt-1 text-base font-bold text-txt-primary">{value}</dd>
     </div>
   );
 }

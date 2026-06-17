@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
-import {CalendarDays,ChevronDown,CreditCard,Gauge, LogOut, Menu,  Settings,  Star, UserRound,UsersRound,ListChecks,type LucideIcon,} from "lucide-react";
+import {CalendarDays,ChevronDown,CreditCard,Gauge, LogOut, Menu,  Settings,  Star, UserRound,ListChecks,type LucideIcon,} from "lucide-react";
 type IconName =| "bookings"| "dashboard" | "logout"  | "payments" | "reviews"  | "services"| "settings"| "staff";
 
 type NavItem = {
@@ -62,7 +62,7 @@ function NavigationLink({
       title={label}
       aria-label={label}
       aria-current={active ? "page" : undefined}
-      className={`flex min-h-10 w-full items-center text-[17px] font-medium text-black transition hover:bg-black hover:text-white ${
+      className={`flex min-h-14 w-full items-center text-[14px]  transition hover:bg-black hover:text-white ${
   collapsed ? "justify-center px-0" : "gap-4 px-5"
 } ${active ? "bg-black text-white" : ""}`}>
       <Icon name={icon} />
@@ -105,7 +105,7 @@ function NavigationGroup({
         aria-label={label}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className={`flex min-h-10 w-full items-center gap-4 px-5 text-[17px] font-medium transition ${
+        className={`flex min-h-14 w-full items-center gap-4 px-5 text-[14px]  transition ${
           open
             ? "bg-black text-white"
             : "text-black hover:bg-black hover:text-white"
@@ -157,20 +157,20 @@ export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
           }`}
         >
           {!collapsed && (
-            <h2 className="text-[17px] font-medium text-black">Navigation</h2>
+            <h2 className="text-[16px] ">Navigation</h2>
           )}
 
           <button
             type="button"
             aria-label="Toggle sidebar"
             onClick={() => setCollapsed((value) => !value)}
-            className="rounded-md p-1 text-black transition "
+            className="rounded-md p-1  transition "
           >
             <Menu size={24} strokeWidth={3} />
           </button>
         </div>
 
-        <nav className="mt-6 grid " aria-label="Main navigation">
+        <nav className="mt-8 grid " aria-label="Main navigation">
           {primaryItems.map((item) => (
             <NavigationLink
               key={item.label}

@@ -268,7 +268,7 @@ export function ProfileSettings() {
 
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2.5">
-                <h2 className="truncate text-xl font-bold text-text-primary">
+                <h2 className="truncate text-xl font-bold text-txt-primary">
                   {user?.full_name ?? "Your profile"}
                 </h2>
                 <Badge
@@ -277,7 +277,7 @@ export function ProfileSettings() {
                   {label(user?.status ?? "unknown")}
                 </Badge>
               </div>
-              <p className="mt-1 truncate text-sm text-text-secondary">
+              <p className="mt-1 truncate text-sm text-txt-secondary">
                 {user?.email ?? "No email address"}
               </p>
             </div>
@@ -377,15 +377,15 @@ export function ProfileSettings() {
               <Icon name="key" />
             </span>
             <span className="min-w-0 flex-1">
-              <strong className="block text-base text-text-primary">
+              <strong className="block text-base text-txt-primary">
                 Change password
               </strong>
-              <span className="mt-0.5 block text-sm text-text-secondary">
+              <span className="mt-0.5 block text-sm text-txt-secondary">
                 Update your password and sign out other active sessions.
               </span>
             </span>
             <span
-              className={`text-text-secondary transition-transform ${isPasswordOpen ? "rotate-180" : ""}`}
+              className={`text-txt-secondary transition-transform ${isPasswordOpen ? "rotate-180" : ""}`}
             >
               <Icon name="chevron" />
             </span>
@@ -445,8 +445,8 @@ export function ProfileSettings() {
         <section className="overflow-hidden rounded-2xl border border-background-secondary bg-card-bg-primary shadow-sm">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-background-secondary p-5 sm:p-6">
             <div>
-              <h3 className="font-bold text-text-primary">Active sessions</h3>
-              <p className="mt-1 text-sm text-text-secondary">
+              <h3 className="font-bold text-txt-primary">Active sessions</h3>
+              <p className="mt-1 text-sm text-txt-secondary">
                 {total} device session{total === 1 ? "" : "s"} can access this
                 account.
               </p>
@@ -485,7 +485,7 @@ export function ProfileSettings() {
               </Button>
             </div>
           ) : sessions.length === 0 ? (
-            <p className="p-5 text-sm text-text-secondary">
+            <p className="p-5 text-sm text-txt-secondary">
               No active sessions were returned.
             </p>
           ) : (
@@ -497,17 +497,17 @@ export function ProfileSettings() {
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <strong className="text-sm text-text-primary">
+                      <strong className="text-sm text-txt-primary">
                         {session.device_name ?? "Unknown device"}
                       </strong>
                       {session.is_current ? (
                         <Badge tone="success">Current session</Badge>
                       ) : null}
                     </div>
-                    <p className="mt-1 break-words text-xs text-text-secondary">
+                    <p className="mt-1 break-words text-xs text-txt-secondary">
                       {session.user_agent ?? session.type}
                     </p>
-                    <dl className="mt-3 grid gap-x-6 gap-y-2 text-xs text-text-secondary sm:grid-cols-2">
+                    <dl className="mt-3 grid gap-x-6 gap-y-2 text-xs text-txt-secondary sm:grid-cols-2">
                       <SessionDetail
                         label="IP address"
                         value={session.ip_address}
@@ -546,7 +546,7 @@ export function ProfileSettings() {
         <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-error/30 bg-error/5 p-5 sm:p-6">
           <div>
             <h3 className="font-bold text-error">Delete account</h3>
-            <p className="mt-1 max-w-2xl text-sm text-text-secondary">
+            <p className="mt-1 max-w-2xl text-sm text-txt-secondary">
               Permanently disable your account and revoke every active session.
             </p>
           </div>
@@ -603,7 +603,7 @@ function SessionDetail({
 }) {
   return (
     <div>
-      <dt className="font-bold text-text-primary">{detailLabel}</dt>
+      <dt className="font-bold text-txt-primary">{detailLabel}</dt>
       <dd className="mt-0.5">{value ?? "Not available"}</dd>
     </div>
   );

@@ -14,6 +14,7 @@ type TopBarProps = {
 
 export function TopBar({ title }: TopBarProps) {
   const { avatarUrl, user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
   return (
     <header
@@ -33,7 +34,7 @@ export function TopBar({ title }: TopBarProps) {
         <Link
           aria-label="Open profile settings"
           className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          href="/admin/settings"
+          href={isAdmin ? "/admin/settings" : "/user"}
         >
           <Avatar
             alt={`${user?.full_name ?? "Account"} profile`}

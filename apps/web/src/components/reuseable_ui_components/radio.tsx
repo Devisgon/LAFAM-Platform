@@ -7,11 +7,11 @@ export interface RadioProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
 
 export function Radio({ description, label, ...props }: RadioProps) {
   return (
-    <label className="flex cursor-pointer items-start gap-2 text-text-primary">
+    <label className="flex cursor-pointer items-start gap-2 text-txt-primary">
       <input className="mt-1 size-4 accent-primary" type="radio" {...props} />
       <span className="grid gap-0.5">
         <span className="text-sm font-semibold">{label}</span>
-        {description && <span className="text-xs text-text-secondary">{description}</span>}
+        {description && <span className="text-xs text-txt-secondary">{description}</span>}
       </span>
     </label>
   );
