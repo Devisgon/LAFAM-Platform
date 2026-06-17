@@ -147,6 +147,10 @@ function buildPublicScheduleListQuery(
     ...(dto.trainer_staff_profile_id !== undefined
       ? { trainer_staff_profile_id: dto.trainer_staff_profile_id }
       : {}),
+    ...(dto.series_id !== undefined ? { series_id: dto.series_id } : {}),
+    ...(dto.generation_source !== undefined
+      ? { generation_source: dto.generation_source }
+      : {}),
     ...(dto.studio !== undefined ? { studio: dto.studio } : {}),
     from_date: fromDate,
     ...(dto.to_date !== undefined ? { to_date: dto.to_date } : {}),
@@ -210,10 +214,13 @@ function mapScheduleToPublicSummary(
     duration_minutes: record.schedule.duration_minutes,
     capacity: record.schedule.capacity,
     status: record.schedule.status,
+    availability: createAvailabilitySnapshot(record.schedule),
     realtime_version: record.schedule.realtime_version,
+    series_id: record.schedule.series_id,
+    series_occurrence_index: record.schedule.series_occurrence_index,
+    generation_source: record.schedule.generation_source,
     class: mapClassToPublicSummary(record.class, resolveImageUrl),
     trainer: mapTrainerToSummary(record.trainer),
-    availability: createAvailabilitySnapshot(record.schedule),
   };
 }
 

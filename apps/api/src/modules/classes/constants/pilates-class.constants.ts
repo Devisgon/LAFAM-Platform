@@ -141,6 +141,124 @@ export type PilatesClassSchedulePublicVisibleStatus =
 export type PilatesClassScheduleTerminalStatus =
   (typeof PILATES_CLASS_SCHEDULE_TERMINAL_STATUSES)[number];
 
+export const PILATES_SCHEDULE_CREATION_MODES = ['single', 'recurring'] as const;
+
+export type PilatesScheduleCreationMode =
+  (typeof PILATES_SCHEDULE_CREATION_MODES)[number];
+
+export const PILATES_SCHEDULE_CREATION_MODE_SINGLE =
+  'single' satisfies PilatesScheduleCreationMode;
+
+export const PILATES_SCHEDULE_CREATION_MODE_RECURRING =
+  'recurring' satisfies PilatesScheduleCreationMode;
+
+export const PILATES_SCHEDULE_DEFAULT_CREATION_MODE =
+  PILATES_SCHEDULE_CREATION_MODE_SINGLE satisfies PilatesScheduleCreationMode;
+
+export const PILATES_SCHEDULE_SERIES_FREQUENCIES = [
+  'weekly',
+  'monthly',
+] as const;
+
+export type PilatesScheduleSeriesFrequency =
+  (typeof PILATES_SCHEDULE_SERIES_FREQUENCIES)[number];
+
+export const PILATES_SCHEDULE_SERIES_FREQUENCY_WEEKLY =
+  'weekly' satisfies PilatesScheduleSeriesFrequency;
+
+export const PILATES_SCHEDULE_SERIES_FREQUENCY_MONTHLY =
+  'monthly' satisfies PilatesScheduleSeriesFrequency;
+
+export const PILATES_SCHEDULE_MONTHLY_RULES = ['day_of_month'] as const;
+
+export type PilatesScheduleMonthlyRule =
+  (typeof PILATES_SCHEDULE_MONTHLY_RULES)[number];
+
+export const PILATES_SCHEDULE_MONTHLY_RULE_DAY_OF_MONTH =
+  'day_of_month' satisfies PilatesScheduleMonthlyRule;
+
+export const PILATES_SCHEDULE_SERIES_STATUSES = [
+  'active',
+  'cancelled',
+  'deleted',
+] as const;
+
+export type PilatesScheduleSeriesStatus =
+  (typeof PILATES_SCHEDULE_SERIES_STATUSES)[number];
+
+export const PILATES_SCHEDULE_SERIES_STATUS_ACTIVE =
+  'active' satisfies PilatesScheduleSeriesStatus;
+
+export const PILATES_SCHEDULE_SERIES_STATUS_CANCELLED =
+  'cancelled' satisfies PilatesScheduleSeriesStatus;
+
+export const PILATES_SCHEDULE_SERIES_STATUS_DELETED =
+  'deleted' satisfies PilatesScheduleSeriesStatus;
+
+export const PILATES_SCHEDULE_SERIES_CREATE_ALLOWED_STATUSES = [
+  PILATES_SCHEDULE_SERIES_STATUS_ACTIVE,
+] as const satisfies readonly PilatesScheduleSeriesStatus[];
+
+export const PILATES_SCHEDULE_SERIES_TERMINAL_STATUSES = [
+  PILATES_SCHEDULE_SERIES_STATUS_CANCELLED,
+  PILATES_SCHEDULE_SERIES_STATUS_DELETED,
+] as const satisfies readonly PilatesScheduleSeriesStatus[];
+
+export type PilatesScheduleSeriesCreateAllowedStatus =
+  (typeof PILATES_SCHEDULE_SERIES_CREATE_ALLOWED_STATUSES)[number];
+
+export type PilatesScheduleSeriesTerminalStatus =
+  (typeof PILATES_SCHEDULE_SERIES_TERMINAL_STATUSES)[number];
+
+export const PILATES_SCHEDULE_GENERATION_SOURCES = [
+  'single',
+  'recurring',
+] as const;
+
+export type PilatesScheduleGenerationSource =
+  (typeof PILATES_SCHEDULE_GENERATION_SOURCES)[number];
+
+export const PILATES_SCHEDULE_GENERATION_SOURCE_SINGLE =
+  'single' satisfies PilatesScheduleGenerationSource;
+
+export const PILATES_SCHEDULE_GENERATION_SOURCE_RECURRING =
+  'recurring' satisfies PilatesScheduleGenerationSource;
+
+export const PILATES_SCHEDULE_UPDATE_SCOPES = [
+  'this_occurrence',
+  'this_and_following',
+  'entire_series',
+] as const;
+
+export type PilatesScheduleUpdateScope =
+  (typeof PILATES_SCHEDULE_UPDATE_SCOPES)[number];
+
+export const PILATES_SCHEDULE_UPDATE_SCOPE_THIS_OCCURRENCE =
+  'this_occurrence' satisfies PilatesScheduleUpdateScope;
+
+export const PILATES_SCHEDULE_UPDATE_SCOPE_THIS_AND_FOLLOWING =
+  'this_and_following' satisfies PilatesScheduleUpdateScope;
+
+export const PILATES_SCHEDULE_UPDATE_SCOPE_ENTIRE_SERIES =
+  'entire_series' satisfies PilatesScheduleUpdateScope;
+
+export const PILATES_SCHEDULE_DEFAULT_UPDATE_SCOPE =
+  PILATES_SCHEDULE_UPDATE_SCOPE_THIS_OCCURRENCE satisfies PilatesScheduleUpdateScope;
+
+export const PILATES_SCHEDULE_WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
+
+export type PilatesScheduleWeekday = (typeof PILATES_SCHEDULE_WEEKDAYS)[number];
+
+export const PILATES_SCHEDULE_WEEKDAY_MIN = 0;
+export const PILATES_SCHEDULE_WEEKDAY_MAX = 6;
+
+export const PILATES_SCHEDULE_MONTH_DAY_MIN = 1;
+export const PILATES_SCHEDULE_MONTH_DAY_MAX = 31;
+
+export const PILATES_SCHEDULE_RECURRENCE_MAX_RANGE_MONTHS = 12;
+export const PILATES_SCHEDULE_RECURRENCE_MAX_OCCURRENCES = 250;
+export const PILATES_SCHEDULE_RECURRENCE_MAX_EXCLUDED_DATES = 100;
+
 export const PILATES_CLASS_LEVELS = [
   'beginner',
   'intermediate',
@@ -297,6 +415,21 @@ export const PILATES_CLASS_EVENT_SCHEDULE_DELETED =
 export const PILATES_CLASS_EVENT_SCHEDULE_AVAILABILITY_CHANGED =
   'pilates.schedule.availability_changed' as const;
 
+export const PILATES_CLASS_EVENT_SCHEDULE_SERIES_CREATED =
+  'pilates.schedule_series.created' as const;
+
+export const PILATES_CLASS_EVENT_SCHEDULE_SERIES_UPDATED =
+  'pilates.schedule_series.updated' as const;
+
+export const PILATES_CLASS_EVENT_SCHEDULE_SERIES_CANCELLED =
+  'pilates.schedule_series.cancelled' as const;
+
+export const PILATES_CLASS_EVENT_SCHEDULE_SERIES_DELETED =
+  'pilates.schedule_series.deleted' as const;
+
+export const PILATES_CLASS_EVENT_RECURRING_SCHEDULES_GENERATED =
+  'pilates.recurring_schedules.generated' as const;
+
 export const PILATES_CLASS_EVENTS = [
   PILATES_CLASS_EVENT_CLASS_CREATED,
   PILATES_CLASS_EVENT_CLASS_UPDATED,
@@ -307,6 +440,11 @@ export const PILATES_CLASS_EVENTS = [
   PILATES_CLASS_EVENT_SCHEDULE_COMPLETED,
   PILATES_CLASS_EVENT_SCHEDULE_DELETED,
   PILATES_CLASS_EVENT_SCHEDULE_AVAILABILITY_CHANGED,
+  PILATES_CLASS_EVENT_SCHEDULE_SERIES_CREATED,
+  PILATES_CLASS_EVENT_SCHEDULE_SERIES_UPDATED,
+  PILATES_CLASS_EVENT_SCHEDULE_SERIES_CANCELLED,
+  PILATES_CLASS_EVENT_SCHEDULE_SERIES_DELETED,
+  PILATES_CLASS_EVENT_RECURRING_SCHEDULES_GENERATED,
 ] as const;
 
 export type PilatesClassEvent = (typeof PILATES_CLASS_EVENTS)[number];
@@ -328,6 +466,7 @@ export const PILATES_CLASS_SCHEDULE_SORT_FIELDS = [
   'class_date',
   'start_time',
   'status',
+  'generation_source',
   'created_at',
   'updated_at',
 ] as const;
@@ -391,6 +530,40 @@ const PILATES_CLASS_SCHEDULE_TERMINAL_STATUS_SET =
   new Set<PilatesClassScheduleTerminalStatus>(
     PILATES_CLASS_SCHEDULE_TERMINAL_STATUSES,
   );
+
+const PILATES_SCHEDULE_CREATION_MODE_SET = new Set<PilatesScheduleCreationMode>(
+  PILATES_SCHEDULE_CREATION_MODES,
+);
+
+const PILATES_SCHEDULE_SERIES_FREQUENCY_SET =
+  new Set<PilatesScheduleSeriesFrequency>(PILATES_SCHEDULE_SERIES_FREQUENCIES);
+
+const PILATES_SCHEDULE_MONTHLY_RULE_SET = new Set<PilatesScheduleMonthlyRule>(
+  PILATES_SCHEDULE_MONTHLY_RULES,
+);
+
+const PILATES_SCHEDULE_SERIES_STATUS_SET = new Set<PilatesScheduleSeriesStatus>(
+  PILATES_SCHEDULE_SERIES_STATUSES,
+);
+
+const PILATES_SCHEDULE_SERIES_CREATE_ALLOWED_STATUS_SET =
+  new Set<PilatesScheduleSeriesCreateAllowedStatus>(
+    PILATES_SCHEDULE_SERIES_CREATE_ALLOWED_STATUSES,
+  );
+
+const PILATES_SCHEDULE_SERIES_TERMINAL_STATUS_SET =
+  new Set<PilatesScheduleSeriesTerminalStatus>(
+    PILATES_SCHEDULE_SERIES_TERMINAL_STATUSES,
+  );
+
+const PILATES_SCHEDULE_GENERATION_SOURCE_SET =
+  new Set<PilatesScheduleGenerationSource>(PILATES_SCHEDULE_GENERATION_SOURCES);
+
+const PILATES_SCHEDULE_UPDATE_SCOPE_SET = new Set<PilatesScheduleUpdateScope>(
+  PILATES_SCHEDULE_UPDATE_SCOPES,
+);
+
+const PILATES_SCHEDULE_WEEKDAY_SET = new Set<number>(PILATES_SCHEDULE_WEEKDAYS);
 
 const PILATES_CLASS_LEVEL_SET = new Set<PilatesClassLevel>(
   PILATES_CLASS_LEVELS,
@@ -489,6 +662,76 @@ export function isPilatesClassScheduleTerminalStatus(
   return PILATES_CLASS_SCHEDULE_TERMINAL_STATUS_SET.has(
     value as PilatesClassScheduleTerminalStatus,
   );
+}
+
+export function isPilatesScheduleCreationMode(
+  value: string,
+): value is PilatesScheduleCreationMode {
+  return PILATES_SCHEDULE_CREATION_MODE_SET.has(
+    value as PilatesScheduleCreationMode,
+  );
+}
+
+export function isPilatesScheduleSeriesFrequency(
+  value: string,
+): value is PilatesScheduleSeriesFrequency {
+  return PILATES_SCHEDULE_SERIES_FREQUENCY_SET.has(
+    value as PilatesScheduleSeriesFrequency,
+  );
+}
+
+export function isPilatesScheduleMonthlyRule(
+  value: string,
+): value is PilatesScheduleMonthlyRule {
+  return PILATES_SCHEDULE_MONTHLY_RULE_SET.has(
+    value as PilatesScheduleMonthlyRule,
+  );
+}
+
+export function isPilatesScheduleSeriesStatus(
+  value: string,
+): value is PilatesScheduleSeriesStatus {
+  return PILATES_SCHEDULE_SERIES_STATUS_SET.has(
+    value as PilatesScheduleSeriesStatus,
+  );
+}
+
+export function isPilatesScheduleSeriesCreateAllowedStatus(
+  value: string,
+): value is PilatesScheduleSeriesCreateAllowedStatus {
+  return PILATES_SCHEDULE_SERIES_CREATE_ALLOWED_STATUS_SET.has(
+    value as PilatesScheduleSeriesCreateAllowedStatus,
+  );
+}
+
+export function isPilatesScheduleSeriesTerminalStatus(
+  value: string,
+): value is PilatesScheduleSeriesTerminalStatus {
+  return PILATES_SCHEDULE_SERIES_TERMINAL_STATUS_SET.has(
+    value as PilatesScheduleSeriesTerminalStatus,
+  );
+}
+
+export function isPilatesScheduleGenerationSource(
+  value: string,
+): value is PilatesScheduleGenerationSource {
+  return PILATES_SCHEDULE_GENERATION_SOURCE_SET.has(
+    value as PilatesScheduleGenerationSource,
+  );
+}
+
+export function isPilatesScheduleUpdateScope(
+  value: string,
+): value is PilatesScheduleUpdateScope {
+  return PILATES_SCHEDULE_UPDATE_SCOPE_SET.has(
+    value as PilatesScheduleUpdateScope,
+  );
+}
+
+export function isPilatesScheduleWeekday(
+  value: number,
+): value is PilatesScheduleWeekday {
+  return PILATES_SCHEDULE_WEEKDAY_SET.has(value);
 }
 
 export function isPilatesClassLevel(value: string): value is PilatesClassLevel {

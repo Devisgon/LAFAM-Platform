@@ -5,6 +5,7 @@
  * Role:
  * - Owns admin-facing Booking Module business flows.
  * - Lists and reads bookings across customers.
+ * - Lists, reads, creates, cancels, and reschedules private trainer bookings.
  * - Cancels bookings through the atomic cancellation RPC.
  * - Reschedules bookings through the atomic reschedule RPC.
  * - Performs controlled admin status overrides.
@@ -12,8 +13,10 @@
  *
  * Important:
  * - This service does not calculate seat capacity in TypeScript.
- * - This service does not insert bookings directly.
+ * - This service does not insert Pilates class bookings directly.
+ * - This service does not insert private trainer bookings directly.
  * - Booking RPC functions remain the concurrency authority.
+ * - Private booking RPC functions remain the trainer conflict authority.
  * - Admin mutation flows must leave audit/history records.
  * - Controllers must protect this service with admin/super-admin role guards.
  */
@@ -33,6 +36,10 @@ import {
   BOOKING_RPC_ACTION_CANCELLED_AND_PROMOTED,
   BOOKING_RPC_ACTION_RESCHEDULED,
   BOOKING_RPC_ACTION_TARGET_WAITLISTED,
+  BOOKING_SOURCE_ADMIN_DASHBOARD,
+  PRIVATE_BOOKING_DEFAULT_DURATION_MINUTES,
+  PRIVATE_BOOKING_DEFAULT_PAYMENT_REQUIRED,
+  PRIVATE_BOOKING_DEFAULT_STUDIO,
   WAITLIST_STATUS_WAITING,
   type BookingWaitlistStatus,
 } from '../constants/booking.constants';
@@ -41,14 +48,18 @@ import {
   assertBookingCanBeCancelled,
   assertBookingCanBeRescheduled,
 } from '../domain/booking-lifecycle.policy';
+import { PrivateBookingLifecyclePolicy } from '../domain/private-booking-lifecycle.policy';
 import {
   assertWaitlistCanBeRemoved,
   assertWaitlistEntryExists,
 } from '../domain/waitlist-fifo.policy';
 import type { AdminCancelBookingDto } from '../dto/admin-cancel-booking.dto';
 import type { AdminOverrideBookingDto } from '../dto/admin-override-booking.dto';
+import type { CreatePrivateBookingDto } from '../dto/create-private-booking.dto';
 import type { ListAdminBookingsQueryDto } from '../dto/list-admin-bookings-query.dto';
+import type { ListAdminPrivateBookingsQueryDto } from '../dto/list-private-bookings-query.dto';
 import type { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
+import type { ReschedulePrivateBookingDto } from '../dto/reschedule-private-booking.dto';
 import { BookingRepository } from '../repositories/booking.repository';
 import { BookingAvailabilityService } from './booking-availability.service';
 import type {
@@ -72,10 +83,25 @@ import type {
   BookingWaitlistHydratedRow,
   BookingWaitlistListItem,
   BookingWaitlistListResult,
+  PrivateBookingAdminListFilters,
+  PrivateBookingCancelResult,
+  PrivateBookingCreateResult,
+  PrivateBookingDetail,
+  PrivateBookingHistoryEntry,
+  PrivateBookingHistoryRecord,
+  PrivateBookingHydratedRow,
+  PrivateBookingListItem,
+  PrivateBookingListResult,
+  PrivateBookingRescheduleResult,
+  PrivateBookingSafeBooking,
 } from '../types/booking.types';
 
 type BookingHydratedStaffProfile = NonNullable<
   BookingHydratedRow['staff_profiles']
+>;
+
+type PrivateBookingHydratedStaffProfile = NonNullable<
+  PrivateBookingHydratedRow['staff_profiles']
 >;
 
 @Injectable()
@@ -99,6 +125,73 @@ export class BookingAdminService {
     };
   }
 
+  async listPrivateBookings(
+    dto: ListAdminPrivateBookingsQueryDto,
+  ): Promise<PrivateBookingListResult> {
+    const filters = this.buildAdminPrivateBookingFilters(dto);
+    const result =
+      await this.bookingRepository.listAdminPrivateBookings(filters);
+
+    return {
+      private_bookings: result.rows.map((row) =>
+        this.toPrivateBookingListItem(row),
+      ),
+      total: result.total,
+      limit: filters.limit,
+      offset: filters.offset,
+    };
+  }
+
+  async createPrivateBooking(
+    adminUserId: string,
+    dto: CreatePrivateBookingDto,
+  ): Promise<PrivateBookingCreateResult> {
+    const customerUserId = this.requireCustomerUserId(dto.user_id);
+    const sessionDate = PrivateBookingLifecyclePolicy.normalizeIsoDate(
+      dto.session_date,
+      'session_date',
+    );
+    const startTime = PrivateBookingLifecyclePolicy.normalizeTimeValue(
+      dto.start_time,
+      'start_time',
+    );
+    const durationMinutes =
+      dto.duration_minutes ?? PRIVATE_BOOKING_DEFAULT_DURATION_MINUTES;
+
+    PrivateBookingLifecyclePolicy.assertSessionDateIsNotInPast(sessionDate);
+    PrivateBookingLifecyclePolicy.assertPrivateBookingDuration(durationMinutes);
+    PrivateBookingLifecyclePolicy.calculateEndTime(startTime, durationMinutes);
+
+    const rpcResult = await this.bookingRepository.createPrivateBookingAtomic({
+      user_id: customerUserId,
+      trainer_staff_profile_id: dto.trainer_staff_profile_id,
+      session_date: sessionDate,
+      start_time: startTime,
+      duration_minutes: durationMinutes,
+      studio: dto.studio ?? PRIVATE_BOOKING_DEFAULT_STUDIO,
+      payment_required:
+        dto.payment_required ?? PRIVATE_BOOKING_DEFAULT_PAYMENT_REQUIRED,
+      idempotency_key: dto.idempotency_key ?? null,
+      created_by_admin_id: adminUserId,
+      source: BOOKING_SOURCE_ADMIN_DASHBOARD,
+    });
+
+    const actionResult = this.resolvePrivateCreateActionResult(
+      rpcResult.rpc.action_result,
+    );
+    const privateBookingId = this.requireReturnedPrivateBookingId(
+      rpcResult.rpc.private_booking_id,
+      'create_private_trainer_booking_atomic did not return private_booking_id.',
+    );
+    const privateBooking =
+      await this.getRequiredPrivateBookingListItem(privateBookingId);
+
+    return {
+      result: actionResult,
+      private_booking: privateBooking,
+    };
+  }
+
   async getBookingById(bookingId: string): Promise<BookingDetail> {
     const lookup = await this.bookingRepository.findBookingById({
       booking_id: bookingId,
@@ -118,6 +211,24 @@ export class BookingAdminService {
       lookup.booking,
       lookup.history.map((history) => this.toHistoryEntry(history)),
       availability,
+    );
+  }
+
+  async getPrivateBookingById(
+    privateBookingId: string,
+  ): Promise<PrivateBookingDetail> {
+    const lookup = await this.bookingRepository.findPrivateBookingById({
+      private_booking_id: privateBookingId,
+      include_deleted: false,
+    });
+
+    if (!lookup.private_booking) {
+      throw AppError.privateBookingNotFound();
+    }
+
+    return this.toPrivateBookingDetail(
+      lookup.private_booking,
+      lookup.history.map((history) => this.toPrivateHistoryEntry(history)),
     );
   }
 
@@ -170,6 +281,44 @@ export class BookingAdminService {
       promoted_booking: promotedBooking,
       promoted_waitlist: promotedWaitlist,
       availability,
+    };
+  }
+
+  async cancelPrivateBooking(
+    adminUserId: string,
+    privateBookingId: string,
+    dto: AdminCancelBookingDto,
+  ): Promise<PrivateBookingCancelResult> {
+    const existingLookup = await this.bookingRepository.findPrivateBookingById({
+      private_booking_id: privateBookingId,
+      include_deleted: false,
+    });
+
+    if (!existingLookup.private_booking) {
+      throw AppError.privateBookingNotFound();
+    }
+
+    PrivateBookingLifecyclePolicy.assertPrivateBookingCanBeCancelled(
+      existingLookup.private_booking,
+    );
+
+    const rpcResult = await this.bookingRepository.cancelPrivateBookingAtomic({
+      private_booking_id: privateBookingId,
+      actor_user_id: null,
+      actor_admin_id: adminUserId,
+      reason: dto.reason,
+    });
+
+    const actionResult = this.resolvePrivateCancelActionResult(
+      rpcResult.rpc.action_result,
+    );
+    const privateBooking = await this.getRequiredPrivateBookingListItem(
+      rpcResult.rpc.private_booking_id,
+    );
+
+    return {
+      result: actionResult,
+      private_booking: privateBooking,
     };
   }
 
@@ -238,6 +387,83 @@ export class BookingAdminService {
       new_booking: newBooking,
       waitlist: null,
       availability,
+    };
+  }
+
+  async reschedulePrivateBooking(
+    adminUserId: string,
+    privateBookingId: string,
+    dto: ReschedulePrivateBookingDto,
+  ): Promise<PrivateBookingRescheduleResult> {
+    const existingLookup = await this.bookingRepository.findPrivateBookingById({
+      private_booking_id: privateBookingId,
+      include_deleted: false,
+    });
+
+    if (!existingLookup.private_booking) {
+      throw AppError.privateBookingNotFound();
+    }
+
+    PrivateBookingLifecyclePolicy.assertPrivateBookingCanBeRescheduled(
+      existingLookup.private_booking,
+    );
+
+    const targetSessionDate = PrivateBookingLifecyclePolicy.normalizeIsoDate(
+      dto.target_session_date,
+      'target_session_date',
+    );
+    const targetStartTime = PrivateBookingLifecyclePolicy.normalizeTimeValue(
+      dto.target_start_time,
+      'target_start_time',
+    );
+    const targetDurationMinutes =
+      dto.target_duration_minutes ??
+      existingLookup.private_booking.duration_minutes;
+    const paymentRequired =
+      dto.payment_required ?? existingLookup.private_booking.payment_required;
+
+    PrivateBookingLifecyclePolicy.assertTargetSessionDateIsNotInPast(
+      targetSessionDate,
+    );
+    PrivateBookingLifecyclePolicy.assertPrivateBookingDuration(
+      targetDurationMinutes,
+    );
+    PrivateBookingLifecyclePolicy.calculateEndTime(
+      targetStartTime,
+      targetDurationMinutes,
+    );
+
+    const rpcResult =
+      await this.bookingRepository.reschedulePrivateBookingAtomic({
+        private_booking_id: privateBookingId,
+        target_session_date: targetSessionDate,
+        target_start_time: targetStartTime,
+        target_duration_minutes: targetDurationMinutes,
+        studio: dto.studio ?? null,
+        actor_user_id: null,
+        actor_admin_id: adminUserId,
+        reason: dto.reason ?? null,
+        idempotency_key: dto.idempotency_key ?? null,
+        payment_required: paymentRequired,
+      });
+
+    const actionResult = this.resolvePrivateRescheduleActionResult(
+      rpcResult.rpc.action_result,
+    );
+    const oldPrivateBooking = await this.getRequiredPrivateBookingListItem(
+      rpcResult.rpc.old_private_booking_id,
+    );
+    const newPrivateBookingId = this.requireReturnedPrivateBookingId(
+      rpcResult.rpc.new_private_booking_id,
+      'reschedule_private_trainer_booking_atomic did not return new_private_booking_id.',
+    );
+    const newPrivateBooking =
+      await this.getRequiredPrivateBookingListItem(newPrivateBookingId);
+
+    return {
+      result: actionResult,
+      old_private_booking: oldPrivateBooking,
+      new_private_booking: newPrivateBooking,
     };
   }
 
@@ -327,6 +553,21 @@ export class BookingAdminService {
     return this.toBookingListItem(lookup.booking);
   }
 
+  private async getRequiredPrivateBookingListItem(
+    privateBookingId: string,
+  ): Promise<PrivateBookingListItem> {
+    const lookup = await this.bookingRepository.findPrivateBookingById({
+      private_booking_id: privateBookingId,
+      include_deleted: false,
+    });
+
+    if (!lookup.private_booking) {
+      throw AppError.privateBookingNotFound();
+    }
+
+    return this.toPrivateBookingListItem(lookup.private_booking);
+  }
+
   private async getRequiredWaitlistItem(
     waitlistId: string,
   ): Promise<BookingWaitlistListItem> {
@@ -361,6 +602,24 @@ export class BookingAdminService {
     };
   }
 
+  private buildAdminPrivateBookingFilters(
+    dto: ListAdminPrivateBookingsQueryDto,
+  ): PrivateBookingAdminListFilters {
+    return {
+      search: dto.search ?? null,
+      status: dto.status ?? null,
+      payment_status: dto.payment_status ?? null,
+      trainer_staff_profile_id: dto.trainer_staff_profile_id ?? null,
+      user_id: dto.user_id ?? null,
+      from_date: dto.from_date ?? null,
+      to_date: dto.to_date ?? null,
+      limit: dto.limit,
+      offset: dto.offset,
+      sort_by: dto.sort_by,
+      sort_direction: dto.sort_direction,
+    };
+  }
+
   private toBookingDetail(
     row: BookingHydratedRow,
     history: readonly BookingHistoryEntry[],
@@ -373,6 +632,16 @@ export class BookingAdminService {
     };
   }
 
+  private toPrivateBookingDetail(
+    row: PrivateBookingHydratedRow,
+    history: readonly PrivateBookingHistoryEntry[],
+  ): PrivateBookingDetail {
+    return {
+      ...this.toPrivateBookingListItem(row),
+      history,
+    };
+  }
+
   private toBookingListItem(row: BookingHydratedRow): BookingListItem {
     return {
       ...this.toSafeBooking(row),
@@ -380,6 +649,16 @@ export class BookingAdminService {
       class: this.toClassSnapshot(row.pilates_classes ?? null),
       schedule: this.toScheduleSnapshot(row.pilates_class_schedules ?? null),
       trainer: this.toTrainerSnapshot(row.staff_profiles ?? null),
+    };
+  }
+
+  private toPrivateBookingListItem(
+    row: PrivateBookingHydratedRow,
+  ): PrivateBookingListItem {
+    return {
+      ...this.toSafePrivateBooking(row),
+      customer: this.toSafeUserSnapshot(row.app_users ?? null),
+      trainer: this.toPrivateTrainerSnapshot(row.staff_profiles ?? null),
     };
   }
 
@@ -401,6 +680,40 @@ export class BookingAdminService {
       completed_at: row.completed_at,
       no_show_at: row.no_show_at,
       rescheduled_from_booking_id: row.rescheduled_from_booking_id,
+      cancellation_reason: row.cancellation_reason,
+      admin_notes: row.admin_notes,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      realtime_version: row.realtime_version,
+    };
+  }
+
+  private toSafePrivateBooking(
+    row: PrivateBookingHydratedRow,
+  ): PrivateBookingSafeBooking {
+    return {
+      id: row.id,
+      booking_number: row.booking_number,
+      user_id: row.user_id,
+      trainer_staff_profile_id: row.trainer_staff_profile_id,
+      session_date: row.session_date,
+      start_time: row.start_time,
+      end_time: row.end_time,
+      duration_minutes: row.duration_minutes,
+      studio: row.studio,
+      status: row.status,
+      source: row.source,
+      payment_status: row.payment_status,
+      payment_required: row.payment_required,
+      seat_hold_expires_at: row.seat_hold_expires_at,
+      confirmed_at: row.confirmed_at,
+      cancelled_at: row.cancelled_at,
+      completed_at: row.completed_at,
+      no_show_at: row.no_show_at,
+      rescheduled_at: row.rescheduled_at,
+      rescheduled_from_private_booking_id:
+        row.rescheduled_from_private_booking_id,
+      rescheduled_to_private_booking_id: row.rescheduled_to_private_booking_id,
       cancellation_reason: row.cancellation_reason,
       admin_notes: row.admin_notes,
       created_at: row.created_at,
@@ -448,6 +761,24 @@ export class BookingAdminService {
     return {
       id: row.id,
       booking_id: row.booking_id,
+      actor_user_id: row.actor_user_id,
+      actor_admin_id: row.actor_admin_id,
+      actor_role: row.actor_role,
+      action: row.action,
+      from_status: row.from_status,
+      to_status: row.to_status,
+      notes: row.notes,
+      metadata: row.metadata,
+      created_at: row.created_at,
+    };
+  }
+
+  private toPrivateHistoryEntry(
+    row: PrivateBookingHistoryRecord,
+  ): PrivateBookingHistoryEntry {
+    return {
+      id: row.id,
+      private_booking_id: row.private_booking_id,
       actor_user_id: row.actor_user_id,
       actor_admin_id: row.actor_admin_id,
       actor_role: row.actor_role,
@@ -541,6 +872,24 @@ export class BookingAdminService {
     };
   }
 
+  private toPrivateTrainerSnapshot(
+    row: PrivateBookingHydratedStaffProfile | null,
+  ): BookingTrainerSnapshot | null {
+    if (!row) {
+      return null;
+    }
+
+    return {
+      staff_profile_id: row.id,
+      app_user_id: row.app_user_id,
+      display_name: row.display_name,
+      post_title: row.post_title,
+      email: row.app_users?.email ?? null,
+      phone: row.app_users?.phone ?? null,
+      avatar_path: row.app_users?.avatar_path ?? null,
+    };
+  }
+
   private toAvailabilitySnapshot(
     row: BookingCancelAtomicRpcRow | BookingRescheduleAtomicRpcRow,
     scheduleId: string,
@@ -587,11 +936,76 @@ export class BookingAdminService {
     );
   }
 
+  private resolvePrivateCreateActionResult(
+    value: string,
+  ): PrivateBookingCreateResult['result'] {
+    if (value === 'existing_private_booking' || value === 'private_booked') {
+      return value;
+    }
+
+    throw AppError.privateBookingDatabaseTransactionFailed(
+      new Error(
+        `Unexpected create private booking RPC action result: ${value}`,
+      ),
+    );
+  }
+
+  private resolvePrivateCancelActionResult(
+    value: string,
+  ): PrivateBookingCancelResult['result'] {
+    if (value === 'private_cancelled') {
+      return value;
+    }
+
+    throw AppError.privateBookingDatabaseTransactionFailed(
+      new Error(
+        `Unexpected cancel private booking RPC action result: ${value}`,
+      ),
+    );
+  }
+
+  private resolvePrivateRescheduleActionResult(
+    value: string,
+  ): PrivateBookingRescheduleResult['result'] {
+    if (value === 'private_rescheduled') {
+      return value;
+    }
+
+    throw AppError.privateBookingDatabaseTransactionFailed(
+      new Error(
+        `Unexpected reschedule private booking RPC action result: ${value}`,
+      ),
+    );
+  }
+
   private requireReturnedId(value: string | null, message: string): string {
     if (value) {
       return value;
     }
 
     throw AppError.bookingDatabaseTransactionFailed(new Error(message));
+  }
+
+  private requireReturnedPrivateBookingId(
+    value: string | null,
+    message: string,
+  ): string {
+    if (value) {
+      return value;
+    }
+
+    throw AppError.privateBookingDatabaseTransactionFailed(new Error(message));
+  }
+
+  private requireCustomerUserId(value: string | undefined): string {
+    PrivateBookingLifecyclePolicy.assertCustomerUserIdAvailable(value);
+
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+
+    throw AppError.invalidRequest(
+      'user_id is required for admin-created private trainer booking.',
+    );
   }
 }

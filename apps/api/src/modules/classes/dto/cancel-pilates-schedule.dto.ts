@@ -5,21 +5,32 @@
  * Role:
  * - Validates admin request body for cancelling a scheduled Pilates class occurrence.
  * - Captures a clear cancellation reason for audit/admin visibility.
+ * - Accepts update_scope for recurring schedule awareness.
  *
  * Important:
  * - This DTO does not delete the schedule.
  * - Cancelled schedules remain in history.
+ * - For now, service logic may enforce occurrence-level cancellation only.
  * - Booking refunds/notifications will be handled later by Booking/Payment/Notification modules.
  */
 
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, type TransformFnParams } from 'class-transformer';
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 import {
   PILATES_CLASS_CANCELLATION_REASON_MAX_LENGTH,
   PILATES_CLASS_CANCELLATION_REASON_MIN_LENGTH,
+  PILATES_SCHEDULE_DEFAULT_UPDATE_SCOPE,
+  PILATES_SCHEDULE_UPDATE_SCOPES,
 } from '../constants/pilates-class.constants';
+import type { PilatesScheduleUpdateScope } from '../constants/pilates-class.constants';
 
 function requiredTrimmedString({ value }: TransformFnParams): unknown {
   if (typeof value !== 'string') {
@@ -29,7 +40,37 @@ function requiredTrimmedString({ value }: TransformFnParams): unknown {
   return value.trim();
 }
 
+function optionalTrimmedString({ value }: TransformFnParams): unknown {
+  if (typeof value === 'undefined' || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmedValue = value.trim();
+
+  return trimmedValue.length > 0 ? trimmedValue : undefined;
+}
+
 export class CancelPilatesScheduleDto {
+  @ApiPropertyOptional({
+    description:
+      'Recurring cancellation scope. Omit this field for backward-compatible occurrence-level cancellation.',
+    enum: PILATES_SCHEDULE_UPDATE_SCOPES,
+    default: PILATES_SCHEDULE_DEFAULT_UPDATE_SCOPE,
+    example: PILATES_SCHEDULE_DEFAULT_UPDATE_SCOPE,
+  })
+  @Transform(optionalTrimmedString)
+  @IsOptional()
+  @IsIn(PILATES_SCHEDULE_UPDATE_SCOPES, {
+    message:
+      'update_scope must be this_occurrence, this_and_following, or entire_series.',
+  })
+  readonly update_scope?: PilatesScheduleUpdateScope =
+    PILATES_SCHEDULE_DEFAULT_UPDATE_SCOPE;
+
   @ApiProperty({
     description:
       'Reason for cancelling the Pilates schedule. Stored for admin/audit visibility.',

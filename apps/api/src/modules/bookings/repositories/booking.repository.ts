@@ -4,16 +4,17 @@
  *
  * Role:
  * - Owns Booking Module database access.
- * - Calls atomic PostgreSQL RPC functions for booking, cancellation,
- *   rescheduling, availability, and hold expiry.
- * - Reads bookings, waitlist entries, history, availability, and domain events.
+ * - Calls atomic PostgreSQL RPC functions for class bookings, private bookings,
+ *   cancellation, rescheduling, availability, and hold expiry.
+ * - Reads bookings, private trainer bookings, waitlist entries, history,
+ *   availability, calendar rows, and domain events.
  * - Keeps raw Supabase queries out of Booking services and controllers.
  *
  * Important:
  * - This repository does not perform authorization.
  * - This repository does not own lifecycle decisions.
  * - This repository does not calculate seat allocation in TypeScript.
- * - Seat allocation must stay inside atomic PostgreSQL functions.
+ * - Seat allocation and private booking conflict safety must stay inside atomic PostgreSQL functions.
  * - Services must remain the business-rule authority.
  * - Database/provider errors are converted into frontend-safe AppError instances.
  */
@@ -23,6 +24,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { AppError } from '../../../common/errors/app-error';
 import { SUPABASE_ADMIN_CLIENT } from '../../../database/database.constants';
 import type {
+  AppUserRow,
   BookingDomainEventInsert,
   BookingDomainEventRow,
   BookingHistoryInsert,
@@ -31,6 +33,8 @@ import type {
   BookingWaitlistRow,
   BookingWaitlistUpdate,
   LAFAMSupabaseClient,
+  PilatesClassRow,
+  PilatesClassScheduleRow,
 } from '../../../database/database.types';
 import {
   BOOKING_ADMIN_DEFAULT_LIMIT,
@@ -45,19 +49,26 @@ import {
   BOOKING_STATUS_DELETED,
   BOOKING_STATUS_EXPIRED,
   BOOKING_STATUS_NO_SHOW,
+  PRIVATE_BOOKING_ADMIN_DEFAULT_LIMIT,
+  PRIVATE_BOOKING_ADMIN_MAX_LIMIT,
+  PRIVATE_BOOKING_DEFAULT_LIMIT,
+  PRIVATE_BOOKING_MAX_LIMIT,
   WAITLIST_STATUS_CANCELLED,
   WAITLIST_STATUS_REMOVED,
   type BookingSortField,
   type BookingStatus,
+  type PrivateBookingSortField,
 } from '../constants/booking.constants';
 import type {
   BookingAdminListFilters,
   BookingAdminWaitlistFilters,
   BookingAvailabilityPayload,
+  BookingCalendarFilters,
   BookingCancelAtomicRpcRow,
   BookingCancelPayload,
   BookingCreateAtomicRpcRow,
   BookingCreatePayload,
+  BookingCustomerListFilters,
   BookingDomainEventPayload,
   BookingDomainEventRecord,
   BookingHydratedRow,
@@ -74,6 +85,21 @@ import type {
   BookingReschedulePayload,
   BookingWaitlistFilters,
   BookingWaitlistHydratedRow,
+  PrivateBookingCancelAtomicRpcRow,
+  PrivateBookingCancelPayload,
+  PrivateBookingConflictLookupInput,
+  PrivateBookingCreateAtomicRpcRow,
+  PrivateBookingCreatePayload,
+  PrivateBookingHistoryRecord,
+  PrivateBookingHydratedRow,
+  PrivateBookingRepositoryCancelAtomicResult,
+  PrivateBookingRepositoryCreateAtomicResult,
+  PrivateBookingRepositoryExpireHoldsResult,
+  PrivateBookingRepositoryListLookup,
+  PrivateBookingRepositoryLookup,
+  PrivateBookingRepositoryRescheduleAtomicResult,
+  PrivateBookingRescheduleAtomicRpcRow,
+  PrivateBookingReschedulePayload,
 } from '../types/booking.types';
 
 const POSTGRES_UNIQUE_VIOLATION_CODE = '23505';
@@ -177,6 +203,66 @@ const WAITLIST_RELATIONS_SELECT = `
   )
 `;
 
+const PRIVATE_BOOKING_RELATIONS_SELECT = `
+  *,
+  app_users!private_trainer_bookings_user_id_fkey (
+    id,
+    email,
+    phone,
+    full_name,
+    role,
+    status,
+    is_guest,
+    avatar_path
+  ),
+  staff_profiles!private_trainer_bookings_trainer_staff_profile_id_fkey (
+    id,
+    app_user_id,
+    display_name,
+    post_title,
+    app_users!staff_profiles_app_user_id_fkey (
+      id,
+      email,
+      phone,
+      full_name,
+      role,
+      status,
+      is_guest,
+      avatar_path
+    )
+  )
+`;
+
+const CALENDAR_SCHEDULE_RELATIONS_SELECT = `
+  *,
+  pilates_classes!pilates_class_schedules_class_id_fkey (
+    id,
+    title,
+    description,
+    level,
+    status,
+    default_duration_minutes,
+    default_capacity,
+    image_path
+  ),
+  staff_profiles!pilates_class_schedules_trainer_staff_profile_id_fkey (
+    id,
+    app_user_id,
+    display_name,
+    post_title,
+    app_users!staff_profiles_app_user_id_fkey (
+      id,
+      email,
+      phone,
+      full_name,
+      role,
+      status,
+      is_guest,
+      avatar_path
+    )
+  )
+`;
+
 interface ProviderDatabaseError {
   readonly code?: string;
   readonly message?: string;
@@ -196,6 +282,17 @@ export interface FindBookingByIdInput {
 
 export interface FindBookingByIdForUserInput {
   readonly booking_id: string;
+  readonly user_id: string;
+  readonly include_deleted?: boolean;
+}
+
+export interface FindPrivateBookingByIdInput {
+  readonly private_booking_id: string;
+  readonly include_deleted?: boolean;
+}
+
+export interface FindPrivateBookingByIdForUserInput {
+  readonly private_booking_id: string;
   readonly user_id: string;
   readonly include_deleted?: boolean;
 }
@@ -236,6 +333,29 @@ export interface MarkDomainEventPublishedInput {
   readonly event_id: string;
   readonly published_at: string;
 }
+
+export interface BookingTrainerTimeWindowLookupInput {
+  readonly trainer_staff_profile_id: string;
+  readonly session_date: string;
+  readonly start_time: string;
+  readonly end_time: string;
+}
+
+export interface BookingTrainerClassScheduleConflictLookupInput extends BookingTrainerTimeWindowLookupInput {
+  readonly ignore_schedule_id?: string | null;
+}
+
+export type BookingCalendarPilatesScheduleHydratedRow =
+  PilatesClassScheduleRow & {
+    readonly pilates_classes?: PilatesClassRow | null;
+    readonly staff_profiles?: {
+      readonly id: string;
+      readonly app_user_id: string;
+      readonly display_name: string;
+      readonly post_title: string;
+      readonly app_users?: AppUserRow | null;
+    } | null;
+  };
 
 function isProviderDatabaseError(
   error: unknown,
@@ -357,6 +477,99 @@ function mapBookingRpcError(error: unknown): AppError {
   return AppError.bookingDatabaseTransactionFailed(error);
 }
 
+function mapPrivateBookingRpcError(error: unknown): AppError {
+  if (!isProviderDatabaseError(error)) {
+    return AppError.privateBookingDatabaseTransactionFailed(error);
+  }
+
+  if (error.code === POSTGRES_RAISE_EXCEPTION_CODE) {
+    if (
+      databaseMessageIncludes(error, 'private trainer booking was not found')
+    ) {
+      return AppError.privateBookingNotFound();
+    }
+
+    if (databaseMessageIncludes(error, 'private booking id is required')) {
+      return AppError.privateBookingNotFound(
+        'Private trainer booking id is required.',
+      );
+    }
+
+    if (databaseMessageIncludes(error, 'does not belong')) {
+      return AppError.privateBookingAccessDenied();
+    }
+
+    if (
+      databaseMessageIncludes(error, 'guest users cannot create private') ||
+      databaseMessageIncludes(error, 'only active users can create private')
+    ) {
+      return AppError.privateBookingAccessDenied(
+        error.message ?? 'You are not allowed to create private bookings.',
+      );
+    }
+
+    if (
+      databaseMessageIncludes(error, 'trainer profile was not found') ||
+      databaseMessageIncludes(error, 'trainer app user was not found')
+    ) {
+      return AppError.trainerPrivateSlotUnavailable(
+        'The selected trainer is not available for private bookings.',
+      );
+    }
+
+    if (
+      databaseMessageIncludes(error, 'trainer is not available') ||
+      databaseMessageIncludes(error, 'trainer account is not active') ||
+      databaseMessageIncludes(error, 'not assignable as a trainer') ||
+      databaseMessageIncludes(error, 'does not have availability')
+    ) {
+      return AppError.trainerPrivateSlotUnavailable(
+        error.message ??
+          'The selected trainer is not available for this private session time slot.',
+      );
+    }
+
+    if (
+      databaseMessageIncludes(error, 'already has a pilates class') ||
+      databaseMessageIncludes(error, 'already has a private booking')
+    ) {
+      return AppError.privateBookingConflict(
+        error.message ??
+          'The private trainer booking conflicts with the current trainer schedule.',
+      );
+    }
+
+    if (
+      databaseMessageIncludes(error, 'only active private trainer bookings') ||
+      databaseMessageIncludes(error, 'duration') ||
+      databaseMessageIncludes(error, 'cross midnight') ||
+      databaseMessageIncludes(error, 'past private trainer session')
+    ) {
+      return AppError.privateBookingInvalidStatus(
+        error.message ?? 'Private trainer booking lifecycle transition failed.',
+      );
+    }
+  }
+
+  if (error.code === POSTGRES_UNIQUE_VIOLATION_CODE) {
+    return AppError.privateBookingConflict();
+  }
+
+  if (error.code === POSTGRES_FOREIGN_KEY_VIOLATION_CODE) {
+    return AppError.privateBookingNotFound(
+      'A related private booking, trainer, or user record was not found.',
+    );
+  }
+
+  if (error.code === POSTGRES_CHECK_VIOLATION_CODE) {
+    return AppError.privateBookingInvalidStatus(
+      'The private booking state violates database lifecycle rules.',
+    );
+  }
+
+  return AppError.privateBookingDatabaseTransactionFailed(error);
+}
+
 function mapDatabaseError(error: unknown): AppError {
   if (!isProviderDatabaseError(error)) {
     return AppError.databaseOperationFailed(error);
@@ -428,6 +641,21 @@ function getRequiredRpcRow<TRow>(
   return row;
 }
 
+function getRequiredPrivateRpcRow<TRow>(
+  rows: readonly TRow[] | null,
+  operation: string,
+): TRow {
+  const row = rows?.[0];
+
+  if (!row) {
+    throw AppError.privateBookingDatabaseTransactionFailed(
+      new Error(`${operation} did not return a result row.`),
+    );
+  }
+
+  return row;
+}
+
 function resolveBookingSort(sortBy: BookingSortField): BookingSortResolution {
   if (sortBy === 'schedule_date') {
     return {
@@ -440,6 +668,32 @@ function resolveBookingSort(sortBy: BookingSortField): BookingSortResolution {
     return {
       column: 'start_time',
       foreignTable: 'pilates_class_schedules',
+    };
+  }
+
+  if (sortBy === 'status') {
+    return {
+      column: 'status',
+    };
+  }
+
+  return {
+    column: 'created_at',
+  };
+}
+
+function resolvePrivateBookingSort(
+  sortBy: PrivateBookingSortField,
+): BookingSortResolution {
+  if (sortBy === 'session_date') {
+    return {
+      column: 'session_date',
+    };
+  }
+
+  if (sortBy === 'start_time') {
+    return {
+      column: 'start_time',
     };
   }
 
@@ -620,6 +874,170 @@ export class BookingRepository {
     };
   }
 
+  async createPrivateBookingAtomic(
+    input: PrivateBookingCreatePayload,
+  ): Promise<PrivateBookingRepositoryCreateAtomicResult> {
+    const { data, error } = await this.adminClient.rpc(
+      'create_private_trainer_booking_atomic',
+      {
+        p_user_id: input.user_id,
+        p_trainer_staff_profile_id: input.trainer_staff_profile_id,
+        p_session_date: input.session_date,
+        p_start_time: input.start_time,
+        p_duration_minutes: input.duration_minutes,
+        p_studio: input.studio,
+        p_payment_required: input.payment_required,
+        p_idempotency_key: input.idempotency_key,
+        p_created_by_admin_id: input.created_by_admin_id,
+        p_source: input.source,
+      },
+    );
+
+    if (error) {
+      throw mapPrivateBookingRpcError(error);
+    }
+
+    return {
+      rpc: getRequiredPrivateRpcRow<PrivateBookingCreateAtomicRpcRow>(
+        data,
+        'create_private_trainer_booking_atomic',
+      ),
+    };
+  }
+
+  async cancelPrivateBookingAtomic(
+    input: PrivateBookingCancelPayload,
+  ): Promise<PrivateBookingRepositoryCancelAtomicResult> {
+    const { data, error } = await this.adminClient.rpc(
+      'cancel_private_trainer_booking_atomic',
+      {
+        p_private_booking_id: input.private_booking_id,
+        p_actor_user_id: input.actor_user_id,
+        p_actor_admin_id: input.actor_admin_id,
+        p_reason: input.reason,
+      },
+    );
+
+    if (error) {
+      throw mapPrivateBookingRpcError(error);
+    }
+
+    return {
+      rpc: getRequiredPrivateRpcRow<PrivateBookingCancelAtomicRpcRow>(
+        data,
+        'cancel_private_trainer_booking_atomic',
+      ),
+    };
+  }
+
+  async reschedulePrivateBookingAtomic(
+    input: PrivateBookingReschedulePayload,
+  ): Promise<PrivateBookingRepositoryRescheduleAtomicResult> {
+    const { data, error } = await this.adminClient.rpc(
+      'reschedule_private_trainer_booking_atomic',
+      {
+        p_private_booking_id: input.private_booking_id,
+        p_target_session_date: input.target_session_date,
+        p_target_start_time: input.target_start_time,
+        p_target_duration_minutes: input.target_duration_minutes,
+        p_studio: input.studio,
+        p_actor_user_id: input.actor_user_id,
+        p_actor_admin_id: input.actor_admin_id,
+        p_reason: input.reason,
+        p_idempotency_key: input.idempotency_key,
+        p_payment_required: input.payment_required,
+      },
+    );
+
+    if (error) {
+      throw mapPrivateBookingRpcError(error);
+    }
+
+    return {
+      rpc: getRequiredPrivateRpcRow<PrivateBookingRescheduleAtomicRpcRow>(
+        data,
+        'reschedule_private_trainer_booking_atomic',
+      ),
+    };
+  }
+
+  async expirePrivateBookingHolds(): Promise<PrivateBookingRepositoryExpireHoldsResult> {
+    const { data, error } = await this.adminClient.rpc(
+      'expire_private_trainer_booking_holds_atomic',
+      {},
+    );
+
+    if (error) {
+      throw mapPrivateBookingRpcError(error);
+    }
+
+    return {
+      expired: data ?? [],
+    };
+  }
+
+  async isStaffAvailableForPrivateTime(
+    input: BookingTrainerTimeWindowLookupInput,
+  ): Promise<boolean> {
+    const { data, error } = await this.adminClient.rpc(
+      'is_staff_available_for_time',
+      {
+        p_staff_profile_id: input.trainer_staff_profile_id,
+        p_session_date: input.session_date,
+        p_start_time: input.start_time,
+        p_end_time: input.end_time,
+      },
+    );
+
+    if (error) {
+      throw mapPrivateBookingRpcError(error);
+    }
+
+    return data === true;
+  }
+
+  async hasTrainerClassScheduleConflict(
+    input: BookingTrainerClassScheduleConflictLookupInput,
+  ): Promise<boolean> {
+    const { data, error } = await this.adminClient.rpc(
+      'has_trainer_class_schedule_conflict',
+      {
+        p_trainer_staff_profile_id: input.trainer_staff_profile_id,
+        p_session_date: input.session_date,
+        p_start_time: input.start_time,
+        p_end_time: input.end_time,
+        p_ignore_schedule_id: input.ignore_schedule_id ?? null,
+      },
+    );
+
+    if (error) {
+      throw mapPrivateBookingRpcError(error);
+    }
+
+    return data === true;
+  }
+
+  async hasTrainerPrivateBookingConflict(
+    input: PrivateBookingConflictLookupInput,
+  ): Promise<boolean> {
+    const { data, error } = await this.adminClient.rpc(
+      'has_trainer_private_booking_conflict',
+      {
+        p_trainer_staff_profile_id: input.trainer_staff_profile_id,
+        p_session_date: input.session_date,
+        p_start_time: input.start_time,
+        p_end_time: input.end_time,
+        p_ignore_private_booking_id: input.ignore_private_booking_id ?? null,
+      },
+    );
+
+    if (error) {
+      throw mapPrivateBookingRpcError(error);
+    }
+
+    return data === true;
+  }
+
   async findBookingById(
     input: FindBookingByIdInput,
   ): Promise<BookingRepositoryBookingLookup> {
@@ -673,8 +1091,65 @@ export class BookingRepository {
     };
   }
 
+  async findPrivateBookingById(
+    input: FindPrivateBookingByIdInput,
+  ): Promise<PrivateBookingRepositoryLookup> {
+    let query = this.adminClient
+      .from('private_trainer_bookings')
+      .select(PRIVATE_BOOKING_RELATIONS_SELECT)
+      .eq('id', input.private_booking_id);
+
+    if (!input.include_deleted) {
+      query = query.is('deleted_at', null);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) {
+      throw mapPrivateBookingRpcError(error);
+    }
+
+    const privateBooking = data as unknown as PrivateBookingHydratedRow | null;
+
+    return {
+      private_booking: privateBooking,
+      history: privateBooking
+        ? await this.listPrivateBookingHistory(privateBooking.id)
+        : [],
+    };
+  }
+
+  async findPrivateBookingByIdForUser(
+    input: FindPrivateBookingByIdForUserInput,
+  ): Promise<PrivateBookingRepositoryLookup> {
+    let query = this.adminClient
+      .from('private_trainer_bookings')
+      .select(PRIVATE_BOOKING_RELATIONS_SELECT)
+      .eq('id', input.private_booking_id)
+      .eq('user_id', input.user_id);
+
+    if (!input.include_deleted) {
+      query = query.is('deleted_at', null);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) {
+      throw mapPrivateBookingRpcError(error);
+    }
+
+    const privateBooking = data as unknown as PrivateBookingHydratedRow | null;
+
+    return {
+      private_booking: privateBooking,
+      history: privateBooking
+        ? await this.listPrivateBookingHistory(privateBooking.id)
+        : [],
+    };
+  }
+
   async listCustomerBookings(
-    filters: BookingAdminListFilters,
+    filters: BookingCustomerListFilters,
   ): Promise<BookingRepositoryListLookup> {
     if (!filters.user_id) {
       throw AppError.bookingAccessDenied(
@@ -825,6 +1300,141 @@ export class BookingRepository {
     };
   }
 
+  async listCustomerPrivateBookings(
+    filters: import('../types/booking.types').PrivateBookingCustomerListFilters,
+  ): Promise<PrivateBookingRepositoryListLookup> {
+    if (!filters.user_id) {
+      throw AppError.privateBookingAccessDenied(
+        'Customer private booking listing requires a user id.',
+      );
+    }
+
+    const limit = resolveLimit(
+      filters.limit,
+      PRIVATE_BOOKING_DEFAULT_LIMIT,
+      PRIVATE_BOOKING_MAX_LIMIT,
+    );
+    const offset = resolveOffset(filters.offset);
+
+    let query = this.adminClient
+      .from('private_trainer_bookings')
+      .select(PRIVATE_BOOKING_RELATIONS_SELECT, { count: 'exact' })
+      .eq('user_id', filters.user_id)
+      .is('deleted_at', null);
+
+    if (filters.status) {
+      query = query.eq('status', filters.status);
+    }
+
+    if (filters.trainer_staff_profile_id) {
+      query = query.eq(
+        'trainer_staff_profile_id',
+        filters.trainer_staff_profile_id,
+      );
+    }
+
+    if (filters.from_date) {
+      query = query.gte('session_date', filters.from_date);
+    }
+
+    if (filters.to_date) {
+      query = query.lte('session_date', filters.to_date);
+    }
+
+    const sort = resolvePrivateBookingSort(filters.sort_by);
+    const { data, error, count } = await query
+      .order(sort.column, {
+        ascending: filters.sort_direction === 'asc',
+      })
+      .range(offset, resolveRangeEnd(offset, limit));
+
+    if (error) {
+      throw mapPrivateBookingRpcError(error);
+    }
+
+    const rows = (data ?? []) as unknown as PrivateBookingHydratedRow[];
+
+    return {
+      rows,
+      total: resolveTotal(count, rows.length),
+    };
+  }
+
+  async listAdminPrivateBookings(
+    filters: import('../types/booking.types').PrivateBookingAdminListFilters,
+  ): Promise<PrivateBookingRepositoryListLookup> {
+    const limit = resolveLimit(
+      filters.limit,
+      PRIVATE_BOOKING_ADMIN_DEFAULT_LIMIT,
+      PRIVATE_BOOKING_ADMIN_MAX_LIMIT,
+    );
+    const offset = resolveOffset(filters.offset);
+
+    let query = this.adminClient
+      .from('private_trainer_bookings')
+      .select(PRIVATE_BOOKING_RELATIONS_SELECT, { count: 'exact' })
+      .is('deleted_at', null);
+
+    if (filters.search) {
+      const searchTerm = sanitizePostgrestSearchTerm(filters.search);
+
+      if (searchTerm.length > 0) {
+        query = query.or(
+          [
+            `booking_number.ilike.%${searchTerm}%`,
+            `cancellation_reason.ilike.%${searchTerm}%`,
+            `admin_notes.ilike.%${searchTerm}%`,
+          ].join(','),
+        );
+      }
+    }
+
+    if (filters.status) {
+      query = query.eq('status', filters.status);
+    }
+
+    if (filters.payment_status) {
+      query = query.eq('payment_status', filters.payment_status);
+    }
+
+    if (filters.trainer_staff_profile_id) {
+      query = query.eq(
+        'trainer_staff_profile_id',
+        filters.trainer_staff_profile_id,
+      );
+    }
+
+    if (filters.user_id) {
+      query = query.eq('user_id', filters.user_id);
+    }
+
+    if (filters.from_date) {
+      query = query.gte('session_date', filters.from_date);
+    }
+
+    if (filters.to_date) {
+      query = query.lte('session_date', filters.to_date);
+    }
+
+    const sort = resolvePrivateBookingSort(filters.sort_by);
+    const { data, error, count } = await query
+      .order(sort.column, {
+        ascending: filters.sort_direction === 'asc',
+      })
+      .range(offset, resolveRangeEnd(offset, limit));
+
+    if (error) {
+      throw mapPrivateBookingRpcError(error);
+    }
+
+    const rows = (data ?? []) as unknown as PrivateBookingHydratedRow[];
+
+    return {
+      rows,
+      total: resolveTotal(count, rows.length),
+    };
+  }
+
   async listBookingHistory(
     bookingId: string,
   ): Promise<readonly BookingHistoryRow[]> {
@@ -836,6 +1446,22 @@ export class BookingRepository {
 
     if (error) {
       throw mapDatabaseError(error);
+    }
+
+    return data ?? [];
+  }
+
+  async listPrivateBookingHistory(
+    privateBookingId: string,
+  ): Promise<readonly PrivateBookingHistoryRecord[]> {
+    const { data, error } = await this.adminClient
+      .from('private_trainer_booking_history')
+      .select('*')
+      .eq('private_booking_id', privateBookingId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      throw mapPrivateBookingRpcError(error);
     }
 
     return data ?? [];
@@ -1049,6 +1675,161 @@ export class BookingRepository {
     return data as unknown as BookingHydratedRow;
   }
 
+  async listCalendarClassSchedules(
+    filters: BookingCalendarFilters,
+  ): Promise<readonly BookingCalendarPilatesScheduleHydratedRow[]> {
+    if (!filters.include_class_schedules) {
+      return [];
+    }
+
+    let query = this.adminClient
+      .from('pilates_class_schedules')
+      .select(CALENDAR_SCHEDULE_RELATIONS_SELECT)
+      .is('deleted_at', null)
+      .gte('class_date', filters.from_date)
+      .lte('class_date', filters.to_date);
+
+    if (filters.trainer_staff_profile_id) {
+      query = query.eq(
+        'trainer_staff_profile_id',
+        filters.trainer_staff_profile_id,
+      );
+    }
+
+    if (filters.class_id) {
+      query = query.eq('class_id', filters.class_id);
+    }
+
+    const { data, error } = await query
+      .order('class_date', { ascending: true })
+      .order('start_time', { ascending: true });
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return (data ??
+      []) as unknown as BookingCalendarPilatesScheduleHydratedRow[];
+  }
+
+  async listCalendarClassBookings(
+    filters: BookingCalendarFilters,
+  ): Promise<readonly BookingHydratedRow[]> {
+    if (!filters.include_class_bookings) {
+      return [];
+    }
+
+    const scheduleIds = await this.resolveScheduleIdsByCalendarFilters(filters);
+
+    if (scheduleIds.length === 0) {
+      return [];
+    }
+
+    let query = this.adminClient
+      .from('bookings')
+      .select(BOOKING_RELATIONS_SELECT)
+      .is('deleted_at', null)
+      .in('schedule_id', [...scheduleIds]);
+
+    if (filters.user_id) {
+      query = query.eq('user_id', filters.user_id);
+    }
+
+    if (filters.class_id) {
+      query = query.eq('class_id', filters.class_id);
+    }
+
+    if (filters.trainer_staff_profile_id) {
+      query = query.eq(
+        'trainer_staff_profile_id',
+        filters.trainer_staff_profile_id,
+      );
+    }
+
+    const { data, error } = await query.order('created_at', {
+      ascending: true,
+    });
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return (data ?? []) as unknown as BookingHydratedRow[];
+  }
+
+  async listCalendarWaitlist(
+    filters: BookingCalendarFilters,
+  ): Promise<readonly BookingWaitlistHydratedRow[]> {
+    if (!filters.include_waitlist) {
+      return [];
+    }
+
+    const scheduleIds = await this.resolveScheduleIdsByCalendarFilters(filters);
+
+    if (scheduleIds.length === 0) {
+      return [];
+    }
+
+    let query = this.adminClient
+      .from('booking_waitlist')
+      .select(WAITLIST_RELATIONS_SELECT)
+      .in('schedule_id', [...scheduleIds]);
+
+    if (filters.user_id) {
+      query = query.eq('user_id', filters.user_id);
+    }
+
+    if (filters.class_id) {
+      query = query.eq('class_id', filters.class_id);
+    }
+
+    const { data, error } = await query
+      .order('joined_at', { ascending: true })
+      .order('position', { ascending: true });
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return (data ?? []) as unknown as BookingWaitlistHydratedRow[];
+  }
+
+  async listCalendarPrivateBookings(
+    filters: BookingCalendarFilters,
+  ): Promise<readonly PrivateBookingHydratedRow[]> {
+    if (!filters.include_private_bookings) {
+      return [];
+    }
+
+    let query = this.adminClient
+      .from('private_trainer_bookings')
+      .select(PRIVATE_BOOKING_RELATIONS_SELECT)
+      .is('deleted_at', null)
+      .gte('session_date', filters.from_date)
+      .lte('session_date', filters.to_date);
+
+    if (filters.trainer_staff_profile_id) {
+      query = query.eq(
+        'trainer_staff_profile_id',
+        filters.trainer_staff_profile_id,
+      );
+    }
+
+    if (filters.user_id) {
+      query = query.eq('user_id', filters.user_id);
+    }
+
+    const { data, error } = await query
+      .order('session_date', { ascending: true })
+      .order('start_time', { ascending: true });
+
+    if (error) {
+      throw mapPrivateBookingRpcError(error);
+    }
+
+    return (data ?? []) as unknown as PrivateBookingHydratedRow[];
+  }
+
   async createDomainEvent(
     input: BookingDomainEventPayload,
   ): Promise<BookingDomainEventRecord> {
@@ -1057,6 +1838,7 @@ export class BookingRepository {
       schedule_id: input.schedule_id,
       booking_id: input.booking_id,
       waitlist_id: input.waitlist_id,
+      private_booking_id: input.private_booking_id ?? null,
       payload: input.payload,
     };
 
@@ -1146,6 +1928,36 @@ export class BookingRepository {
 
     if (toDate) {
       query = query.lte('class_date', toDate);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return (data ?? []).map((row) => row.id);
+  }
+
+  private async resolveScheduleIdsByCalendarFilters(
+    filters: BookingCalendarFilters,
+  ): Promise<readonly string[]> {
+    let query = this.adminClient
+      .from('pilates_class_schedules')
+      .select('id')
+      .is('deleted_at', null)
+      .gte('class_date', filters.from_date)
+      .lte('class_date', filters.to_date);
+
+    if (filters.class_id) {
+      query = query.eq('class_id', filters.class_id);
+    }
+
+    if (filters.trainer_staff_profile_id) {
+      query = query.eq(
+        'trainer_staff_profile_id',
+        filters.trainer_staff_profile_id,
+      );
     }
 
     const { data, error } = await query;

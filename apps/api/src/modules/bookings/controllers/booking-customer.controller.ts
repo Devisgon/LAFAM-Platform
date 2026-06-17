@@ -44,7 +44,12 @@ import { AuthGuard } from '../../auth/guards/auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import type { AuthInternalContext } from '../../auth/types/auth-context.types';
 import { BookingCustomerService } from '../application/booking-customer.service';
-import { BOOKING_CUSTOMER_ROUTE_PREFIX } from '../constants/booking.constants';
+import { PrivateBookingAvailabilityService } from '../application/private-booking-availability.service';
+import {
+  BOOKING_CUSTOMER_ROUTE_PREFIX,
+  PRIVATE_BOOKING_ID_PARAM_NAME,
+  PRIVATE_BOOKING_TRAINER_ID_PARAM_NAME,
+} from '../constants/booking.constants';
 import {
   BookingParamDto,
   BookingWaitlistParamDto,
@@ -53,6 +58,14 @@ import { CancelBookingDto } from '../dto/cancel-booking.dto';
 import { CreateBookingDto } from '../dto/create-booking.dto';
 import { ListBookingsQueryDto } from '../dto/list-bookings-query.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
+import { CreatePrivateBookingDto } from '../dto/create-private-booking.dto';
+import { ListPrivateBookingsQueryDto } from '../dto/list-private-bookings-query.dto';
+import { PrivateAvailabilityQueryDto } from '../dto/private-availability-query.dto';
+import {
+  PrivateBookingParamDto,
+  PrivateBookingTrainerParamDto,
+} from '../dto/private-booking-param.dto';
+import { ReschedulePrivateBookingDto } from '../dto/reschedule-private-booking.dto';
 import type {
   BookingCancelResult,
   BookingCreateResult,
@@ -61,6 +74,12 @@ import type {
   BookingRescheduleResult,
   BookingWaitlistListItem,
   BookingWaitlistListResult,
+  PrivateBookingAvailabilityResult,
+  PrivateBookingCancelResult,
+  PrivateBookingCreateResult,
+  PrivateBookingDetail,
+  PrivateBookingListResult,
+  PrivateBookingRescheduleResult,
 } from '../types/booking.types';
 
 function resolveAuthContext(
@@ -85,6 +104,7 @@ function resolveAuthenticatedCustomerId(
 export class BookingCustomerController {
   constructor(
     private readonly bookingCustomerService: BookingCustomerService,
+    private readonly privateBookingAvailabilityService: PrivateBookingAvailabilityService,
   ) {}
 
   @Post()
@@ -133,6 +153,117 @@ export class BookingCustomerController {
     return createApiSuccessResponse({
       status: HttpStatus.OK,
       message: 'Waitlist entries retrieved successfully.',
+      data,
+    });
+  }
+
+  @Post('private-trainer')
+  @HttpCode(HttpStatus.CREATED)
+  async createPrivateBooking(
+    @CurrentAuth() auth: AuthInternalContext | undefined,
+    @Body() body: CreatePrivateBookingDto,
+  ): Promise<ApiSuccessResponse<PrivateBookingCreateResult>> {
+    const data = await this.bookingCustomerService.createPrivateBooking(
+      resolveAuthenticatedCustomerId(auth),
+      body,
+    );
+
+    return createApiSuccessResponse({
+      status: HttpStatus.CREATED,
+      message: 'Private trainer booking request processed successfully.',
+      data,
+    });
+  }
+
+  @Get('private-trainer')
+  async listPrivateBookings(
+    @CurrentAuth() auth: AuthInternalContext | undefined,
+    @Query() query: ListPrivateBookingsQueryDto,
+  ): Promise<ApiSuccessResponse<PrivateBookingListResult>> {
+    const data = await this.bookingCustomerService.listPrivateBookings(
+      resolveAuthenticatedCustomerId(auth),
+      query,
+    );
+
+    return createApiSuccessResponse({
+      status: HttpStatus.OK,
+      message: 'Private trainer bookings retrieved successfully.',
+      data,
+    });
+  }
+
+  @Get(`private-trainer/availability/:${PRIVATE_BOOKING_TRAINER_ID_PARAM_NAME}`)
+  async getPrivateTrainerAvailability(
+    @Param() params: PrivateBookingTrainerParamDto,
+    @Query() query: PrivateAvailabilityQueryDto,
+  ): Promise<ApiSuccessResponse<PrivateBookingAvailabilityResult>> {
+    const data =
+      await this.privateBookingAvailabilityService.getTrainerAvailability(
+        params[PRIVATE_BOOKING_TRAINER_ID_PARAM_NAME],
+        query,
+      );
+
+    return createApiSuccessResponse({
+      status: HttpStatus.OK,
+      message: 'Private trainer availability retrieved successfully.',
+      data,
+    });
+  }
+
+  @Get(`private-trainer/:${PRIVATE_BOOKING_ID_PARAM_NAME}`)
+  async getPrivateBookingById(
+    @CurrentAuth() auth: AuthInternalContext | undefined,
+    @Param() params: PrivateBookingParamDto,
+  ): Promise<ApiSuccessResponse<PrivateBookingDetail>> {
+    const data = await this.bookingCustomerService.getPrivateBookingById(
+      resolveAuthenticatedCustomerId(auth),
+      params[PRIVATE_BOOKING_ID_PARAM_NAME],
+    );
+
+    return createApiSuccessResponse({
+      status: HttpStatus.OK,
+      message: 'Private trainer booking retrieved successfully.',
+      data,
+    });
+  }
+
+  @Post(`private-trainer/:${PRIVATE_BOOKING_ID_PARAM_NAME}/cancel`)
+  @HttpCode(HttpStatus.OK)
+  async cancelPrivateBooking(
+    @CurrentAuth() auth: AuthInternalContext | undefined,
+    @Param() params: PrivateBookingParamDto,
+    @Body() body: CancelBookingDto,
+  ): Promise<ApiSuccessResponse<PrivateBookingCancelResult>> {
+    const data = await this.bookingCustomerService.cancelPrivateBooking(
+      resolveAuthenticatedCustomerId(auth),
+      params[PRIVATE_BOOKING_ID_PARAM_NAME],
+      body,
+    );
+
+    return createApiSuccessResponse({
+      status: HttpStatus.OK,
+      message: 'Private trainer booking cancelled successfully.',
+      data,
+    });
+  }
+
+  @Post(`private-trainer/:${PRIVATE_BOOKING_ID_PARAM_NAME}/reschedule`)
+  @HttpCode(HttpStatus.OK)
+  async reschedulePrivateBooking(
+    @CurrentAuth() auth: AuthInternalContext | undefined,
+    @Param() params: PrivateBookingParamDto,
+    @Body() body: ReschedulePrivateBookingDto,
+  ): Promise<ApiSuccessResponse<PrivateBookingRescheduleResult>> {
+    const data = await this.bookingCustomerService.reschedulePrivateBooking(
+      resolveAuthenticatedCustomerId(auth),
+      params[PRIVATE_BOOKING_ID_PARAM_NAME],
+      body,
+    );
+
+    return createApiSuccessResponse({
+      status: HttpStatus.OK,
+      message:
+        'Private trainer booking reschedule request processed successfully.',
       data,
     });
   }
