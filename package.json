@@ -5,7 +5,7 @@
   "description": "LAFAM single-tenant admin dashboard and backend platform monorepo.",
   "packageManager": "pnpm@10.19.0",
   "engines": {
-    "node": ">=20.9.0",
+    "node": "22.x",
     "pnpm": ">=10.19.0"
   },
   "scripts": {
