@@ -259,6 +259,11 @@ export const PILATES_SCHEDULE_RECURRENCE_MAX_RANGE_MONTHS = 12;
 export const PILATES_SCHEDULE_RECURRENCE_MAX_OCCURRENCES = 250;
 export const PILATES_SCHEDULE_RECURRENCE_MAX_EXCLUDED_DATES = 100;
 
+export const PILATES_SCHEDULE_TIME_SLOT_MIN_COUNT = 1;
+export const PILATES_SCHEDULE_TIME_SLOT_MAX_COUNT = 24;
+export const PILATES_SCHEDULE_TIME_SLOT_DEFAULT_COUNT = 1;
+export const PILATES_SCHEDULE_TIME_SLOT_INDEX_MIN = 1;
+
 export const PILATES_CLASS_LEVELS = [
   'beginner',
   'intermediate',
@@ -356,6 +361,21 @@ export const PILATES_CLASS_DEFAULT_DURATION_MINUTES = 60;
 export const PILATES_CLASS_CAPACITY_MIN = 1;
 export const PILATES_CLASS_CAPACITY_MAX = 100;
 export const PILATES_CLASS_DEFAULT_CAPACITY = 8;
+
+export const PILATES_CLASS_PRICE_AMOUNT_MIN = 0;
+export const PILATES_CLASS_DEFAULT_PRICE_AMOUNT = 0;
+export const PILATES_CLASS_PRICE_DECIMAL_PLACES = 3;
+
+export const PILATES_CLASS_DEFAULT_CURRENCY = 'KWD' as const;
+
+export const PILATES_CLASS_ALLOWED_CURRENCIES = [
+  PILATES_CLASS_DEFAULT_CURRENCY,
+] as const;
+
+export type PilatesClassCurrency =
+  (typeof PILATES_CLASS_ALLOWED_CURRENCIES)[number];
+
+export const PILATES_CLASS_CURRENCY_CODE_LENGTH = 3;
 
 export const PILATES_CLASS_STUDIO_MIN_LENGTH = 1;
 export const PILATES_CLASS_STUDIO_MAX_LENGTH = 120;
@@ -565,6 +585,10 @@ const PILATES_SCHEDULE_UPDATE_SCOPE_SET = new Set<PilatesScheduleUpdateScope>(
 
 const PILATES_SCHEDULE_WEEKDAY_SET = new Set<number>(PILATES_SCHEDULE_WEEKDAYS);
 
+const PILATES_CLASS_CURRENCY_SET = new Set<PilatesClassCurrency>(
+  PILATES_CLASS_ALLOWED_CURRENCIES,
+);
+
 const PILATES_CLASS_LEVEL_SET = new Set<PilatesClassLevel>(
   PILATES_CLASS_LEVELS,
 );
@@ -732,6 +756,11 @@ export function isPilatesScheduleWeekday(
   value: number,
 ): value is PilatesScheduleWeekday {
   return PILATES_SCHEDULE_WEEKDAY_SET.has(value);
+}
+export function isPilatesClassCurrency(
+  value: string,
+): value is PilatesClassCurrency {
+  return PILATES_CLASS_CURRENCY_SET.has(value as PilatesClassCurrency);
 }
 
 export function isPilatesClassLevel(value: string): value is PilatesClassLevel {

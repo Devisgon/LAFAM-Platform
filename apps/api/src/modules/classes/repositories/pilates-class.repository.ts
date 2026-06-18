@@ -32,6 +32,8 @@ import type {
   PilatesClassUpdate,
   PilatesScheduleSeriesInsert,
   PilatesScheduleSeriesRow,
+  PilatesScheduleSeriesTimeSlotInsert,
+  PilatesScheduleSeriesTimeSlotRow,
   StaffAvailabilityRuleRow,
   StaffProfileRow,
 } from '../../../database/database.types';
@@ -138,11 +140,16 @@ function mapDatabaseError(error: unknown): AppError {
   }
 
   if (
-    error.code === '23P01' ||
-    message.includes('pilates_class_schedules_trainer_no_overlap')
+    error.code === '23505' &&
+    (message.includes(
+      'pilates_schedule_series_time_slots_series_slot_unique',
+    ) ||
+      message.includes(
+        'pilates_schedule_series_time_slots_series_window_unique',
+      ))
   ) {
-    return AppError.pilatesScheduleConflict(
-      'The selected trainer already has a class during this time slot.',
+    return AppError.pilatesScheduleDuplicateTimeSlot(
+      'Duplicate recurring schedule time slots are not allowed.',
       details,
     );
   }
@@ -545,6 +552,27 @@ export class PilatesClassRepository {
 
     return data;
   }
+  async createScheduleSeriesTimeSlots(
+    payloads: readonly PilatesScheduleSeriesTimeSlotInsert[],
+  ): Promise<readonly PilatesScheduleSeriesTimeSlotRow[]> {
+    if (payloads.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await this.adminClient
+      .from('pilates_schedule_series_time_slots')
+      .insert(payloads.map((payload) => ({ ...payload })))
+      .select('*');
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return [...(data ?? [])].sort(
+      (firstTimeSlot, secondTimeSlot) =>
+        firstTimeSlot.slot_index - secondTimeSlot.slot_index,
+    );
+  }
   async updateSchedule(
     scheduleId: string,
     patch: PilatesClassScheduleUpdate,
@@ -725,11 +753,13 @@ export class PilatesClassRepository {
       return null;
     }
 
-    const [classesById, trainersById, generatedSchedules] = await Promise.all([
-      this.fetchClassesByIds([series.class_id]),
-      this.fetchStaffProfilesByIds([series.trainer_staff_profile_id]),
-      this.findSchedulesBySeriesId(series.id),
-    ]);
+    const [classesById, trainersById, timeSlotsBySeriesId, generatedSchedules] =
+      await Promise.all([
+        this.fetchClassesByIds([series.class_id]),
+        this.fetchStaffProfilesByIds([series.trainer_staff_profile_id]),
+        this.fetchScheduleSeriesTimeSlotsBySeriesIds([series.id]),
+        this.findSchedulesBySeriesId(series.id),
+      ]);
 
     const classRecord = classesById.get(series.class_id);
     const trainer = trainersById.get(series.trainer_staff_profile_id);
@@ -758,6 +788,7 @@ export class PilatesClassRepository {
       series,
       class: classRecord,
       trainer,
+      time_slots: timeSlotsBySeriesId.get(series.id) ?? [],
       generated_schedules: generatedSchedules,
     };
   }
@@ -1100,6 +1131,7 @@ export class PilatesClassRepository {
           start_time: occurrence.start_time,
           end_time: occurrence.end_time,
           reason: 'trainer_schedule_overlap',
+          series_slot_index: occurrence.series_slot_index ?? null,
           conflicting_schedule_id: conflictingSchedule.id,
         });
       }
@@ -1197,12 +1229,22 @@ export class PilatesClassRepository {
         .map((schedule) => schedule.series_id)
         .filter((seriesId): seriesId is string => typeof seriesId === 'string'),
     );
+    const seriesTimeSlotIds = uniqueValues(
+      schedules
+        .map((schedule) => schedule.series_time_slot_id)
+        .filter(
+          (seriesTimeSlotId): seriesTimeSlotId is string =>
+            typeof seriesTimeSlotId === 'string',
+        ),
+    );
 
-    const [classesById, trainersById, seriesById] = await Promise.all([
-      this.fetchClassesByIds(classIds),
-      this.fetchStaffProfilesByIds(trainerIds),
-      this.fetchScheduleSeriesByIds(seriesIds),
-    ]);
+    const [classesById, trainersById, seriesById, seriesTimeSlotsById] =
+      await Promise.all([
+        this.fetchClassesByIds(classIds),
+        this.fetchStaffProfilesByIds(trainerIds),
+        this.fetchScheduleSeriesByIds(seriesIds),
+        this.fetchScheduleSeriesTimeSlotsByIds(seriesTimeSlotIds),
+      ]);
 
     return schedules.map((schedule) => {
       const classRecord = classesById.get(schedule.class_id);
@@ -1210,6 +1252,10 @@ export class PilatesClassRepository {
       const series =
         schedule.series_id !== null
           ? (seriesById.get(schedule.series_id) ?? null)
+          : null;
+      const seriesTimeSlot =
+        schedule.series_time_slot_id !== null
+          ? (seriesTimeSlotsById.get(schedule.series_time_slot_id) ?? null)
           : null;
 
       if (!classRecord) {
@@ -1237,6 +1283,7 @@ export class PilatesClassRepository {
         class: classRecord,
         trainer,
         series,
+        series_time_slot: seriesTimeSlot,
       };
     });
   }
@@ -1295,6 +1342,59 @@ export class PilatesClassRepository {
     }
 
     return new Map((data ?? []).map((record) => [record.id, record]));
+  }
+  private async fetchScheduleSeriesTimeSlotsByIds(
+    timeSlotIds: readonly string[],
+  ): Promise<ReadonlyMap<string, PilatesScheduleSeriesTimeSlotRow>> {
+    if (timeSlotIds.length === 0) {
+      return new Map<string, PilatesScheduleSeriesTimeSlotRow>();
+    }
+
+    const { data, error } = await this.adminClient
+      .from('pilates_schedule_series_time_slots')
+      .select('*')
+      .in('id', timeSlotIds);
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return new Map((data ?? []).map((record) => [record.id, record]));
+  }
+
+  private async fetchScheduleSeriesTimeSlotsBySeriesIds(
+    seriesIds: readonly string[],
+  ): Promise<ReadonlyMap<string, readonly PilatesScheduleSeriesTimeSlotRow[]>> {
+    if (seriesIds.length === 0) {
+      return new Map<string, readonly PilatesScheduleSeriesTimeSlotRow[]>();
+    }
+
+    const { data, error } = await this.adminClient
+      .from('pilates_schedule_series_time_slots')
+      .select('*')
+      .in('series_id', seriesIds)
+      .order('slot_index', { ascending: true });
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    const timeSlotsBySeriesId = new Map<
+      string,
+      PilatesScheduleSeriesTimeSlotRow[]
+    >();
+
+    for (const timeSlot of data ?? []) {
+      const existingTimeSlots =
+        timeSlotsBySeriesId.get(timeSlot.series_id) ?? [];
+
+      timeSlotsBySeriesId.set(timeSlot.series_id, [
+        ...existingTimeSlots,
+        timeSlot,
+      ]);
+    }
+
+    return timeSlotsBySeriesId;
   }
 
   private async fetchSchedulesBySeriesId(

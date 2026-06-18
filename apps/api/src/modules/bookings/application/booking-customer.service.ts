@@ -32,6 +32,13 @@ import type {
 } from '../../../database/database.types';
 import {
   BOOKING_DEFAULT_PAYMENT_REQUIRED,
+  BOOKING_PAYMENT_CONFIRMING_STATUSES,
+  BOOKING_PAYMENT_FAILURE_STATUSES,
+  BOOKING_PAYMENT_PAYABLE_STATUSES,
+  BOOKING_PAYMENT_REFUNDABLE_STATUSES,
+  BOOKING_PAYMENT_RETRYABLE_STATUSES,
+  BOOKING_PAYMENT_SETTLED_STATUSES,
+  BOOKING_PAYMENT_TERMINAL_STATUSES,
   BOOKING_RPC_ACTION_BOOKED,
   BOOKING_RPC_ACTION_CANCELLED,
   BOOKING_RPC_ACTION_CANCELLED_AND_PROMOTED,
@@ -40,6 +47,7 @@ import {
   BOOKING_RPC_ACTION_TARGET_WAITLISTED,
   BOOKING_RPC_ACTION_WAITLISTED,
   BOOKING_SOURCE_CUSTOMER_WEB,
+  BOOKING_STATUS_PENDING_PAYMENT,
   PRIVATE_BOOKING_DEFAULT_DURATION_MINUTES,
   PRIVATE_BOOKING_DEFAULT_PAYMENT_REQUIRED,
   PRIVATE_BOOKING_DEFAULT_STUDIO,
@@ -71,9 +79,13 @@ import type {
   BookingCustomerListFilters,
   BookingDetail,
   BookingHistoryEntry,
+  BookingHydratedPaymentRow,
   BookingHydratedRow,
   BookingListItem,
   BookingListResult,
+  BookingPaymentStateSnapshot,
+  BookingPaymentSummary,
+  BookingPriceSnapshot,
   BookingRescheduleAtomicRpcRow,
   BookingRescheduleResult,
   BookingSafeBooking,
@@ -103,6 +115,195 @@ type BookingHydratedStaffProfile = NonNullable<
 type PrivateBookingHydratedStaffProfile = NonNullable<
   PrivateBookingHydratedRow['staff_profiles']
 >;
+
+function getLatestHydratedPayment(
+  payments: readonly BookingHydratedPaymentRow[] | null | undefined,
+): BookingHydratedPaymentRow | null {
+  if (!payments || payments.length === 0) {
+    return null;
+  }
+
+  return (
+    [...payments].sort((left, right) =>
+      right.created_at.localeCompare(left.created_at),
+    )[0] ?? null
+  );
+}
+
+function isPaymentStatusIncluded<TStatus extends string>(
+  statuses: readonly TStatus[],
+  value: string,
+): value is TStatus {
+  return statuses.includes(value as TStatus);
+}
+
+function hasSeatHoldExpired(seatHoldExpiresAt: string | null): boolean {
+  if (!seatHoldExpiresAt) {
+    return false;
+  }
+
+  return new Date(seatHoldExpiresAt).getTime() <= Date.now();
+}
+
+function toPaymentSummary(
+  payment: BookingHydratedPaymentRow | null,
+  targetKind: BookingPaymentSummary['target_kind'],
+): BookingPaymentSummary | null {
+  if (!payment) {
+    return null;
+  }
+
+  return {
+    id: payment.id,
+    payment_number: payment.payment_number,
+    receipt_number: payment.receipt_number,
+    target_kind: targetKind,
+    booking_id: payment.booking_id,
+    private_booking_id: payment.private_booking_id,
+    amount: payment.amount,
+    discount_amount: payment.discount_amount,
+    final_amount: payment.final_amount,
+    currency: payment.currency,
+    payment_method: payment.payment_method,
+    payment_provider: payment.payment_provider,
+    status: payment.status,
+    redirect_url: payment.redirect_url,
+    paid_at: payment.paid_at,
+    failed_at: payment.failed_at,
+    cancelled_at: payment.cancelled_at,
+    expired_at: payment.expired_at,
+    refunded_at: payment.refunded_at,
+    refunded_amount: payment.refunded_amount,
+    expires_at: payment.expires_at,
+    created_at: payment.created_at,
+    updated_at: payment.updated_at,
+  };
+}
+
+function buildPaymentStateSnapshot(input: {
+  readonly booking_status: BookingHydratedRow['status'];
+  readonly payment_required: boolean;
+  readonly payment_status: BookingHydratedRow['payment_status'];
+  readonly seat_hold_expires_at: string | null;
+  readonly latest_payment: BookingPaymentSummary | null;
+}): BookingPaymentStateSnapshot {
+  const holdExpired = hasSeatHoldExpired(input.seat_hold_expires_at);
+  const isPendingBooking =
+    input.booking_status === BOOKING_STATUS_PENDING_PAYMENT;
+
+  const isPayable =
+    input.payment_required &&
+    isPendingBooking &&
+    !holdExpired &&
+    isPaymentStatusIncluded(
+      BOOKING_PAYMENT_PAYABLE_STATUSES,
+      input.payment_status,
+    );
+
+  const isRetryable =
+    input.payment_required &&
+    isPendingBooking &&
+    !holdExpired &&
+    isPaymentStatusIncluded(
+      BOOKING_PAYMENT_RETRYABLE_STATUSES,
+      input.payment_status,
+    );
+
+  const isSettled = isPaymentStatusIncluded(
+    BOOKING_PAYMENT_SETTLED_STATUSES,
+    input.payment_status,
+  );
+
+  const isFailed = isPaymentStatusIncluded(
+    BOOKING_PAYMENT_FAILURE_STATUSES,
+    input.payment_status,
+  );
+
+  const isTerminal = isPaymentStatusIncluded(
+    BOOKING_PAYMENT_TERMINAL_STATUSES,
+    input.payment_status,
+  );
+
+  const isRefundable = isPaymentStatusIncluded(
+    BOOKING_PAYMENT_REFUNDABLE_STATUSES,
+    input.payment_status,
+  );
+
+  const confirmsBooking = isPaymentStatusIncluded(
+    BOOKING_PAYMENT_CONFIRMING_STATUSES,
+    input.payment_status,
+  );
+
+  return {
+    payment_required: input.payment_required,
+    payment_status: input.payment_status,
+    seat_hold_expires_at: input.seat_hold_expires_at,
+    is_pending_payment: input.payment_required && isPendingBooking,
+    is_payable: isPayable,
+    is_retryable: isRetryable,
+    is_settled: isSettled,
+    is_failed: isFailed,
+    is_terminal: isTerminal,
+    is_refundable: isRefundable,
+    confirms_booking: confirmsBooking,
+    checkout_required: isPayable,
+    hold_expires_at: input.seat_hold_expires_at,
+    latest_payment: input.latest_payment,
+  };
+}
+
+function resolveClassBookingPriceSnapshot(
+  row: BookingHydratedRow,
+): BookingPriceSnapshot {
+  const schedule = row.pilates_class_schedules ?? null;
+  const pilatesClass = row.pilates_classes ?? null;
+
+  if (
+    typeof schedule?.price_amount === 'number' &&
+    schedule.price_amount >= 0
+  ) {
+    return {
+      amount: schedule.price_amount,
+      currency: schedule.currency ?? pilatesClass?.currency ?? null,
+      source: 'schedule_override',
+    };
+  }
+
+  if (
+    typeof pilatesClass?.default_price_amount === 'number' &&
+    pilatesClass.default_price_amount >= 0
+  ) {
+    return {
+      amount: pilatesClass.default_price_amount,
+      currency: pilatesClass.currency ?? schedule?.currency ?? null,
+      source: 'class_default',
+    };
+  }
+
+  return {
+    amount: null,
+    currency: schedule?.currency ?? pilatesClass?.currency ?? null,
+    source: 'not_configured',
+  };
+}
+
+function resolvePrivateBookingPriceSnapshot(
+  row: PrivateBookingHydratedRow,
+): BookingPriceSnapshot {
+  if (typeof row.price_amount === 'number' && row.price_amount >= 0) {
+    return {
+      amount: row.price_amount,
+      currency: row.currency,
+      source: 'private_booking',
+    };
+  }
+
+  return {
+    amount: null,
+    currency: row.currency,
+    source: 'not_configured',
+  };
+}
 
 @Injectable()
 export class BookingCustomerService {
@@ -147,6 +348,8 @@ export class BookingCustomerService {
         result: actionResult,
         booking,
         waitlist: null,
+        payment_state: booking.payment_state ?? null,
+        checkout_required: booking.payment_state?.checkout_required ?? false,
         availability,
       };
     }
@@ -164,6 +367,8 @@ export class BookingCustomerService {
       result: actionResult,
       booking: null,
       waitlist,
+      payment_state: null,
+      checkout_required: false,
       availability,
     };
   }
@@ -218,6 +423,9 @@ export class BookingCustomerService {
     return {
       result: actionResult,
       private_booking: privateBooking,
+      payment_state: privateBooking.payment_state ?? null,
+      checkout_required:
+        privateBooking.payment_state?.checkout_required ?? false,
     };
   }
 
@@ -774,6 +982,18 @@ export class BookingCustomerService {
   }
 
   private toSafeBooking(row: BookingHydratedRow): BookingSafeBooking {
+    const latestPayment = toPaymentSummary(
+      getLatestHydratedPayment(row.payments),
+      'booking',
+    );
+    const paymentState = buildPaymentStateSnapshot({
+      booking_status: row.status,
+      payment_required: row.payment_required,
+      payment_status: row.payment_status,
+      seat_hold_expires_at: row.seat_hold_expires_at,
+      latest_payment: latestPayment,
+    });
+
     return {
       id: row.id,
       booking_number: row.booking_number,
@@ -786,6 +1006,9 @@ export class BookingCustomerService {
       payment_status: row.payment_status,
       payment_required: row.payment_required,
       seat_hold_expires_at: row.seat_hold_expires_at,
+      price: resolveClassBookingPriceSnapshot(row),
+      payment_state: paymentState,
+      latest_payment: latestPayment,
       confirmed_at: row.confirmed_at,
       cancelled_at: row.cancelled_at,
       completed_at: row.completed_at,
@@ -802,6 +1025,18 @@ export class BookingCustomerService {
   private toSafePrivateBooking(
     row: PrivateBookingHydratedRow,
   ): PrivateBookingSafeBooking {
+    const latestPayment = toPaymentSummary(
+      getLatestHydratedPayment(row.payments),
+      'private_booking',
+    );
+    const paymentState = buildPaymentStateSnapshot({
+      booking_status: row.status,
+      payment_required: row.payment_required,
+      payment_status: row.payment_status,
+      seat_hold_expires_at: row.seat_hold_expires_at,
+      latest_payment: latestPayment,
+    });
+
     return {
       id: row.id,
       booking_number: row.booking_number,
@@ -812,11 +1047,16 @@ export class BookingCustomerService {
       end_time: row.end_time,
       duration_minutes: row.duration_minutes,
       studio: row.studio,
+      price_amount: row.price_amount,
+      currency: row.currency,
+      price: resolvePrivateBookingPriceSnapshot(row),
       status: row.status,
       source: row.source,
       payment_status: row.payment_status,
       payment_required: row.payment_required,
       seat_hold_expires_at: row.seat_hold_expires_at,
+      payment_state: paymentState,
+      latest_payment: latestPayment,
       confirmed_at: row.confirmed_at,
       cancelled_at: row.cancelled_at,
       completed_at: row.completed_at,
@@ -902,6 +1142,8 @@ export class BookingCustomerService {
       status: row.status,
       duration_minutes: row.default_duration_minutes,
       capacity: row.default_capacity,
+      default_price_amount: row.default_price_amount,
+      currency: row.currency,
       cover_image_path: row.image_path,
     };
   }
@@ -923,6 +1165,8 @@ export class BookingCustomerService {
       end_time: row.end_time,
       duration_minutes: row.duration_minutes,
       capacity: row.capacity,
+      price_amount: row.price_amount,
+      currency: row.currency,
       status: row.status,
       cancellation_reason: row.cancellation_reason,
       cancelled_at: row.cancelled_at,

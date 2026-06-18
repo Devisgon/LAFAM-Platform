@@ -6,7 +6,7 @@
  * - Defines Booking Module statuses, payment states, sources, waitlist states,
  *   private trainer booking states, route prefixes, validation limits,
  *   pagination defaults, RPC action results, calendar event types,
- *   domain event names, and role access rules.
+ *   domain event names, payment-flow state groups, and role access rules.
  * - Keeps DTOs, services, repositories, controllers, and Swagger aligned.
  *
  * Important:
@@ -15,7 +15,10 @@
  * - Do not place service logic here.
  * - Do not place secrets or environment-derived values here.
  * - Booking is the source of truth for real schedule availability.
+ * - Payment is the source of truth for payment settlement.
  * - Pilates class bookings and private trainer bookings must remain separate flows.
+ * - Bookings that require payment must start as pending_payment.
+ * - Bookings must not be confirmed by the frontend.
  */
 
 import {
@@ -117,6 +120,35 @@ export const BOOKING_RESCHEDULABLE_STATUSES = [
   BOOKING_STATUS_CONFIRMED,
 ] as const satisfies readonly BookingStatus[];
 
+export const BOOKING_PAYMENT_PENDING_BOOKING_STATUSES = [
+  BOOKING_STATUS_PENDING_PAYMENT,
+] as const satisfies readonly BookingStatus[];
+
+export const BOOKING_PAYMENT_CONFIRMATION_ALLOWED_STATUSES = [
+  BOOKING_STATUS_PENDING_PAYMENT,
+  BOOKING_STATUS_CONFIRMED,
+] as const satisfies readonly BookingStatus[];
+
+export const BOOKING_PAYMENT_FAILURE_ALLOWED_STATUSES = [
+  BOOKING_STATUS_PENDING_PAYMENT,
+] as const satisfies readonly BookingStatus[];
+
+export const BOOKING_PAYMENT_EXPIRABLE_STATUSES = [
+  BOOKING_STATUS_PENDING_PAYMENT,
+] as const satisfies readonly BookingStatus[];
+
+export type BookingPaymentPendingBookingStatus =
+  (typeof BOOKING_PAYMENT_PENDING_BOOKING_STATUSES)[number];
+
+export type BookingPaymentConfirmationAllowedStatus =
+  (typeof BOOKING_PAYMENT_CONFIRMATION_ALLOWED_STATUSES)[number];
+
+export type BookingPaymentFailureAllowedStatus =
+  (typeof BOOKING_PAYMENT_FAILURE_ALLOWED_STATUSES)[number];
+
+export type BookingPaymentExpirableStatus =
+  (typeof BOOKING_PAYMENT_EXPIRABLE_STATUSES)[number];
+
 export const PRIVATE_BOOKING_ACTIVE_STATUSES = [
   BOOKING_STATUS_PENDING_PAYMENT,
   BOOKING_STATUS_CONFIRMED,
@@ -149,6 +181,18 @@ export const PRIVATE_BOOKING_RESCHEDULABLE_STATUSES = [
   BOOKING_STATUS_PENDING_PAYMENT,
   BOOKING_STATUS_CONFIRMED,
 ] as const satisfies readonly BookingStatus[];
+
+export const PRIVATE_BOOKING_PAYMENT_PENDING_BOOKING_STATUSES =
+  BOOKING_PAYMENT_PENDING_BOOKING_STATUSES;
+
+export const PRIVATE_BOOKING_PAYMENT_CONFIRMATION_ALLOWED_STATUSES =
+  BOOKING_PAYMENT_CONFIRMATION_ALLOWED_STATUSES;
+
+export const PRIVATE_BOOKING_PAYMENT_FAILURE_ALLOWED_STATUSES =
+  BOOKING_PAYMENT_FAILURE_ALLOWED_STATUSES;
+
+export const PRIVATE_BOOKING_PAYMENT_EXPIRABLE_STATUSES =
+  BOOKING_PAYMENT_EXPIRABLE_STATUSES;
 
 export type PrivateBookingActiveStatus =
   (typeof PRIVATE_BOOKING_ACTIVE_STATUSES)[number];
@@ -190,6 +234,83 @@ export const BOOKING_PAYMENT_STATUS_REFUNDED =
 
 export const BOOKING_PAYMENT_STATUS_EXPIRED =
   'expired' satisfies BookingPaymentStatus;
+
+export const BOOKING_PAYMENT_PAYABLE_STATUSES = [
+  BOOKING_PAYMENT_STATUS_PENDING,
+  BOOKING_PAYMENT_STATUS_FAILED,
+] as const satisfies readonly BookingPaymentStatus[];
+
+export const BOOKING_PAYMENT_RETRYABLE_STATUSES = [
+  BOOKING_PAYMENT_STATUS_FAILED,
+] as const satisfies readonly BookingPaymentStatus[];
+
+export const BOOKING_PAYMENT_SETTLED_STATUSES = [
+  BOOKING_PAYMENT_STATUS_NOT_REQUIRED,
+  BOOKING_PAYMENT_STATUS_PAID,
+] as const satisfies readonly BookingPaymentStatus[];
+
+export const BOOKING_PAYMENT_FAILURE_STATUSES = [
+  BOOKING_PAYMENT_STATUS_FAILED,
+  BOOKING_PAYMENT_STATUS_EXPIRED,
+] as const satisfies readonly BookingPaymentStatus[];
+
+export const BOOKING_PAYMENT_TERMINAL_STATUSES = [
+  BOOKING_PAYMENT_STATUS_NOT_REQUIRED,
+  BOOKING_PAYMENT_STATUS_PAID,
+  BOOKING_PAYMENT_STATUS_REFUNDED,
+  BOOKING_PAYMENT_STATUS_EXPIRED,
+] as const satisfies readonly BookingPaymentStatus[];
+
+export const BOOKING_PAYMENT_REFUNDABLE_STATUSES = [
+  BOOKING_PAYMENT_STATUS_PAID,
+] as const satisfies readonly BookingPaymentStatus[];
+
+export const BOOKING_PAYMENT_CONFIRMING_STATUSES = [
+  BOOKING_PAYMENT_STATUS_NOT_REQUIRED,
+  BOOKING_PAYMENT_STATUS_PAID,
+] as const satisfies readonly BookingPaymentStatus[];
+
+export const PRIVATE_BOOKING_PAYMENT_PAYABLE_STATUSES =
+  BOOKING_PAYMENT_PAYABLE_STATUSES;
+
+export const PRIVATE_BOOKING_PAYMENT_RETRYABLE_STATUSES =
+  BOOKING_PAYMENT_RETRYABLE_STATUSES;
+
+export const PRIVATE_BOOKING_PAYMENT_SETTLED_STATUSES =
+  BOOKING_PAYMENT_SETTLED_STATUSES;
+
+export const PRIVATE_BOOKING_PAYMENT_FAILURE_STATUSES =
+  BOOKING_PAYMENT_FAILURE_STATUSES;
+
+export const PRIVATE_BOOKING_PAYMENT_TERMINAL_STATUSES =
+  BOOKING_PAYMENT_TERMINAL_STATUSES;
+
+export const PRIVATE_BOOKING_PAYMENT_REFUNDABLE_STATUSES =
+  BOOKING_PAYMENT_REFUNDABLE_STATUSES;
+
+export const PRIVATE_BOOKING_PAYMENT_CONFIRMING_STATUSES =
+  BOOKING_PAYMENT_CONFIRMING_STATUSES;
+
+export type BookingPaymentPayableStatus =
+  (typeof BOOKING_PAYMENT_PAYABLE_STATUSES)[number];
+
+export type BookingPaymentRetryableStatus =
+  (typeof BOOKING_PAYMENT_RETRYABLE_STATUSES)[number];
+
+export type BookingPaymentSettledStatus =
+  (typeof BOOKING_PAYMENT_SETTLED_STATUSES)[number];
+
+export type BookingPaymentFailureStatus =
+  (typeof BOOKING_PAYMENT_FAILURE_STATUSES)[number];
+
+export type BookingPaymentTerminalStatus =
+  (typeof BOOKING_PAYMENT_TERMINAL_STATUSES)[number];
+
+export type BookingPaymentRefundableStatus =
+  (typeof BOOKING_PAYMENT_REFUNDABLE_STATUSES)[number];
+
+export type BookingPaymentConfirmingStatus =
+  (typeof BOOKING_PAYMENT_CONFIRMING_STATUSES)[number];
 
 export const BOOKING_SOURCES = [
   'customer_web',
@@ -503,10 +624,22 @@ export const BOOKING_HISTORY_NOTES_MAX_LENGTH = 2000 as const;
 export const BOOKING_ACTOR_ROLE_MAX_LENGTH = 80 as const;
 
 export const BOOKING_PAYMENT_HOLD_TTL_MINUTES = 15 as const;
+export const BOOKING_PAYMENT_HOLD_EXPIRING_SOON_THRESHOLD_MINUTES = 5 as const;
 
-export const BOOKING_DEFAULT_PAYMENT_REQUIRED = false as const;
+export const BOOKING_DEFAULT_PAYMENT_REQUIRED = true as const;
+export const PRIVATE_BOOKING_DEFAULT_PAYMENT_REQUIRED = true as const;
 
-export const PRIVATE_BOOKING_DEFAULT_PAYMENT_REQUIRED = false as const;
+export const BOOKING_PAYMENT_REQUIRED_DEFAULT_STATUS =
+  BOOKING_PAYMENT_STATUS_PENDING;
+
+export const BOOKING_PAYMENT_NOT_REQUIRED_DEFAULT_STATUS =
+  BOOKING_PAYMENT_STATUS_NOT_REQUIRED;
+
+export const PRIVATE_BOOKING_PAYMENT_REQUIRED_DEFAULT_STATUS =
+  BOOKING_PAYMENT_STATUS_PENDING;
+
+export const PRIVATE_BOOKING_PAYMENT_NOT_REQUIRED_DEFAULT_STATUS =
+  BOOKING_PAYMENT_STATUS_NOT_REQUIRED;
 
 export const PRIVATE_BOOKING_DEFAULT_STUDIO = 'LAFAM Pilates Studio' as const;
 export const PRIVATE_BOOKING_STUDIO_MIN_LENGTH = 2 as const;
@@ -625,6 +758,38 @@ export function isBookingReschedulableStatus(
   );
 }
 
+export function isBookingPaymentPendingBookingStatus(
+  value: string,
+): value is BookingPaymentPendingBookingStatus {
+  return BOOKING_PAYMENT_PENDING_BOOKING_STATUSES.includes(
+    value as BookingPaymentPendingBookingStatus,
+  );
+}
+
+export function isBookingPaymentConfirmationAllowedStatus(
+  value: string,
+): value is BookingPaymentConfirmationAllowedStatus {
+  return BOOKING_PAYMENT_CONFIRMATION_ALLOWED_STATUSES.includes(
+    value as BookingPaymentConfirmationAllowedStatus,
+  );
+}
+
+export function isBookingPaymentFailureAllowedStatus(
+  value: string,
+): value is BookingPaymentFailureAllowedStatus {
+  return BOOKING_PAYMENT_FAILURE_ALLOWED_STATUSES.includes(
+    value as BookingPaymentFailureAllowedStatus,
+  );
+}
+
+export function isBookingPaymentExpirableStatus(
+  value: string,
+): value is BookingPaymentExpirableStatus {
+  return BOOKING_PAYMENT_EXPIRABLE_STATUSES.includes(
+    value as BookingPaymentExpirableStatus,
+  );
+}
+
 export function isPrivateBookingActiveStatus(
   value: string,
 ): value is PrivateBookingActiveStatus {
@@ -661,6 +826,62 @@ export function isBookingPaymentStatus(
   value: string,
 ): value is BookingPaymentStatus {
   return BOOKING_PAYMENT_STATUSES.includes(value as BookingPaymentStatus);
+}
+
+export function isBookingPaymentPayableStatus(
+  value: string,
+): value is BookingPaymentPayableStatus {
+  return BOOKING_PAYMENT_PAYABLE_STATUSES.includes(
+    value as BookingPaymentPayableStatus,
+  );
+}
+
+export function isBookingPaymentRetryableStatus(
+  value: string,
+): value is BookingPaymentRetryableStatus {
+  return BOOKING_PAYMENT_RETRYABLE_STATUSES.includes(
+    value as BookingPaymentRetryableStatus,
+  );
+}
+
+export function isBookingPaymentSettledStatus(
+  value: string,
+): value is BookingPaymentSettledStatus {
+  return BOOKING_PAYMENT_SETTLED_STATUSES.includes(
+    value as BookingPaymentSettledStatus,
+  );
+}
+
+export function isBookingPaymentFailureStatus(
+  value: string,
+): value is BookingPaymentFailureStatus {
+  return BOOKING_PAYMENT_FAILURE_STATUSES.includes(
+    value as BookingPaymentFailureStatus,
+  );
+}
+
+export function isBookingPaymentTerminalStatus(
+  value: string,
+): value is BookingPaymentTerminalStatus {
+  return BOOKING_PAYMENT_TERMINAL_STATUSES.includes(
+    value as BookingPaymentTerminalStatus,
+  );
+}
+
+export function isBookingPaymentRefundableStatus(
+  value: string,
+): value is BookingPaymentRefundableStatus {
+  return BOOKING_PAYMENT_REFUNDABLE_STATUSES.includes(
+    value as BookingPaymentRefundableStatus,
+  );
+}
+
+export function isBookingPaymentConfirmingStatus(
+  value: string,
+): value is BookingPaymentConfirmingStatus {
+  return BOOKING_PAYMENT_CONFIRMING_STATUSES.includes(
+    value as BookingPaymentConfirmingStatus,
+  );
 }
 
 export function isBookingSource(value: string): value is BookingSource {

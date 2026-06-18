@@ -17,8 +17,12 @@
 
 import {
   NODE_ENV_VALUES,
+  PAYMENT_MODE_VALUES,
+  PAYMENT_PROVIDER_VALUES,
   type EnvironmentVariableName,
   type NodeEnvironment,
+  type PaymentMode,
+  type PaymentProvider,
   type RawEnvironment,
   type ValidatedEnvironment,
 } from './environment.contract';
@@ -42,12 +46,22 @@ const DEFAULT_AUTH_GUEST_SESSION_TTL_HOURS = 24;
 const DEFAULT_AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR = 20;
 const DEFAULT_AUTH_GUEST_REQUIRE_CAPTCHA = false;
 const DEFAULT_AUTH_GUEST_CLEANUP_ENABLED = true;
+const DEFAULT_PAYMENT_PROVIDER: PaymentProvider = 'mock';
+const DEFAULT_PAYMENT_MODE: PaymentMode = 'sandbox';
+const DEFAULT_PAYMENT_DEFAULT_CURRENCY = 'KWD';
+const DEFAULT_PAYMENT_PUBLIC_BASE_URL = 'http://localhost:4000';
+const DEFAULT_PAYMENT_FRONTEND_SUCCESS_URL =
+  'http://localhost:3000/payment/success';
+const DEFAULT_PAYMENT_FRONTEND_FAILURE_URL =
+  'http://localhost:3000/payment/failed';
 
 const MIN_AUTH_ACCESS_TOKEN_HASH_PEPPER_LENGTH = 32;
 const MIN_AUTH_AVATAR_MAX_SIZE_BYTES = 1024;
 const MAX_AUTH_AVATAR_MAX_SIZE_BYTES = 10_485_760;
 
 const NODE_ENV_VALUE_SET = new Set<string>(NODE_ENV_VALUES);
+const PAYMENT_PROVIDER_VALUE_SET = new Set<string>(PAYMENT_PROVIDER_VALUES);
+const PAYMENT_MODE_VALUE_SET = new Set<string>(PAYMENT_MODE_VALUES);
 
 function readOptionalString(
   environment: EnvironmentInput,
@@ -90,6 +104,53 @@ function parseNodeEnvironment(
   errors.push(`NODE_ENV must be one of: ${NODE_ENV_VALUES.join(', ')}.`);
 
   return DEFAULT_NODE_ENV;
+}
+function parsePaymentProvider(
+  value: string,
+  errors: string[],
+): PaymentProvider {
+  if (PAYMENT_PROVIDER_VALUE_SET.has(value)) {
+    return value as PaymentProvider;
+  }
+
+  errors.push(
+    `PAYMENT_PROVIDER must be one of: ${PAYMENT_PROVIDER_VALUES.join(', ')}.`,
+  );
+
+  return DEFAULT_PAYMENT_PROVIDER;
+}
+
+function parsePaymentMode(value: string, errors: string[]): PaymentMode {
+  if (PAYMENT_MODE_VALUE_SET.has(value)) {
+    return value as PaymentMode;
+  }
+
+  errors.push(
+    `PAYMENT_MODE must be one of: ${PAYMENT_MODE_VALUES.join(', ')}.`,
+  );
+
+  return DEFAULT_PAYMENT_MODE;
+}
+
+function validatePaymentDefaultCurrency(
+  value: string,
+  errors: string[],
+): string {
+  const normalizedValue = value.trim().toUpperCase();
+
+  if (!/^[A-Z]{3}$/u.test(normalizedValue)) {
+    errors.push('PAYMENT_DEFAULT_CURRENCY must be a 3-letter currency code.');
+    return DEFAULT_PAYMENT_DEFAULT_CURRENCY;
+  }
+
+  if (normalizedValue !== 'KWD') {
+    errors.push(
+      'PAYMENT_DEFAULT_CURRENCY must be KWD for the current payment module.',
+    );
+    return DEFAULT_PAYMENT_DEFAULT_CURRENCY;
+  }
+
+  return normalizedValue;
 }
 
 function parsePort(value: string, errors: string[]): number {
@@ -494,6 +555,95 @@ export function validateEnvironment(
     errors,
   );
 
+  const paymentProvider = parsePaymentProvider(
+    readOptionalString(environment, 'PAYMENT_PROVIDER') ??
+      DEFAULT_PAYMENT_PROVIDER,
+    errors,
+  );
+
+  const paymentMode = parsePaymentMode(
+    readOptionalString(environment, 'PAYMENT_MODE') ?? DEFAULT_PAYMENT_MODE,
+    errors,
+  );
+
+  const paymentDefaultCurrency = validatePaymentDefaultCurrency(
+    readOptionalString(environment, 'PAYMENT_DEFAULT_CURRENCY') ??
+      DEFAULT_PAYMENT_DEFAULT_CURRENCY,
+    errors,
+  );
+
+  const paymentPublicBaseUrl = validateHttpUrl(
+    readOptionalString(environment, 'PAYMENT_PUBLIC_BASE_URL') ??
+      DEFAULT_PAYMENT_PUBLIC_BASE_URL,
+    'PAYMENT_PUBLIC_BASE_URL',
+    errors,
+  );
+
+  const paymentFrontendSuccessUrl = validateHttpUrl(
+    readOptionalString(environment, 'PAYMENT_FRONTEND_SUCCESS_URL') ??
+      DEFAULT_PAYMENT_FRONTEND_SUCCESS_URL,
+    'PAYMENT_FRONTEND_SUCCESS_URL',
+    errors,
+  );
+
+  const paymentFrontendFailureUrl = validateHttpUrl(
+    readOptionalString(environment, 'PAYMENT_FRONTEND_FAILURE_URL') ??
+      DEFAULT_PAYMENT_FRONTEND_FAILURE_URL,
+    'PAYMENT_FRONTEND_FAILURE_URL',
+    errors,
+  );
+
+  const knetMerchantId =
+    readOptionalString(environment, 'KNET_MERCHANT_ID') ?? '';
+  const knetSecretKey =
+    readOptionalString(environment, 'KNET_SECRET_KEY') ?? '';
+  const knetWebhookSecret =
+    readOptionalString(environment, 'KNET_WEBHOOK_SECRET') ?? '';
+  const knetApiBaseUrl =
+    readOptionalString(environment, 'KNET_API_BASE_URL') ?? '';
+  const knetSandboxApiBaseUrl =
+    readOptionalString(environment, 'KNET_SANDBOX_API_BASE_URL') ?? '';
+
+  if (knetApiBaseUrl) {
+    validateHttpUrl(knetApiBaseUrl, 'KNET_API_BASE_URL', errors);
+  }
+
+  if (knetSandboxApiBaseUrl) {
+    validateHttpUrl(knetSandboxApiBaseUrl, 'KNET_SANDBOX_API_BASE_URL', errors);
+  }
+
+  if (paymentProvider !== 'mock') {
+    if (!knetMerchantId) {
+      errors.push(
+        'KNET_MERCHANT_ID is required when PAYMENT_PROVIDER is not mock.',
+      );
+    }
+
+    if (!knetSecretKey) {
+      errors.push(
+        'KNET_SECRET_KEY is required when PAYMENT_PROVIDER is not mock.',
+      );
+    }
+
+    if (!knetWebhookSecret) {
+      errors.push(
+        'KNET_WEBHOOK_SECRET is required when PAYMENT_PROVIDER is not mock.',
+      );
+    }
+
+    if (paymentMode === 'sandbox' && !knetSandboxApiBaseUrl) {
+      errors.push(
+        'KNET_SANDBOX_API_BASE_URL is required when PAYMENT_PROVIDER is not mock and PAYMENT_MODE is sandbox.',
+      );
+    }
+
+    if (paymentMode === 'production' && !knetApiBaseUrl) {
+      errors.push(
+        'KNET_API_BASE_URL is required when PAYMENT_PROVIDER is not mock and PAYMENT_MODE is production.',
+      );
+    }
+  }
+
   throwIfEnvironmentInvalid(errors);
 
   return {
@@ -533,6 +683,19 @@ export function validateEnvironment(
       guestMaxSessionsPerIpPerHour,
       guestRequireCaptcha,
       guestCleanupEnabled,
+    },
+    payment: {
+      provider: paymentProvider,
+      mode: paymentMode,
+      defaultCurrency: paymentDefaultCurrency,
+      publicBaseUrl: paymentPublicBaseUrl,
+      frontendSuccessUrl: paymentFrontendSuccessUrl,
+      frontendFailureUrl: paymentFrontendFailureUrl,
+      knetMerchantId,
+      knetSecretKey,
+      knetWebhookSecret,
+      knetApiBaseUrl,
+      knetSandboxApiBaseUrl,
     },
   };
 }

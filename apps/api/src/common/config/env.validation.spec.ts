@@ -74,6 +74,19 @@ describe('validateEnvironment', () => {
         guestRequireCaptcha: false,
         guestCleanupEnabled: true,
       },
+      payment: {
+        provider: 'mock',
+        mode: 'sandbox',
+        defaultCurrency: 'KWD',
+        publicBaseUrl: 'http://localhost:4000',
+        frontendSuccessUrl: 'http://localhost:3000/payment/success',
+        frontendFailureUrl: 'http://localhost:3000/payment/failed',
+        knetMerchantId: '',
+        knetSecretKey: '',
+        knetWebhookSecret: '',
+        knetApiBaseUrl: '',
+        knetSandboxApiBaseUrl: '',
+      },
     });
   });
 
@@ -107,6 +120,113 @@ describe('validateEnvironment', () => {
 
     expect(result.auth.guestRequireCaptcha).toBe(true);
     expect(result.auth.guestCleanupEnabled).toBe(false);
+  });
+
+  it('uses safe Payment defaults for local mock development', () => {
+    const result = validateEnvironment(createValidEnvironment());
+
+    expect(result.payment).toEqual({
+      provider: 'mock',
+      mode: 'sandbox',
+      defaultCurrency: 'KWD',
+      publicBaseUrl: 'http://localhost:4000',
+      frontendSuccessUrl: 'http://localhost:3000/payment/success',
+      frontendFailureUrl: 'http://localhost:3000/payment/failed',
+      knetMerchantId: '',
+      knetSecretKey: '',
+      knetWebhookSecret: '',
+      knetApiBaseUrl: '',
+      knetSandboxApiBaseUrl: '',
+    });
+  });
+
+  it('parses explicit mock Payment configuration', () => {
+    const result = validateEnvironment(
+      createValidEnvironment({
+        PAYMENT_PROVIDER: 'mock',
+        PAYMENT_MODE: 'sandbox',
+        PAYMENT_DEFAULT_CURRENCY: 'kwd',
+        PAYMENT_PUBLIC_BASE_URL: 'https://api.lafam.test',
+        PAYMENT_FRONTEND_SUCCESS_URL: 'https://lafam.test/payment/success',
+        PAYMENT_FRONTEND_FAILURE_URL: 'https://lafam.test/payment/failed',
+      }),
+    );
+
+    expect(result.payment).toEqual({
+      provider: 'mock',
+      mode: 'sandbox',
+      defaultCurrency: 'KWD',
+      publicBaseUrl: 'https://api.lafam.test',
+      frontendSuccessUrl: 'https://lafam.test/payment/success',
+      frontendFailureUrl: 'https://lafam.test/payment/failed',
+      knetMerchantId: '',
+      knetSecretKey: '',
+      knetWebhookSecret: '',
+      knetApiBaseUrl: '',
+      knetSandboxApiBaseUrl: '',
+    });
+  });
+
+  it('accepts non-mock sandbox Payment provider when KNET sandbox credentials are configured', () => {
+    const result = validateEnvironment(
+      createValidEnvironment({
+        PAYMENT_PROVIDER: 'knet',
+        PAYMENT_MODE: 'sandbox',
+        PAYMENT_DEFAULT_CURRENCY: 'KWD',
+        PAYMENT_PUBLIC_BASE_URL: 'https://api.lafam.test',
+        PAYMENT_FRONTEND_SUCCESS_URL: 'https://lafam.test/payment/success',
+        PAYMENT_FRONTEND_FAILURE_URL: 'https://lafam.test/payment/failed',
+        KNET_MERCHANT_ID: 'sandbox-merchant',
+        KNET_SECRET_KEY: 'sandbox-secret',
+        KNET_WEBHOOK_SECRET: 'sandbox-webhook-secret',
+        KNET_SANDBOX_API_BASE_URL: 'https://sandbox-payments.lafam.test',
+      }),
+    );
+
+    expect(result.payment).toEqual({
+      provider: 'knet',
+      mode: 'sandbox',
+      defaultCurrency: 'KWD',
+      publicBaseUrl: 'https://api.lafam.test',
+      frontendSuccessUrl: 'https://lafam.test/payment/success',
+      frontendFailureUrl: 'https://lafam.test/payment/failed',
+      knetMerchantId: 'sandbox-merchant',
+      knetSecretKey: 'sandbox-secret',
+      knetWebhookSecret: 'sandbox-webhook-secret',
+      knetApiBaseUrl: '',
+      knetSandboxApiBaseUrl: 'https://sandbox-payments.lafam.test',
+    });
+  });
+
+  it('accepts non-mock production Payment provider when KNET production credentials are configured', () => {
+    const result = validateEnvironment(
+      createValidEnvironment({
+        PAYMENT_PROVIDER: 'tap',
+        PAYMENT_MODE: 'production',
+        PAYMENT_DEFAULT_CURRENCY: 'KWD',
+        PAYMENT_PUBLIC_BASE_URL: 'https://api.lafam.com',
+        PAYMENT_FRONTEND_SUCCESS_URL: 'https://lafam.com/payment/success',
+        PAYMENT_FRONTEND_FAILURE_URL: 'https://lafam.com/payment/failed',
+        KNET_MERCHANT_ID: 'production-merchant',
+        KNET_SECRET_KEY: 'production-secret',
+        KNET_WEBHOOK_SECRET: 'production-webhook-secret',
+        KNET_API_BASE_URL: 'https://payments.lafam.com',
+      }),
+    );
+
+    expect(result.payment).toEqual({
+      provider: 'tap',
+      mode: 'production',
+      defaultCurrency: 'KWD',
+      publicBaseUrl: 'https://api.lafam.com',
+      frontendSuccessUrl: 'https://lafam.com/payment/success',
+      frontendFailureUrl: 'https://lafam.com/payment/failed',
+      knetMerchantId: 'production-merchant',
+      knetSecretKey: 'production-secret',
+      knetWebhookSecret: 'production-webhook-secret',
+      knetApiBaseUrl: 'https://payments.lafam.com',
+      knetSandboxApiBaseUrl: '',
+    });
   });
 
   it('rejects invalid port values', () => {
@@ -221,6 +341,128 @@ describe('validateEnvironment', () => {
       ),
     ).toThrow(
       'AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR must be an integer between 1 and 1000.',
+    );
+  });
+
+  it('rejects invalid Payment provider values', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          PAYMENT_PROVIDER: 'stripe',
+        }),
+      ),
+    ).toThrow(
+      'PAYMENT_PROVIDER must be one of: mock, knet, tap, myfatoorah, checkout.',
+    );
+  });
+
+  it('rejects invalid Payment mode values', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          PAYMENT_MODE: 'live',
+        }),
+      ),
+    ).toThrow('PAYMENT_MODE must be one of: sandbox, production.');
+  });
+
+  it('rejects invalid Payment default currency format', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          PAYMENT_DEFAULT_CURRENCY: '123',
+        }),
+      ),
+    ).toThrow('PAYMENT_DEFAULT_CURRENCY must be a 3-letter currency code.');
+  });
+
+  it('rejects non-KWD Payment default currency', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          PAYMENT_DEFAULT_CURRENCY: 'USD',
+        }),
+      ),
+    ).toThrow(
+      'PAYMENT_DEFAULT_CURRENCY must be KWD for the current payment module.',
+    );
+  });
+
+  it('rejects missing KNET merchant id for non-mock Payment provider', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          PAYMENT_PROVIDER: 'knet',
+          PAYMENT_MODE: 'sandbox',
+          KNET_SECRET_KEY: 'sandbox-secret',
+          KNET_WEBHOOK_SECRET: 'sandbox-webhook-secret',
+          KNET_SANDBOX_API_BASE_URL: 'https://sandbox-payments.lafam.test',
+        }),
+      ),
+    ).toThrow(
+      'KNET_MERCHANT_ID is required when PAYMENT_PROVIDER is not mock.',
+    );
+  });
+
+  it('rejects missing KNET secret key for non-mock Payment provider', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          PAYMENT_PROVIDER: 'knet',
+          PAYMENT_MODE: 'sandbox',
+          KNET_MERCHANT_ID: 'sandbox-merchant',
+          KNET_WEBHOOK_SECRET: 'sandbox-webhook-secret',
+          KNET_SANDBOX_API_BASE_URL: 'https://sandbox-payments.lafam.test',
+        }),
+      ),
+    ).toThrow('KNET_SECRET_KEY is required when PAYMENT_PROVIDER is not mock.');
+  });
+
+  it('rejects missing KNET webhook secret for non-mock Payment provider', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          PAYMENT_PROVIDER: 'knet',
+          PAYMENT_MODE: 'sandbox',
+          KNET_MERCHANT_ID: 'sandbox-merchant',
+          KNET_SECRET_KEY: 'sandbox-secret',
+          KNET_SANDBOX_API_BASE_URL: 'https://sandbox-payments.lafam.test',
+        }),
+      ),
+    ).toThrow(
+      'KNET_WEBHOOK_SECRET is required when PAYMENT_PROVIDER is not mock.',
+    );
+  });
+
+  it('rejects missing KNET sandbox API base URL for sandbox non-mock Payment provider', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          PAYMENT_PROVIDER: 'knet',
+          PAYMENT_MODE: 'sandbox',
+          KNET_MERCHANT_ID: 'sandbox-merchant',
+          KNET_SECRET_KEY: 'sandbox-secret',
+          KNET_WEBHOOK_SECRET: 'sandbox-webhook-secret',
+        }),
+      ),
+    ).toThrow(
+      'KNET_SANDBOX_API_BASE_URL is required when PAYMENT_PROVIDER is not mock and PAYMENT_MODE is sandbox.',
+    );
+  });
+
+  it('rejects missing KNET production API base URL for production non-mock Payment provider', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          PAYMENT_PROVIDER: 'knet',
+          PAYMENT_MODE: 'production',
+          KNET_MERCHANT_ID: 'production-merchant',
+          KNET_SECRET_KEY: 'production-secret',
+          KNET_WEBHOOK_SECRET: 'production-webhook-secret',
+        }),
+      ),
+    ).toThrow(
+      'KNET_API_BASE_URL is required when PAYMENT_PROVIDER is not mock and PAYMENT_MODE is production.',
     );
   });
 });

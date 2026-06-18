@@ -91,6 +91,8 @@ export class BookingEventService {
       class_id: booking.class_id,
       status: booking.status,
       payment_status: booking.payment_status,
+      payment_required: booking.payment_required,
+      seat_hold_expires_at: booking.seat_hold_expires_at,
     } satisfies BookingCreatedEventPayload & DatabaseJsonObject;
 
     return this.createEvent({

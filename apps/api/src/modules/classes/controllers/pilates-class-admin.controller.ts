@@ -6,12 +6,15 @@
  * - Exposes protected admin Pilates class management endpoints.
  * - Exposes protected admin Pilates schedule management endpoints.
  * - Keeps controller logic thin and delegates business rules to PilatesClassAdminService.
+ * - Accepts backend-owned class/schedule pricing fields through DTO validation.
+ * - Accepts recurring multi-time schedule slots through DTO validation.
  *
  * Important:
  * - AuthGuard resolves the Bearer token and attaches Auth context.
  * - ActiveSessionGuard rejects revoked, expired, deleted, deactivated, and invalid guest sessions.
  * - RolesGuard enforces route-level admin/super-admin access.
  * - PilatesClassAdminService owns class/schedule business validation.
+ * - Controllers must not calculate prices, create payments, or create wallet records.
  * - Controllers must not log raw access tokens, refresh tokens, passwords, OTPs, or token hashes.
  */
 
@@ -31,6 +34,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+
 import { AppError } from '../../../common/errors/app-error';
 import {
   createApiSuccessResponse,

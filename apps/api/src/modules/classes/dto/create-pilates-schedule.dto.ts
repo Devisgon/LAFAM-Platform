@@ -6,6 +6,8 @@
  * - Validates admin request body for creating bookable Pilates class occurrences.
  * - Supports existing single schedule creation.
  * - Supports recurring weekly/monthly schedule generation through the same endpoint.
+ * - Supports backend-owned schedule pricing fields used by the Payment Module.
+ * - Supports optional multi-time recurring schedule slots.
  *
  * Important:
  * - This DTO creates scheduled occurrences, not the class template.
@@ -13,8 +15,9 @@
  * - For recurring mode, start_date, end_date, and recurrence are required.
  * - end_time is not accepted from the client.
  * - Backend calculates end_time from start_time + duration_minutes.
- * - Trainer availability, trainer overlap, recurrence generation limits, and conflict checks
- *   are handled in service/repository/policy logic.
+ * - For recurring schedules, time_slots can be used to create multiple bookable slots per recurrence date.
+ * - Trainer availability, trainer overlap, recurrence generation limits, price resolution,
+ *   and conflict checks are handled in service/repository/policy logic.
  */
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -27,6 +30,7 @@ import {
   IsDefined,
   IsIn,
   IsInt,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
@@ -41,14 +45,19 @@ import {
 } from 'class-validator';
 
 import {
+  PILATES_CLASS_ALLOWED_CURRENCIES,
   PILATES_CLASS_CAPACITY_MAX,
   PILATES_CLASS_CAPACITY_MIN,
   PILATES_CLASS_DATE_PATTERN,
   PILATES_CLASS_DEFAULT_CAPACITY,
+  PILATES_CLASS_DEFAULT_CURRENCY,
   PILATES_CLASS_DEFAULT_DURATION_MINUTES,
+  PILATES_CLASS_DEFAULT_PRICE_AMOUNT,
   PILATES_CLASS_DEFAULT_STUDIO,
   PILATES_CLASS_DURATION_MAX_MINUTES,
   PILATES_CLASS_DURATION_MIN_MINUTES,
+  PILATES_CLASS_PRICE_AMOUNT_MIN,
+  PILATES_CLASS_PRICE_DECIMAL_PLACES,
   PILATES_CLASS_STUDIO_MAX_LENGTH,
   PILATES_CLASS_STUDIO_MIN_LENGTH,
   PILATES_CLASS_TIME_VALUE_PATTERN,
@@ -64,6 +73,8 @@ import {
   PILATES_SCHEDULE_SERIES_FREQUENCIES,
   PILATES_SCHEDULE_SERIES_FREQUENCY_MONTHLY,
   PILATES_SCHEDULE_SERIES_FREQUENCY_WEEKLY,
+  PILATES_SCHEDULE_TIME_SLOT_MAX_COUNT,
+  PILATES_SCHEDULE_TIME_SLOT_MIN_COUNT,
   PILATES_SCHEDULE_WEEKDAY_MAX,
   PILATES_SCHEDULE_WEEKDAY_MIN,
   PILATES_SCHEDULE_WEEKDAYS,
@@ -109,12 +120,42 @@ function integerValue(value: unknown): unknown {
   return Number(trimmedValue);
 }
 
+function decimalValue(value: unknown): unknown {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmedValue = value.trim();
+
+  if (!/^-?\d+(?:\.\d+)?$/u.test(trimmedValue)) {
+    return value;
+  }
+
+  return Number(trimmedValue);
+}
+
 function optionalInteger({ value }: TransformFnParams): unknown {
   if (typeof value === 'undefined' || value === null || value === '') {
     return undefined;
   }
 
   return integerValue(value);
+}
+
+function requiredInteger({ value }: TransformFnParams): unknown {
+  return integerValue(value);
+}
+
+function optionalDecimal({ value }: TransformFnParams): unknown {
+  if (typeof value === 'undefined' || value === null || value === '') {
+    return undefined;
+  }
+
+  return decimalValue(value);
 }
 
 function optionalIntegerArray({ value }: TransformFnParams): unknown {
@@ -153,6 +194,14 @@ function isRecurringSchedule(dto: CreatePilatesScheduleDto): boolean {
 
 function isSingleSchedule(dto: CreatePilatesScheduleDto): boolean {
   return dto.mode !== PILATES_SCHEDULE_CREATION_MODE_RECURRING;
+}
+
+function hasRecurringTimeSlots(dto: CreatePilatesScheduleDto): boolean {
+  return (
+    isRecurringSchedule(dto) &&
+    typeof dto.time_slots !== 'undefined' &&
+    dto.time_slots !== null
+  );
 }
 
 function isWeeklyRecurrence(dto: CreatePilatesScheduleRecurrenceDto): boolean {
@@ -277,6 +326,111 @@ export class CreatePilatesScheduleRecurrenceDto {
   readonly excluded_dates?: string[];
 }
 
+export class CreatePilatesScheduleTimeSlotDto {
+  @ApiPropertyOptional({
+    description:
+      'Studio or room for this recurring time slot. If omitted, the schedule studio is used.',
+    example: PILATES_CLASS_DEFAULT_STUDIO,
+    minLength: PILATES_CLASS_STUDIO_MIN_LENGTH,
+    maxLength: PILATES_CLASS_STUDIO_MAX_LENGTH,
+  })
+  @Transform(optionalTrimmedString)
+  @IsOptional()
+  @IsString({
+    message: 'time_slots.studio must be a string.',
+  })
+  @MinLength(PILATES_CLASS_STUDIO_MIN_LENGTH, {
+    message: `time_slots.studio must be at least ${PILATES_CLASS_STUDIO_MIN_LENGTH} character long.`,
+  })
+  @MaxLength(PILATES_CLASS_STUDIO_MAX_LENGTH, {
+    message: `time_slots.studio must not exceed ${PILATES_CLASS_STUDIO_MAX_LENGTH} characters.`,
+  })
+  readonly studio?: string;
+
+  @ApiProperty({
+    description: 'Time-slot start time in 24-hour HH:mm format.',
+    example: '10:00',
+  })
+  @Transform(requiredTrimmedString)
+  @Matches(PILATES_CLASS_TIME_VALUE_PATTERN, {
+    message: 'time_slots.start_time must use HH:mm 24-hour format.',
+  })
+  readonly start_time!: string;
+
+  @ApiProperty({
+    description:
+      'Time-slot duration in minutes. Backend calculates this slot end_time from start_time + duration_minutes.',
+    example: PILATES_CLASS_DEFAULT_DURATION_MINUTES,
+    minimum: PILATES_CLASS_DURATION_MIN_MINUTES,
+    maximum: PILATES_CLASS_DURATION_MAX_MINUTES,
+  })
+  @Transform(requiredInteger)
+  @IsInt({
+    message: 'time_slots.duration_minutes must be an integer.',
+  })
+  @Min(PILATES_CLASS_DURATION_MIN_MINUTES, {
+    message: `time_slots.duration_minutes must be at least ${PILATES_CLASS_DURATION_MIN_MINUTES}.`,
+  })
+  @Max(PILATES_CLASS_DURATION_MAX_MINUTES, {
+    message: `time_slots.duration_minutes must not exceed ${PILATES_CLASS_DURATION_MAX_MINUTES}.`,
+  })
+  readonly duration_minutes!: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Capacity for this recurring time slot. If omitted, the schedule capacity is used.',
+    example: PILATES_CLASS_DEFAULT_CAPACITY,
+    minimum: PILATES_CLASS_CAPACITY_MIN,
+    maximum: PILATES_CLASS_CAPACITY_MAX,
+  })
+  @Transform(optionalInteger)
+  @IsOptional()
+  @IsInt({
+    message: 'time_slots.capacity must be an integer.',
+  })
+  @Min(PILATES_CLASS_CAPACITY_MIN, {
+    message: `time_slots.capacity must be at least ${PILATES_CLASS_CAPACITY_MIN}.`,
+  })
+  @Max(PILATES_CLASS_CAPACITY_MAX, {
+    message: `time_slots.capacity must not exceed ${PILATES_CLASS_CAPACITY_MAX}.`,
+  })
+  readonly capacity?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Price override for this recurring time slot. If omitted, the schedule or class price is used.',
+    example: PILATES_CLASS_DEFAULT_PRICE_AMOUNT,
+    minimum: PILATES_CLASS_PRICE_AMOUNT_MIN,
+  })
+  @Transform(optionalDecimal)
+  @IsOptional()
+  @IsNumber(
+    {
+      maxDecimalPlaces: PILATES_CLASS_PRICE_DECIMAL_PLACES,
+    },
+    {
+      message: `time_slots.price_amount must be a number with no more than ${PILATES_CLASS_PRICE_DECIMAL_PLACES} decimal places.`,
+    },
+  )
+  @Min(PILATES_CLASS_PRICE_AMOUNT_MIN, {
+    message: `time_slots.price_amount must be at least ${PILATES_CLASS_PRICE_AMOUNT_MIN}.`,
+  })
+  readonly price_amount?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Currency for this recurring time slot. Current Payment Module supports KWD only.',
+    enum: PILATES_CLASS_ALLOWED_CURRENCIES,
+    example: PILATES_CLASS_DEFAULT_CURRENCY,
+  })
+  @Transform(optionalTrimmedString)
+  @IsOptional()
+  @IsIn(PILATES_CLASS_ALLOWED_CURRENCIES, {
+    message: 'time_slots.currency must be KWD.',
+  })
+  readonly currency?: typeof PILATES_CLASS_DEFAULT_CURRENCY;
+}
+
 export class CreatePilatesScheduleDto {
   @ApiPropertyOptional({
     description:
@@ -383,7 +537,8 @@ export class CreatePilatesScheduleDto {
   readonly end_date?: string;
 
   @ApiProperty({
-    description: 'Schedule start time in 24-hour HH:mm format.',
+    description:
+      'Schedule start time in 24-hour HH:mm format. For recurring multi-slot schedules, this remains the series base start time.',
     example: '10:00',
   })
   @Transform(requiredTrimmedString)
@@ -433,6 +588,80 @@ export class CreatePilatesScheduleDto {
     message: `capacity must not exceed ${PILATES_CLASS_CAPACITY_MAX}.`,
   })
   readonly capacity?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Schedule price override. If omitted, service may use the class default price.',
+    example: PILATES_CLASS_DEFAULT_PRICE_AMOUNT,
+    default: PILATES_CLASS_DEFAULT_PRICE_AMOUNT,
+    minimum: PILATES_CLASS_PRICE_AMOUNT_MIN,
+  })
+  @Transform(optionalDecimal)
+  @IsOptional()
+  @IsNumber(
+    {
+      maxDecimalPlaces: PILATES_CLASS_PRICE_DECIMAL_PLACES,
+    },
+    {
+      message: `price_amount must be a number with no more than ${PILATES_CLASS_PRICE_DECIMAL_PLACES} decimal places.`,
+    },
+  )
+  @Min(PILATES_CLASS_PRICE_AMOUNT_MIN, {
+    message: `price_amount must be at least ${PILATES_CLASS_PRICE_AMOUNT_MIN}.`,
+  })
+  readonly price_amount?: number;
+
+  @ApiPropertyOptional({
+    description: 'Schedule currency. Current Payment Module supports KWD only.',
+    enum: PILATES_CLASS_ALLOWED_CURRENCIES,
+    example: PILATES_CLASS_DEFAULT_CURRENCY,
+    default: PILATES_CLASS_DEFAULT_CURRENCY,
+  })
+  @Transform(optionalTrimmedString)
+  @IsOptional()
+  @IsIn(PILATES_CLASS_ALLOWED_CURRENCIES, {
+    message: 'currency must be KWD.',
+  })
+  readonly currency?: typeof PILATES_CLASS_DEFAULT_CURRENCY;
+
+  @ApiPropertyOptional({
+    description:
+      'Recurring schedule time slots. Only used when mode is recurring. Each slot becomes a bookable schedule occurrence for every generated recurrence date.',
+    type: [CreatePilatesScheduleTimeSlotDto],
+    minItems: PILATES_SCHEDULE_TIME_SLOT_MIN_COUNT,
+    maxItems: PILATES_SCHEDULE_TIME_SLOT_MAX_COUNT,
+    example: [
+      {
+        studio: 'Studio A',
+        start_time: '09:00',
+        duration_minutes: 50,
+        capacity: 8,
+        price_amount: 12,
+        currency: 'KWD',
+      },
+      {
+        studio: 'Studio A',
+        start_time: '18:00',
+        duration_minutes: 50,
+        capacity: 8,
+        price_amount: 12,
+        currency: 'KWD',
+      },
+    ],
+  })
+  @ValidateIf(hasRecurringTimeSlots)
+  @IsArray({
+    message: 'time_slots must be an array.',
+  })
+  @ArrayMinSize(PILATES_SCHEDULE_TIME_SLOT_MIN_COUNT, {
+    message: `time_slots must include at least ${PILATES_SCHEDULE_TIME_SLOT_MIN_COUNT} time slot.`,
+  })
+  @ArrayMaxSize(PILATES_SCHEDULE_TIME_SLOT_MAX_COUNT, {
+    message: `time_slots must not include more than ${PILATES_SCHEDULE_TIME_SLOT_MAX_COUNT} time slots.`,
+  })
+  @ValidateNested({ each: true })
+  @Type(() => CreatePilatesScheduleTimeSlotDto)
+  readonly time_slots?: CreatePilatesScheduleTimeSlotDto[];
 
   @ApiPropertyOptional({
     description:
