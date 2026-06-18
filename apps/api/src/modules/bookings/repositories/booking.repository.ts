@@ -42,6 +42,7 @@ import {
   BOOKING_DEFAULT_LIMIT,
   BOOKING_HISTORY_ACTION_ADMIN_OVERRIDE,
   BOOKING_MAX_LIMIT,
+  BOOKING_PAYMENT_PAYABLE_STATUSES,
   BOOKING_PAYMENT_STATUS_EXPIRED,
   BOOKING_STATUS_CANCELLED,
   BOOKING_STATUS_COMPLETED,
@@ -52,6 +53,7 @@ import {
   PRIVATE_BOOKING_ADMIN_DEFAULT_LIMIT,
   PRIVATE_BOOKING_ADMIN_MAX_LIMIT,
   PRIVATE_BOOKING_DEFAULT_LIMIT,
+  PRIVATE_BOOKING_PAYMENT_PAYABLE_STATUSES,
   PRIVATE_BOOKING_MAX_LIMIT,
   WAITLIST_STATUS_CANCELLED,
   WAITLIST_STATUS_REMOVED,
@@ -71,13 +73,17 @@ import type {
   BookingCustomerListFilters,
   BookingDomainEventPayload,
   BookingDomainEventRecord,
+  BookingHydratedPaymentRow,
   BookingHydratedRow,
+  BookingPriceSnapshot,
   BookingRepositoryAvailabilityLookup,
   BookingRepositoryBookingLookup,
   BookingRepositoryCancelAtomicResult,
   BookingRepositoryCreateAtomicResult,
   BookingRepositoryExpireHoldsResult,
   BookingRepositoryListLookup,
+  BookingRepositoryPayableBookingLookup,
+  BookingRepositoryPaymentStateLookup,
   BookingRepositoryRescheduleAtomicResult,
   BookingRepositoryWaitlistListLookup,
   BookingRepositoryWaitlistLookup,
@@ -97,6 +103,8 @@ import type {
   PrivateBookingRepositoryExpireHoldsResult,
   PrivateBookingRepositoryListLookup,
   PrivateBookingRepositoryLookup,
+  PrivateBookingRepositoryPayableBookingLookup,
+  PrivateBookingRepositoryPaymentStateLookup,
   PrivateBookingRepositoryRescheduleAtomicResult,
   PrivateBookingRescheduleAtomicRpcRow,
   PrivateBookingReschedulePayload,
@@ -127,6 +135,8 @@ const BOOKING_RELATIONS_SELECT = `
     status,
     default_duration_minutes,
     default_capacity,
+    default_price_amount,
+    currency,
     image_path
   ),
   pilates_class_schedules!bookings_schedule_id_fkey (
@@ -139,6 +149,8 @@ const BOOKING_RELATIONS_SELECT = `
     end_time,
     duration_minutes,
     capacity,
+    price_amount,
+    currency,
     status,
     cancellation_reason,
     cancelled_at,
@@ -160,6 +172,30 @@ const BOOKING_RELATIONS_SELECT = `
       is_guest,
       avatar_path
     )
+  ),
+  payments!payments_booking_id_fkey (
+    id,
+    payment_number,
+    receipt_number,
+    booking_id,
+    private_booking_id,
+    amount,
+    discount_amount,
+    final_amount,
+    currency,
+    payment_method,
+    payment_provider,
+    status,
+    redirect_url,
+    paid_at,
+    failed_at,
+    cancelled_at,
+    expired_at,
+    refunded_at,
+    refunded_amount,
+    expires_at,
+    created_at,
+    updated_at
   )
 `;
 
@@ -183,6 +219,8 @@ const WAITLIST_RELATIONS_SELECT = `
     status,
     default_duration_minutes,
     default_capacity,
+    default_price_amount,
+    currency,
     image_path
   ),
   pilates_class_schedules!booking_waitlist_schedule_id_fkey (
@@ -195,6 +233,8 @@ const WAITLIST_RELATIONS_SELECT = `
     end_time,
     duration_minutes,
     capacity,
+    price_amount,
+    currency,
     status,
     cancellation_reason,
     cancelled_at,
@@ -230,6 +270,30 @@ const PRIVATE_BOOKING_RELATIONS_SELECT = `
       is_guest,
       avatar_path
     )
+  ),
+  payments!payments_private_booking_id_fkey (
+    id,
+    payment_number,
+    receipt_number,
+    booking_id,
+    private_booking_id,
+    amount,
+    discount_amount,
+    final_amount,
+    currency,
+    payment_method,
+    payment_provider,
+    status,
+    redirect_url,
+    paid_at,
+    failed_at,
+    cancelled_at,
+    expired_at,
+    refunded_at,
+    refunded_amount,
+    expires_at,
+    created_at,
+    updated_at
   )
 `;
 
@@ -243,6 +307,8 @@ const CALENDAR_SCHEDULE_RELATIONS_SELECT = `
     status,
     default_duration_minutes,
     default_capacity,
+    default_price_amount,
+    currency,
     image_path
   ),
   staff_profiles!pilates_class_schedules_trainer_staff_profile_id_fkey (
@@ -654,6 +720,84 @@ function getRequiredPrivateRpcRow<TRow>(
   }
 
   return row;
+}
+
+function getLatestHydratedPayment(
+  payments: readonly BookingHydratedPaymentRow[] | null | undefined,
+): BookingHydratedPaymentRow | null {
+  if (!payments || payments.length === 0) {
+    return null;
+  }
+
+  return (
+    [...payments].sort((left, right) =>
+      right.created_at.localeCompare(left.created_at),
+    )[0] ?? null
+  );
+}
+
+function resolveClassBookingPriceSnapshot(
+  booking: BookingHydratedRow | null,
+): BookingPriceSnapshot | null {
+  if (!booking) {
+    return null;
+  }
+
+  const schedule = booking.pilates_class_schedules ?? null;
+  const pilatesClass = booking.pilates_classes ?? null;
+
+  if (
+    typeof schedule?.price_amount === 'number' &&
+    schedule.price_amount >= 0
+  ) {
+    return {
+      amount: schedule.price_amount,
+      currency: schedule.currency ?? pilatesClass?.currency ?? null,
+      source: 'schedule_override',
+    };
+  }
+
+  if (
+    typeof pilatesClass?.default_price_amount === 'number' &&
+    pilatesClass.default_price_amount >= 0
+  ) {
+    return {
+      amount: pilatesClass.default_price_amount,
+      currency: pilatesClass.currency ?? schedule?.currency ?? null,
+      source: 'class_default',
+    };
+  }
+
+  return {
+    amount: null,
+    currency: schedule?.currency ?? pilatesClass?.currency ?? null,
+    source: 'not_configured',
+  };
+}
+
+function resolvePrivateBookingPriceSnapshot(
+  privateBooking: PrivateBookingHydratedRow | null,
+): BookingPriceSnapshot | null {
+  if (!privateBooking) {
+    return null;
+  }
+
+  if (
+    typeof privateBooking.price_amount === 'number' &&
+    privateBooking.price_amount >= 0
+  ) {
+    return {
+      amount: privateBooking.price_amount,
+      currency: privateBooking.currency ?? null,
+      source: 'private_booking',
+    };
+  }
+
+  return {
+    amount: null,
+    currency: privateBooking.currency ?? null,
+    source: 'not_configured',
+  };
 }
 
 function resolveBookingSort(sortBy: BookingSortField): BookingSortResolution {
@@ -1145,6 +1289,100 @@ export class BookingRepository {
       history: privateBooking
         ? await this.listPrivateBookingHistory(privateBooking.id)
         : [],
+    };
+  }
+
+  async findPayableBookingForUser(
+    input: FindBookingByIdForUserInput,
+  ): Promise<BookingRepositoryPayableBookingLookup> {
+    const lookup = await this.findBookingByIdForUser(input);
+    const booking = lookup.booking;
+
+    if (!booking) {
+      return {
+        booking: null,
+        price: null,
+        latest_payment: null,
+      };
+    }
+
+    if (
+      !BOOKING_PAYMENT_PAYABLE_STATUSES.includes(
+        booking.payment_status as (typeof BOOKING_PAYMENT_PAYABLE_STATUSES)[number],
+      )
+    ) {
+      return {
+        booking,
+        price: resolveClassBookingPriceSnapshot(booking),
+        latest_payment: getLatestHydratedPayment(booking.payments),
+      };
+    }
+
+    return {
+      booking,
+      price: resolveClassBookingPriceSnapshot(booking),
+      latest_payment: getLatestHydratedPayment(booking.payments),
+    };
+  }
+
+  async findPrivatePayableBookingForUser(
+    input: FindPrivateBookingByIdForUserInput,
+  ): Promise<PrivateBookingRepositoryPayableBookingLookup> {
+    const lookup = await this.findPrivateBookingByIdForUser(input);
+    const privateBooking = lookup.private_booking;
+
+    if (!privateBooking) {
+      return {
+        private_booking: null,
+        price: null,
+        latest_payment: null,
+      };
+    }
+
+    if (
+      !PRIVATE_BOOKING_PAYMENT_PAYABLE_STATUSES.includes(
+        privateBooking.payment_status as (typeof PRIVATE_BOOKING_PAYMENT_PAYABLE_STATUSES)[number],
+      )
+    ) {
+      return {
+        private_booking: privateBooking,
+        price: resolvePrivateBookingPriceSnapshot(privateBooking),
+        latest_payment: getLatestHydratedPayment(privateBooking.payments),
+      };
+    }
+
+    return {
+      private_booking: privateBooking,
+      price: resolvePrivateBookingPriceSnapshot(privateBooking),
+      latest_payment: getLatestHydratedPayment(privateBooking.payments),
+    };
+  }
+
+  async findBookingPaymentState(
+    input: FindBookingByIdInput,
+  ): Promise<BookingRepositoryPaymentStateLookup> {
+    const lookup = await this.findBookingById(input);
+    const booking = lookup.booking;
+
+    return {
+      booking,
+      latest_payment: booking
+        ? getLatestHydratedPayment(booking.payments)
+        : null,
+    };
+  }
+
+  async findPrivateBookingPaymentState(
+    input: FindPrivateBookingByIdInput,
+  ): Promise<PrivateBookingRepositoryPaymentStateLookup> {
+    const lookup = await this.findPrivateBookingById(input);
+    const privateBooking = lookup.private_booking;
+
+    return {
+      private_booking: privateBooking,
+      latest_payment: privateBooking
+        ? getLatestHydratedPayment(privateBooking.payments)
+        : null,
     };
   }
 

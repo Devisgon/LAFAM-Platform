@@ -23,7 +23,7 @@ export function LoadingState({
   }
 
   return (
-    <div className={cn("flex items-center gap-3 text-text-secondary", className)} aria-busy="true" role="status" {...props}>
+    <div className={cn("flex items-center gap-3 text-txt-secondary", className)} aria-busy="true" role="status" {...props}>
       <span className="size-5 animate-spin rounded-full border-2 border-background-secondary border-t-primary" aria-hidden="true" />
       <span>{label}</span>
     </div>

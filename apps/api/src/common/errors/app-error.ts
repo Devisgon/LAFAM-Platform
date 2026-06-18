@@ -100,6 +100,8 @@ export type AppErrorCode =
   | 'PILATES_SCHEDULE_ALREADY_DELETED'
   | 'PILATES_SCHEDULE_ALREADY_COMPLETED'
   | 'PILATES_SCHEDULE_EMPTY_UPDATE'
+  | 'PILATES_SCHEDULE_TIME_SLOT_INVALID'
+  | 'PILATES_SCHEDULE_DUPLICATE_TIME_SLOT'
   | 'RECURRENCE_RANGE_TOO_LARGE'
   | 'RECURRENCE_GENERATED_TOO_MANY_OCCURRENCES'
   | 'RECURRENCE_CONFLICT_FOUND'
@@ -137,7 +139,29 @@ export type AppErrorCode =
   | 'PRIVATE_BOOKING_CONFLICT'
   | 'PRIVATE_BOOKING_INVALID_STATUS'
   | 'PRIVATE_BOOKING_DATABASE_TRANSACTION_FAILED'
-  | 'CALENDAR_RANGE_TOO_LARGE';
+  | 'CALENDAR_RANGE_TOO_LARGE'
+  | 'PAYMENT_NOT_FOUND'
+  | 'PAYMENT_ACCESS_DENIED'
+  | 'PAYMENT_TARGET_INVALID'
+  | 'PAYMENT_METHOD_UNSUPPORTED'
+  | 'PAYMENT_AMOUNT_INVALID'
+  | 'PAYMENT_CURRENCY_UNSUPPORTED'
+  | 'PAYMENT_ALREADY_PAID'
+  | 'PAYMENT_NOT_PAYABLE'
+  | 'PAYMENT_EXPIRED'
+  | 'PAYMENT_PROVIDER_UNAVAILABLE'
+  | 'PAYMENT_PROVIDER_VERIFICATION_FAILED'
+  | 'PAYMENT_WEBHOOK_INVALID'
+  | 'PAYMENT_DATABASE_TRANSACTION_FAILED'
+  | 'WALLET_NOT_FOUND'
+  | 'WALLET_ACCESS_DENIED'
+  | 'WALLET_NOT_ACTIVE'
+  | 'WALLET_INSUFFICIENT_BALANCE'
+  | 'WALLET_TRANSACTION_FAILED'
+  | 'PROMO_CODE_INVALID'
+  | 'PROMO_CODE_EXPIRED'
+  | 'REFUND_NOT_ALLOWED'
+  | 'REFUND_FAILED';
 
 export type AppErrorDetails = Record<string, unknown>;
 
@@ -980,6 +1004,27 @@ export class AppError extends Error {
       publicMessage,
     );
   }
+  static pilatesScheduleTimeSlotInvalid(
+    publicMessage = 'One or more Pilates schedule time slots are invalid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PILATES_SCHEDULE_TIME_SLOT_INVALID',
+      publicMessage,
+      details,
+    );
+  }
+
+  static pilatesScheduleDuplicateTimeSlot(
+    publicMessage = 'Duplicate Pilates schedule time slots are not allowed.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PILATES_SCHEDULE_DUPLICATE_TIME_SLOT',
+      publicMessage,
+      details,
+    );
+  }
 
   static recurrenceRangeTooLarge(
     publicMessage = 'The recurrence date range is too large.',
@@ -1392,6 +1437,238 @@ export class AppError extends Error {
       publicMessage,
       details,
     );
+  }
+  static paymentNotFound(
+    publicMessage = 'The requested payment was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'PAYMENT_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static paymentAccessDenied(
+    publicMessage = 'You are not allowed to access this payment.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createAuthorizationError(
+      'PAYMENT_ACCESS_DENIED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static paymentTargetInvalid(
+    publicMessage = 'The payment target is invalid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PAYMENT_TARGET_INVALID',
+      publicMessage,
+      details,
+    );
+  }
+
+  static paymentMethodUnsupported(
+    publicMessage = 'The selected payment method is not supported.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PAYMENT_METHOD_UNSUPPORTED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static paymentAmountInvalid(
+    publicMessage = 'The payment amount is invalid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PAYMENT_AMOUNT_INVALID',
+      publicMessage,
+      details,
+    );
+  }
+
+  static paymentCurrencyUnsupported(
+    publicMessage = 'The selected payment currency is not supported.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PAYMENT_CURRENCY_UNSUPPORTED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static paymentAlreadyPaid(
+    publicMessage = 'This payment has already been paid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PAYMENT_ALREADY_PAID',
+      publicMessage,
+      details,
+    );
+  }
+
+  static paymentNotPayable(
+    publicMessage = 'This payment target is not payable.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PAYMENT_NOT_PAYABLE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static paymentExpired(
+    publicMessage = 'This payment has expired.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PAYMENT_EXPIRED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static paymentProviderUnavailable(cause?: unknown): AppError {
+    return AppError.createExternalProviderError(
+      'PAYMENT_PROVIDER_UNAVAILABLE',
+      'The payment provider is temporarily unavailable. Please try again later.',
+      cause,
+    );
+  }
+
+  static paymentProviderVerificationFailed(cause?: unknown): AppError {
+    return AppError.createExternalProviderError(
+      'PAYMENT_PROVIDER_VERIFICATION_FAILED',
+      'Payment verification failed. Please try again later.',
+      cause,
+    );
+  }
+
+  static paymentWebhookInvalid(
+    publicMessage = 'The payment webhook payload is invalid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PAYMENT_WEBHOOK_INVALID',
+      publicMessage,
+      details,
+    );
+  }
+
+  static paymentDatabaseTransactionFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'PAYMENT_DATABASE_TRANSACTION_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage: 'Payment transaction failed. Please try again later.',
+      cause,
+    });
+  }
+
+  static walletNotFound(
+    publicMessage = 'The requested wallet was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'WALLET_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static walletAccessDenied(
+    publicMessage = 'You are not allowed to access this wallet.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createAuthorizationError(
+      'WALLET_ACCESS_DENIED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static walletNotActive(
+    publicMessage = 'This wallet is not active.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'WALLET_NOT_ACTIVE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static walletInsufficientBalance(
+    publicMessage = 'The wallet balance is insufficient for this payment.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'WALLET_INSUFFICIENT_BALANCE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static walletTransactionFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'WALLET_TRANSACTION_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage: 'Wallet transaction failed. Please try again later.',
+      cause,
+    });
+  }
+
+  static promoCodeInvalid(
+    publicMessage = 'The promo code is invalid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PROMO_CODE_INVALID',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeExpired(
+    publicMessage = 'The promo code has expired.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PROMO_CODE_EXPIRED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static refundNotAllowed(
+    publicMessage = 'This payment cannot be refunded.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'REFUND_NOT_ALLOWED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static refundFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'REFUND_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage: 'Refund failed. Please try again later.',
+      cause,
+    });
   }
 }
 

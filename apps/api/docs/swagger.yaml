@@ -3,9 +3,14 @@ info:
   title: LAFAM API
   version: 0.1.0
   description:
-    'LAFAM backend API contract for the single-tenant Pilates and ladies salon booking platform. The contract currently
-    exposes Core foundation endpoints and the approved Auth module endpoints. Auth includes public customer sign-up/login/password
-    reset, guest sessions, authenticated session/profile management, admin user management, and frontend auth-context bootstrapping.
+    'LAFAM backend API contract for the single-tenant Pilates and ladies salon booking platform. The contract exposes
+    Core, Auth, Staff, Pilates Classes, Schedules, Bookings, Payment, Wallet, KNET callback/webhook, and Admin management
+    endpoints.
+
+
+    Payment implementation uses a backend-owned hosted redirect flow for KNET/card, internal wallet debit for wallet payments,
+    server-side price calculation, payment confirmation after provider verification, and wallet ledger tracking. The backend
+    does not collect or store raw card data.
 
 
     **OpenAPI JSON:** [openapi.json](/api/openapi.json)
@@ -14,6 +19,8 @@ info:
 servers:
   - url: http://localhost:4000/api
     description: Local development API server
+  - url: https://lafam-platform-staging.up.railway.app/api
+    description: Staging API server
 tags:
   - name: Core
     description: API identity and health-check endpoints
@@ -39,6 +46,16 @@ tags:
     description: Protected customer Pilates booking, private trainer booking, availability, and waitlist endpoints
   - name: Bookings - Admin
     description: Protected admin booking, private trainer booking, calendar, override, and waitlist management endpoints
+  - name: Payments - Customer
+    description: Protected customer checkout, payment history, payment detail, transaction, and verification endpoints
+  - name: Payments - Public
+    description: Public KNET/provider callback and webhook endpoints called by hosted payment providers
+  - name: Payments - Admin
+    description: Protected admin payment listing, detail, transaction, refund, and expiry endpoints
+  - name: Wallet - Customer
+    description: Protected customer wallet balance, wallet transaction history, and wallet top-up endpoints
+  - name: Wallet - Admin
+    description: Protected admin wallet listing, wallet detail, wallet ledger, and audited adjustment endpoints
 paths:
   /:
     get:
@@ -1668,8 +1685,27 @@ paths:
             schema:
               $ref: '#/components/schemas/CreatePilatesScheduleRequest'
             examples:
-              single:
-                summary: Create one schedule occurrence
+              singleMultiSlot:
+                summary: Create one date with multiple bookable time slots
+                value:
+                  mode: single
+                  class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
+                  trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
+                  studio: LAFAM Pilates Studio
+                  class_date: '2026-06-22'
+                  price_amount: 15
+                  currency: KWD
+                  time_slots:
+                    - start_time: '09:00'
+                      duration_minutes: 60
+                      capacity: 8
+                      studio: LAFAM Pilates Studio
+                    - start_time: '11:00'
+                      duration_minutes: 60
+                      capacity: 8
+                      studio: LAFAM Pilates Studio
+              singleBackwardCompatible:
+                summary: Create one schedule occurrence with legacy single-time shape
                 value:
                   mode: single
                   class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
@@ -1679,8 +1715,10 @@ paths:
                   start_time: '10:00'
                   duration_minutes: 60
                   capacity: 8
-              recurringWeekly:
-                summary: Create weekly recurring schedules
+                  price_amount: 15
+                  currency: KWD
+              recurringWeeklyMultiSlot:
+                summary: Create weekly recurring schedules with multiple time slots
                 value:
                   mode: recurring
                   class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
@@ -1688,9 +1726,17 @@ paths:
                   studio: LAFAM Pilates Studio
                   start_date: '2026-06-22'
                   end_date: '2026-07-22'
-                  start_time: '10:00'
-                  duration_minutes: 60
-                  capacity: 8
+                  price_amount: 15
+                  currency: KWD
+                  time_slots:
+                    - start_time: '09:00'
+                      duration_minutes: 60
+                      capacity: 8
+                      studio: LAFAM Pilates Studio
+                    - start_time: '11:00'
+                      duration_minutes: 60
+                      capacity: 8
+                      studio: LAFAM Pilates Studio
                   recurrence:
                     frequency: weekly
                     days_of_week:
@@ -1699,8 +1745,8 @@ paths:
                       - 5
                     excluded_dates:
                       - '2026-07-01'
-              recurringMonthly:
-                summary: Create monthly recurring schedules
+              recurringMonthlyMultiSlot:
+                summary: Create monthly recurring schedules with multiple time slots
                 value:
                   mode: recurring
                   class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
@@ -1708,9 +1754,15 @@ paths:
                   studio: LAFAM Pilates Studio
                   start_date: '2026-06-22'
                   end_date: '2026-09-22'
-                  start_time: '11:00'
-                  duration_minutes: 60
-                  capacity: 8
+                  price_amount: 15
+                  currency: KWD
+                  time_slots:
+                    - start_time: '09:00'
+                      duration_minutes: 60
+                      capacity: 8
+                    - start_time: '11:00'
+                      duration_minutes: 60
+                      capacity: 8
                   recurrence:
                     frequency: monthly
                     monthly_rule: day_of_month
@@ -3128,7 +3180,992 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /payments/checkout:
+    post:
+      summary: Create customer checkout payment
+      description: Creates a backend-owned payment intent for booking, private trainer booking, or wallet top-up. KNET/card return a hosted redirect URL. Wallet payment uses internal wallet debit and never trusts frontend amount.
+      operationId: paymentCustomerCreateCheckout
+      tags:
+        - Payments - Customer
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCheckoutPaymentRequest'
+            examples:
+              knetBooking:
+                summary: KNET booking payment
+                value:
+                  target_type: booking
+                  booking_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  payment_method: knet
+                  idempotency_key: booking-checkout-001
+              cardPrivateBooking:
+                summary: Card private booking payment
+                value:
+                  target_type: private_booking
+                  private_booking_id: 4fa85f64-5717-4562-b3fc-2c963f66afa7
+                  payment_method: card
+                  idempotency_key: private-checkout-001
+              walletBooking:
+                summary: Wallet booking payment
+                value:
+                  target_type: booking
+                  booking_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  payment_method: wallet
+                  idempotency_key: wallet-booking-001
+      responses:
+        '201':
+          description: Checkout payment created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentCheckoutSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /payments:
+    get:
+      summary: List customer payments
+      description: Returns payments owned by the authenticated customer.
+      operationId: paymentCustomerListPayments
+      tags:
+        - Payments - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: target_type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentTargetType'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentStatus'
+        - name: from_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentSortDirection'
+      responses:
+        '200':
+          description: Customer payments retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentListSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /payments/{paymentId}:
+    get:
+      summary: Get customer payment detail
+      description: Returns one payment owned by the authenticated customer.
+      operationId: paymentCustomerGetPaymentById
+      tags:
+        - Payments - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaymentIdPathParam'
+      responses:
+        '200':
+          description: Payment retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentDetailSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /payments/{paymentId}/transactions:
+    get:
+      summary: List customer payment transactions
+      description: Returns sanitized transaction events for one payment owned by the authenticated customer.
+      operationId: paymentCustomerListPaymentTransactions
+      tags:
+        - Payments - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaymentIdPathParam'
+        - name: transaction_type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentTransactionType'
+        - name: transaction_status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentTransactionStatus'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentTransactionSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentSortDirection'
+      responses:
+        '200':
+          description: Payment transactions retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTransactionListSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /payments/{paymentId}/verify:
+    post:
+      summary: Verify customer payment
+      description: Verifies one customer-owned hosted payment with the configured provider and returns the latest local payment state.
+      operationId: paymentCustomerVerifyPayment
+      tags:
+        - Payments - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaymentIdPathParam'
+      responses:
+        '200':
+          description: Payment verified successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentVerificationSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /payments/callback/knet:
+    get:
+      summary: KNET hosted payment callback
+      description: Browser redirect endpoint used after KNET/hosted payment completion. Callback is not payment truth; backend verifies the payment with the provider and redirects the customer to frontend success/failure URL.
+      operationId: paymentPublicKnetCallback
+      tags:
+        - Payments - Public
+      parameters:
+        - name: payment_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: provider_reference
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+        - name: gateway_payment_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+        - name: gateway_invoice_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+        - name: result
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentCallbackResult'
+      responses:
+        '302':
+          description: Redirects to configured frontend payment success or failure URL.
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /payments/webhooks/knet:
+    post:
+      summary: KNET payment webhook
+      description: Server-to-server provider webhook endpoint. Signature and timestamp validation are enforced when supported by the configured provider.
+      operationId: paymentPublicKnetWebhook
+      tags:
+        - Payments - Public
+      parameters:
+        - name: x-lafam-payment-signature
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Provider webhook signature header.
+        - name: x-lafam-payment-timestamp
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Provider webhook timestamp header.
+        - name: x-lafam-payment-event-id
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Provider webhook event id header used for idempotency.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentWebhookRequest'
+      responses:
+        '200':
+          description: Webhook accepted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentWebhookSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/payments:
+    get:
+      summary: List admin payments
+      description: Returns payments across customers for admin review and reporting.
+      operationId: paymentAdminListPayments
+      tags:
+        - Payments - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: target_type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentTargetType'
+        - name: booking_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: private_booking_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: payment_method
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentMethod'
+        - name: payment_provider
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentProvider'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentStatus'
+        - name: from_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentSortDirection'
+      responses:
+        '200':
+          description: Admin payments retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentListSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/payments/expire-unpaid:
+    post:
+      summary: Expire unpaid payment intents
+      description: Expires unpaid payment intents and pending payment booking holds through backend-controlled logic.
+      operationId: paymentAdminExpireUnpaid
+      tags:
+        - Payments - Admin
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Unpaid payments expired successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentExpireUnpaidSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/payments/{paymentId}:
+    get:
+      summary: Get admin payment detail
+      operationId: paymentAdminGetPaymentById
+      tags:
+        - Payments - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaymentIdPathParam'
+      responses:
+        '200':
+          description: Payment retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentDetailSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/payments/{paymentId}/transactions:
+    get:
+      summary: List admin payment transactions
+      operationId: paymentAdminListPaymentTransactions
+      tags:
+        - Payments - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaymentIdPathParam'
+        - name: transaction_type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentTransactionType'
+        - name: transaction_status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentTransactionStatus'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Payment transactions retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTransactionListSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/payments/{paymentId}/refund:
+    post:
+      summary: Refund admin payment
+      description: Starts a full refund flow for a paid payment. Audit reason is required. Partial refunds are not exposed in this phase.
+      operationId: paymentAdminRefundPayment
+      tags:
+        - Payments - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaymentIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundPaymentRequest'
+      responses:
+        '200':
+          description: Refund processed or queued successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentRefundSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /wallet:
+    get:
+      summary: Get customer wallet
+      operationId: walletCustomerGetWallet
+      tags:
+        - Wallet - Customer
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Wallet retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletAccountSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /wallet/transactions:
+    get:
+      summary: List customer wallet transactions
+      operationId: walletCustomerListTransactions
+      tags:
+        - Wallet - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WalletLedgerEntryTypeQueryParam'
+        - $ref: '#/components/parameters/WalletLedgerEntryStatusQueryParam'
+        - name: from_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/WalletLedgerSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentSortDirection'
+      responses:
+        '200':
+          description: Wallet transactions retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletLedgerListSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /wallet/transactions/{ledgerEntryId}:
+    get:
+      summary: Get customer wallet transaction
+      operationId: walletCustomerGetTransactionById
+      tags:
+        - Wallet - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WalletLedgerEntryIdPathParam'
+      responses:
+        '200':
+          description: Wallet transaction retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletLedgerEntrySuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /wallet/top-up:
+    post:
+      summary: Create customer wallet top-up
+      description: Creates a hosted KNET/card checkout for wallet top-up. Wallet top-up cannot use wallet payment and does not support promo codes.
+      operationId: walletCustomerCreateTopUp
+      tags:
+        - Wallet - Customer
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WalletTopUpRequest'
+      responses:
+        '201':
+          description: Wallet top-up checkout created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletTopUpSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/wallets:
+    get:
+      summary: List admin wallets
+      operationId: walletAdminListWallets
+      tags:
+        - Wallet - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/WalletAccountStatus'
+        - name: from_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/WalletSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentSortDirection'
+      responses:
+        '200':
+          description: Admin wallets retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminWalletListSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/wallets/users/{userId}:
+    get:
+      summary: Get admin wallet by user id
+      operationId: walletAdminGetWalletByUserId
+      tags:
+        - Wallet - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdPathParam'
+      responses:
+        '200':
+          description: Wallet retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletAccountSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/wallets/users/{userId}/transactions:
+    get:
+      summary: List admin wallet transactions by user id
+      operationId: walletAdminListWalletTransactionsByUserId
+      tags:
+        - Wallet - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdPathParam'
+        - name: wallet_account_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/WalletLedgerEntryTypeQueryParam'
+        - $ref: '#/components/parameters/WalletLedgerEntryStatusQueryParam'
+        - name: from_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Wallet transactions retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletLedgerListSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/wallets/users/{userId}/adjust:
+    post:
+      summary: Adjust wallet as admin
+      description: Admin wallet adjustment requires an audit reason. In the current backend, this endpoint routes through WalletService and remains blocked until an atomic wallet adjustment RPC exists.
+      operationId: walletAdminAdjustWalletByUserId
+      tags:
+        - Wallet - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminWalletAdjustmentRequest'
+      responses:
+        '200':
+          description: Wallet adjustment processed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminWalletAdjustmentSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/wallets/{walletAccountId}:
+    get:
+      summary: Get admin wallet by wallet account id
+      operationId: walletAdminGetWalletByWalletAccountId
+      tags:
+        - Wallet - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WalletAccountIdPathParam'
+      responses:
+        '200':
+          description: Wallet retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletAccountSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 components:
+  parameters:
+    PaymentIdPathParam:
+      name: paymentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Payment id.
+
+    WalletAccountIdPathParam:
+      name: walletAccountId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Wallet account id.
+
+    WalletLedgerEntryIdPathParam:
+      name: ledgerEntryId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Wallet ledger entry id.
+
+    UserIdPathParam:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: App user id.
+
+    WalletLedgerEntryTypeQueryParam:
+      name: entry_type
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/WalletLedgerEntryType'
+
+    WalletLedgerEntryStatusQueryParam:
+      name: entry_status
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/WalletLedgerEntryStatus'
   schemas:
     ApiSuccessBase:
       type: object
@@ -5160,6 +6197,8 @@ components:
         - description
         - default_duration_minutes
         - default_capacity
+        - default_price_amount
+        - currency
         - level
         - status
         - image_path
@@ -5191,6 +6230,13 @@ components:
           minimum: 1
           maximum: 100
           example: 8
+        default_price_amount:
+          type: number
+          minimum: 0
+          example: 15
+          description: Default KWD class price used when schedule-level price is not provided.
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
         level:
           $ref: '#/components/schemas/PilatesClassLevel'
         status:
@@ -5240,6 +6286,8 @@ components:
         - description
         - default_duration_minutes
         - default_capacity
+        - default_price_amount
+        - currency
         - level
         - image_url
         - realtime_version
@@ -5264,6 +6312,13 @@ components:
           minimum: 1
           maximum: 100
           example: 8
+        default_price_amount:
+          type: number
+          minimum: 0
+          example: 15
+          description: Default KWD class price used when schedule-level price is not provided.
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
         level:
           $ref: '#/components/schemas/PilatesClassLevel'
         image_url:
@@ -5425,6 +6480,8 @@ components:
         - end_time
         - duration_minutes
         - capacity
+        - price_amount
+        - currency
         - status
         - cancellation_reason
         - created_by_admin_id
@@ -5437,6 +6494,9 @@ components:
         - realtime_version
         - series_id
         - series_occurrence_index
+        - series_time_slot_id
+        - series_date_index
+        - series_slot_index
         - generation_source
         - class
         - trainer
@@ -5475,6 +6535,15 @@ components:
           minimum: 1
           maximum: 100
           example: 8
+        price_amount:
+          type: number
+          nullable: true
+          example: 15
+          description: Schedule-level price override. If null, class default price is used.
+        currency:
+          allOf:
+            - $ref: '#/components/schemas/PaymentCurrency'
+          nullable: true
         status:
           $ref: '#/components/schemas/PilatesScheduleStatus'
         cancellation_reason:
@@ -5527,6 +6596,20 @@ components:
           minimum: 1
           nullable: true
           example: null
+        series_time_slot_id:
+          type: string
+          format: uuid
+          nullable: true
+        series_date_index:
+          type: integer
+          nullable: true
+          minimum: 0
+          example: 0
+        series_slot_index:
+          type: integer
+          nullable: true
+          minimum: 0
+          example: 1
         generation_source:
           $ref: '#/components/schemas/PilatesScheduleGenerationSource'
         class:
@@ -5554,6 +6637,8 @@ components:
         - end_time
         - duration_minutes
         - capacity
+        - price_amount
+        - currency
         - status
         - realtime_version
         - class
@@ -5586,6 +6671,15 @@ components:
           minimum: 1
           maximum: 100
           example: 8
+        price_amount:
+          type: number
+          nullable: true
+          example: 15
+          description: Schedule-level price override. If null, class default price is used.
+        currency:
+          allOf:
+            - $ref: '#/components/schemas/PaymentCurrency'
+          nullable: true
         status:
           $ref: '#/components/schemas/PilatesScheduleStatus'
         realtime_version:
@@ -5631,6 +6725,13 @@ components:
           maximum: 100
           default: 8
           example: 8
+        default_price_amount:
+          type: number
+          minimum: 0
+          example: 15
+          description: Default KWD class price used when schedule-level price is not provided.
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
         level:
           $ref: '#/components/schemas/PilatesClassLevel'
         status:
@@ -5663,6 +6764,13 @@ components:
           maximum: 100
           default: 8
           example: 8
+        default_price_amount:
+          type: number
+          minimum: 0
+          example: 15
+          description: Default KWD class price used when schedule-level price is not provided.
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
         level:
           $ref: '#/components/schemas/PilatesClassLevel'
         status:
@@ -5696,6 +6804,13 @@ components:
           minimum: 1
           maximum: 100
           example: 8
+        default_price_amount:
+          type: number
+          minimum: 0
+          example: 15
+          description: Default KWD class price used when schedule-level price is not provided.
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
         level:
           $ref: '#/components/schemas/PilatesClassLevel'
         status:
@@ -5730,6 +6845,13 @@ components:
           minimum: 1
           maximum: 100
           example: 8
+        default_price_amount:
+          type: number
+          minimum: 0
+          example: 15
+          description: Default KWD class price used when schedule-level price is not provided.
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
         level:
           $ref: '#/components/schemas/PilatesClassLevel'
         status:
@@ -5743,6 +6865,32 @@ components:
           type: string
           format: binary
           description: 'Optional Pilates class replacement cover image. Allowed MIME types: image/jpeg, image/png, image/webp. Max size: 5 MB.'
+    PilatesScheduleTimeSlotInput:
+      type: object
+      required:
+        - start_time
+      properties:
+        start_time:
+          type: string
+          pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
+          example: '09:00'
+        duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 240
+          default: 60
+          example: 60
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 8
+        studio:
+          type: string
+          minLength: 1
+          maxLength: 120
+          nullable: true
+          example: LAFAM Pilates Studio
     CreatePilatesScheduleRequest:
       oneOf:
         - $ref: '#/components/schemas/CreateSinglePilatesScheduleRequest'
@@ -5754,7 +6902,6 @@ components:
         - class_id
         - trainer_staff_profile_id
         - class_date
-        - start_time
       properties:
         mode:
           allOf:
@@ -5781,6 +6928,7 @@ components:
           type: string
           pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
           example: '10:00'
+          description: Backward-compatible single-time field. Use time_slots for multiple slots.
         duration_minutes:
           type: integer
           minimum: 15
@@ -5792,6 +6940,24 @@ components:
           minimum: 1
           maximum: 100
           example: 8
+        time_slots:
+          type: array
+          minItems: 1
+          maxItems: 12
+          description: Multiple schedule slots to create on the same date. If omitted, backend uses start_time/duration_minutes/capacity.
+          items:
+            $ref: '#/components/schemas/PilatesScheduleTimeSlotInput'
+        price_amount:
+          type: number
+          minimum: 0
+          nullable: true
+          example: 15
+          description: Optional schedule-level price override. If null, class default price is used.
+        currency:
+          allOf:
+            - $ref: '#/components/schemas/PaymentCurrency'
+          nullable: true
+          description: Optional schedule-level currency. KWD is currently supported.
 
     CreateRecurringPilatesScheduleRequest:
       type: object
@@ -5801,7 +6967,6 @@ components:
         - trainer_staff_profile_id
         - start_date
         - end_date
-        - start_time
         - recurrence
       properties:
         mode:
@@ -5833,6 +6998,7 @@ components:
           type: string
           pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
           example: '10:00'
+          description: Backward-compatible single-time field. Use time_slots for multiple recurring slots.
         duration_minutes:
           type: integer
           minimum: 15
@@ -5844,6 +7010,24 @@ components:
           minimum: 1
           maximum: 100
           example: 8
+        time_slots:
+          type: array
+          minItems: 1
+          maxItems: 12
+          description: Multiple recurring slots generated for every matched recurrence date.
+          items:
+            $ref: '#/components/schemas/PilatesScheduleTimeSlotInput'
+        price_amount:
+          type: number
+          minimum: 0
+          nullable: true
+          example: 15
+          description: Optional schedule-level price override copied to generated schedules.
+        currency:
+          allOf:
+            - $ref: '#/components/schemas/PaymentCurrency'
+          nullable: true
+          description: Optional schedule-level currency. KWD is currently supported.
         recurrence:
           $ref: '#/components/schemas/PilatesScheduleRecurrenceInput'
 
@@ -6437,7 +7621,8 @@ components:
           example: LAFAM Pilates Studio
         payment_required:
           type: boolean
-          default: false
+          default: true
+          description: Payment-required private bookings start as pending_payment and require checkout before confirmation.
         idempotency_key:
           type: string
           maxLength: 160
@@ -6494,8 +7679,8 @@ components:
           description: Pilates schedule id.
         payment_required:
           type: boolean
-          default: false
-          description: Optional controlled payment flag. Current Booking MVP defaults to false.
+          default: true
+          description: Optional controlled payment flag. Payment-required bookings start as pending_payment and require checkout before confirmation.
         idempotency_key:
           type: string
           maxLength: 160
@@ -6645,6 +7830,8 @@ components:
         - status
         - duration_minutes
         - capacity
+        - default_price_amount
+        - currency
         - cover_image_path
       properties:
         id:
@@ -6670,6 +7857,14 @@ components:
           minimum: 1
           maximum: 100
           example: 8
+        default_price_amount:
+          type: number
+          nullable: true
+          example: 15
+        currency:
+          allOf:
+            - $ref: '#/components/schemas/PaymentCurrency'
+          nullable: true
         cover_image_path:
           type: string
           nullable: true
@@ -6687,6 +7882,8 @@ components:
         - end_time
         - duration_minutes
         - capacity
+        - default_price_amount
+        - currency
         - status
         - cancellation_reason
         - cancelled_at
@@ -6721,6 +7918,14 @@ components:
         capacity:
           type: integer
           example: 8
+        default_price_amount:
+          type: number
+          nullable: true
+          example: 15
+        currency:
+          allOf:
+            - $ref: '#/components/schemas/PaymentCurrency'
+          nullable: true
         status:
           $ref: '#/components/schemas/PilatesScheduleStatus'
         cancellation_reason:
@@ -6836,7 +8041,197 @@ components:
         created_at:
           type: string
           format: date-time
+    BookingPriceSnapshot:
+      type: object
+      required:
+        - amount
+        - currency
+        - source
+      properties:
+        amount:
+          type: number
+          nullable: true
+          example: 15
+        currency:
+          allOf:
+            - $ref: '#/components/schemas/PaymentCurrency'
+          nullable: true
+        source:
+          type: string
+          enum:
+            - schedule_override
+            - class_default
+            - private_booking
+            - not_configured
+          example: schedule_override
 
+    BookingPaymentSummary:
+      type: object
+      required:
+        - id
+        - payment_number
+        - receipt_number
+        - target_kind
+        - booking_id
+        - private_booking_id
+        - amount
+        - discount_amount
+        - final_amount
+        - currency
+        - payment_method
+        - payment_provider
+        - status
+        - redirect_url
+        - paid_at
+        - failed_at
+        - cancelled_at
+        - expired_at
+        - refunded_at
+        - refunded_amount
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        payment_number:
+          type: string
+          example: PAY-20260618-ABC12345
+        receipt_number:
+          type: string
+          nullable: true
+        target_kind:
+          type: string
+          enum:
+            - booking
+            - private_booking
+          example: booking
+        booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        amount:
+          type: number
+          example: 15
+        discount_amount:
+          type: number
+          example: 0
+        final_amount:
+          type: number
+          example: 15
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+        payment_method:
+          $ref: '#/components/schemas/PaymentMethod'
+        payment_provider:
+          $ref: '#/components/schemas/PaymentProvider'
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        redirect_url:
+          type: string
+          format: uri
+          nullable: true
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+        failed_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        expired_at:
+          type: string
+          format: date-time
+          nullable: true
+        refunded_at:
+          type: string
+          format: date-time
+          nullable: true
+        refunded_amount:
+          type: number
+          example: 0
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    BookingPaymentStateSnapshot:
+      type: object
+      required:
+        - payment_required
+        - payment_status
+        - seat_hold_expires_at
+        - is_pending_payment
+        - is_payable
+        - is_retryable
+        - is_settled
+        - is_failed
+        - is_terminal
+        - is_refundable
+        - confirms_booking
+        - checkout_required
+        - hold_expires_at
+        - latest_payment
+      properties:
+        payment_required:
+          type: boolean
+          example: true
+        payment_status:
+          $ref: '#/components/schemas/BookingPaymentStatus'
+        seat_hold_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        is_pending_payment:
+          type: boolean
+          example: true
+        is_payable:
+          type: boolean
+          example: true
+        is_retryable:
+          type: boolean
+          example: false
+        is_settled:
+          type: boolean
+          example: false
+        is_failed:
+          type: boolean
+          example: false
+        is_terminal:
+          type: boolean
+          example: false
+        is_refundable:
+          type: boolean
+          example: false
+        confirms_booking:
+          type: boolean
+          example: false
+        checkout_required:
+          type: boolean
+          example: true
+        hold_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        latest_payment:
+          allOf:
+            - $ref: '#/components/schemas/BookingPaymentSummary'
+          nullable: true
     Booking:
       type: object
       required:
@@ -6851,6 +8246,9 @@ components:
         - payment_status
         - payment_required
         - seat_hold_expires_at
+        - price
+        - payment_state
+        - latest_payment
         - confirmed_at
         - cancelled_at
         - completed_at
@@ -6889,10 +8287,20 @@ components:
           $ref: '#/components/schemas/BookingPaymentStatus'
         payment_required:
           type: boolean
-          example: false
+          example: true
         seat_hold_expires_at:
           type: string
           format: date-time
+          nullable: true
+        price:
+          allOf:
+            - $ref: '#/components/schemas/BookingPriceSnapshot'
+          nullable: true
+        payment_state:
+          $ref: '#/components/schemas/BookingPaymentStateSnapshot'
+        latest_payment:
+          allOf:
+            - $ref: '#/components/schemas/BookingPaymentSummary'
           nullable: true
         confirmed_at:
           type: string
@@ -7114,6 +8522,8 @@ components:
         - booking
         - waitlist
         - availability
+        - payment_state
+        - checkout_required
       properties:
         result:
           $ref: '#/components/schemas/BookingCreateActionResult'
@@ -7127,7 +8537,13 @@ components:
           nullable: true
         availability:
           $ref: '#/components/schemas/BookingAvailabilitySnapshot'
-
+        payment_state:
+          allOf:
+            - $ref: '#/components/schemas/BookingPaymentStateSnapshot'
+          nullable: true
+        checkout_required:
+          type: boolean
+          example: true
     BookingCancelData:
       type: object
       required:
@@ -7326,11 +8742,16 @@ components:
         - end_time
         - duration_minutes
         - studio
+        - price_amount
+        - currency
+        - price
         - status
         - source
         - payment_status
         - payment_required
         - seat_hold_expires_at
+        - payment_state
+        - latest_payment
         - confirmed_at
         - cancelled_at
         - completed_at
@@ -7372,6 +8793,13 @@ components:
         studio:
           type: string
           example: LAFAM Pilates Studio
+        price_amount:
+          type: number
+          example: 20
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+        price:
+          $ref: '#/components/schemas/BookingPriceSnapshot'
         status:
           $ref: '#/components/schemas/BookingStatus'
         source:
@@ -7380,10 +8808,16 @@ components:
           $ref: '#/components/schemas/BookingPaymentStatus'
         payment_required:
           type: boolean
-          example: false
+          example: true
         seat_hold_expires_at:
           type: string
           format: date-time
+          nullable: true
+        payment_state:
+          $ref: '#/components/schemas/BookingPaymentStateSnapshot'
+        latest_payment:
+          allOf:
+            - $ref: '#/components/schemas/BookingPaymentSummary'
           nullable: true
         confirmed_at:
           type: string
@@ -7546,12 +8980,20 @@ components:
       required:
         - result
         - private_booking
+        - payment_state
+        - checkout_required
       properties:
         result:
           $ref: '#/components/schemas/PrivateBookingCreateActionResult'
         private_booking:
           $ref: '#/components/schemas/PrivateBookingListItem'
-
+        payment_state:
+          allOf:
+            - $ref: '#/components/schemas/BookingPaymentStateSnapshot'
+          nullable: true
+        checkout_required:
+          type: boolean
+          example: true
     PrivateBookingCancelData:
       type: object
       required:
@@ -7816,7 +9258,1068 @@ components:
           from_date: '2026-06-20'
           to_date: '2026-06-30'
           total: 1
+    PaymentCurrency:
+      type: string
+      enum:
+        - KWD
+      example: KWD
 
+    PaymentTargetType:
+      type: string
+      enum:
+        - booking
+        - private_booking
+        - wallet_top_up
+      example: booking
+
+    PaymentMethod:
+      type: string
+      enum:
+        - knet
+        - card
+        - wallet
+      example: knet
+
+    PaymentHostedMethod:
+      type: string
+      enum:
+        - knet
+        - card
+      example: knet
+
+    PaymentProvider:
+      type: string
+      enum:
+        - mock
+        - knet
+        - tap
+        - myfatoorah
+        - checkout
+        - wallet
+        - manual
+      example: mock
+
+    PaymentStatus:
+      type: string
+      enum:
+        - pending
+        - requires_redirect
+        - processing
+        - paid
+        - failed
+        - cancelled
+        - expired
+        - refund_requested
+        - refund_processing
+        - manual_refund_required
+        - refunded
+      example: requires_redirect
+
+    PaymentTransactionType:
+      type: string
+      enum:
+        - intent_created
+        - provider_request
+        - provider_response
+        - callback_received
+        - webhook_received
+        - verification
+        - status_change
+        - wallet_debit
+        - wallet_credit
+        - refund_requested
+        - refund_processed
+        - refund_failed
+      example: intent_created
+
+    PaymentTransactionStatus:
+      type: string
+      enum:
+        - pending
+        - succeeded
+        - failed
+        - ignored
+      example: succeeded
+
+    PaymentCallbackResult:
+      type: string
+      enum:
+        - success
+        - failed
+        - cancelled
+      example: success
+
+    PaymentWebhookEventType:
+      type: string
+      enum:
+        - payment.succeeded
+        - payment.failed
+        - payment.cancelled
+        - payment.refunded
+      example: payment.succeeded
+
+    PaymentSortField:
+      type: string
+      enum:
+        - created_at
+        - updated_at
+        - final_amount
+        - paid_at
+      default: created_at
+      example: created_at
+
+    PaymentTransactionSortField:
+      type: string
+      enum:
+        - created_at
+        - processed_at
+      default: created_at
+      example: created_at
+
+    PaymentSortDirection:
+      type: string
+      enum:
+        - asc
+        - desc
+      default: desc
+      example: desc
+
+    WalletAccountStatus:
+      type: string
+      enum:
+        - active
+        - frozen
+        - closed
+      example: active
+
+    WalletLedgerEntryType:
+      type: string
+      enum:
+        - wallet_top_up
+        - booking_payment
+        - private_booking_payment
+        - refund_credit
+        - admin_adjustment_credit
+        - admin_adjustment_debit
+      example: wallet_top_up
+
+    WalletLedgerEntryStatus:
+      type: string
+      enum:
+        - pending
+        - posted
+        - reversed
+        - failed
+      example: posted
+
+    WalletSortField:
+      type: string
+      enum:
+        - created_at
+        - updated_at
+        - available_balance
+      default: created_at
+      example: available_balance
+
+    WalletLedgerSortField:
+      type: string
+      enum:
+        - created_at
+        - amount
+      default: created_at
+      example: created_at
+
+    PaymentMetadata:
+      type: object
+      additionalProperties: true
+      example:
+        source: checkout_screen
+
+    CreateCheckoutPaymentRequest:
+      type: object
+      required:
+        - target_type
+        - payment_method
+      properties:
+        target_type:
+          $ref: '#/components/schemas/PaymentTargetType'
+        booking_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Required when target_type is booking.
+        private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Required when target_type is private_booking.
+        wallet_top_up_amount:
+          type: number
+          minimum: 1
+          maximum: 10000
+          nullable: true
+          description: Required when target_type is wallet_top_up.
+          example: 25
+        payment_method:
+          $ref: '#/components/schemas/PaymentMethod'
+        currency:
+          allOf:
+            - $ref: '#/components/schemas/PaymentCurrency'
+          nullable: true
+          description: KWD is currently the only supported currency.
+        promo_code:
+          type: string
+          minLength: 2
+          maxLength: 64
+          nullable: true
+          example: INTRO10
+        idempotency_key:
+          type: string
+          minLength: 8
+          maxLength: 160
+          nullable: true
+          example: checkout-20260618-001
+        metadata:
+          $ref: '#/components/schemas/PaymentMetadata'
+
+    WalletTopUpRequest:
+      type: object
+      required:
+        - target_type
+        - wallet_top_up_amount
+        - payment_method
+      properties:
+        target_type:
+          type: string
+          enum:
+            - wallet_top_up
+          example: wallet_top_up
+        wallet_top_up_amount:
+          type: number
+          minimum: 1
+          maximum: 10000
+          example: 25
+        payment_method:
+          $ref: '#/components/schemas/PaymentHostedMethod'
+        currency:
+          allOf:
+            - $ref: '#/components/schemas/PaymentCurrency'
+          nullable: true
+        idempotency_key:
+          type: string
+          minLength: 8
+          maxLength: 160
+          nullable: true
+          example: wallet-top-up-001
+        metadata:
+          $ref: '#/components/schemas/PaymentMetadata'
+
+    PaymentWebhookRequest:
+      type: object
+      additionalProperties: true
+      description: Provider webhook payload. Raw shape depends on configured provider and is normalized by backend provider adapter.
+      example:
+        event_type: payment.succeeded
+        payment_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        provider_reference: mock_ref_123
+        status: paid
+
+    RefundPaymentRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 1000
+          example: Customer refund approved by admin.
+        idempotency_key:
+          type: string
+          minLength: 8
+          maxLength: 160
+          nullable: true
+          example: refund-20260618-001
+        metadata:
+          $ref: '#/components/schemas/PaymentMetadata'
+
+    AdminWalletAdjustmentRequest:
+      type: object
+      required:
+        - amount
+        - entry_type
+        - reason
+      properties:
+        amount:
+          type: number
+          minimum: 0.001
+          maximum: 10000
+          example: 10
+        entry_type:
+          type: string
+          enum:
+            - admin_adjustment_credit
+            - admin_adjustment_debit
+          example: admin_adjustment_credit
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 1000
+          example: Manual correction after admin audit.
+        idempotency_key:
+          type: string
+          minLength: 8
+          maxLength: 160
+          nullable: true
+          example: wallet-adjust-20260618-001
+        metadata:
+          $ref: '#/components/schemas/PaymentMetadata'
+
+    PaymentSummary:
+      type: object
+      required:
+        - id
+        - payment_number
+        - receipt_number
+        - user_id
+        - target_type
+        - booking_id
+        - private_booking_id
+        - amount
+        - discount_amount
+        - final_amount
+        - currency
+        - payment_method
+        - payment_provider
+        - status
+        - redirect_url
+        - paid_at
+        - failed_at
+        - cancelled_at
+        - expired_at
+        - refunded_at
+        - refunded_amount
+        - expires_at
+        - created_at
+        - updated_at
+        - realtime_version
+      properties:
+        id:
+          type: string
+          format: uuid
+        payment_number:
+          type: string
+          example: PAY-20260618-ABC12345
+        receipt_number:
+          type: string
+          nullable: true
+          example: RCP-20260618-ABC12345
+        user_id:
+          type: string
+          format: uuid
+        target_type:
+          $ref: '#/components/schemas/PaymentTargetType'
+        booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        amount:
+          type: number
+          example: 15
+        discount_amount:
+          type: number
+          example: 0
+        final_amount:
+          type: number
+          example: 15
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+        payment_method:
+          $ref: '#/components/schemas/PaymentMethod'
+        payment_provider:
+          $ref: '#/components/schemas/PaymentProvider'
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        redirect_url:
+          type: string
+          format: uri
+          nullable: true
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+        failed_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        expired_at:
+          type: string
+          format: date-time
+          nullable: true
+        refunded_at:
+          type: string
+          format: date-time
+          nullable: true
+        refunded_amount:
+          type: number
+          example: 0
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        realtime_version:
+          type: integer
+          format: int64
+          minimum: 1
+
+    PaymentDetail:
+      allOf:
+        - $ref: '#/components/schemas/PaymentSummary'
+        - type: object
+          required:
+            - gateway_reference
+            - gateway_payment_id
+            - gateway_invoice_id
+            - webhook_verified_at
+            - failure_code
+            - failure_message
+            - metadata
+          properties:
+            gateway_reference:
+              type: string
+              nullable: true
+            gateway_payment_id:
+              type: string
+              nullable: true
+            gateway_invoice_id:
+              type: string
+              nullable: true
+            webhook_verified_at:
+              type: string
+              format: date-time
+              nullable: true
+            failure_code:
+              type: string
+              nullable: true
+            failure_message:
+              type: string
+              nullable: true
+            metadata:
+              $ref: '#/components/schemas/PaymentMetadata'
+            transactions:
+              type: array
+              items:
+                $ref: '#/components/schemas/PaymentTransactionSummary'
+            discounts:
+              type: array
+              items:
+                $ref: '#/components/schemas/PaymentDiscountSummary'
+
+    PaymentTransactionSummary:
+      type: object
+      required:
+        - id
+        - payment_id
+        - transaction_type
+        - transaction_status
+        - provider
+        - provider_reference
+        - failure_code
+        - failure_message
+        - metadata
+        - processed_at
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        payment_id:
+          type: string
+          format: uuid
+        transaction_type:
+          $ref: '#/components/schemas/PaymentTransactionType'
+        transaction_status:
+          $ref: '#/components/schemas/PaymentTransactionStatus'
+        provider:
+          $ref: '#/components/schemas/PaymentProvider'
+        provider_reference:
+          type: string
+          nullable: true
+        failure_code:
+          type: string
+          nullable: true
+        failure_message:
+          type: string
+          nullable: true
+        metadata:
+          $ref: '#/components/schemas/PaymentMetadata'
+        processed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    PaymentDiscountSummary:
+      type: object
+      required:
+        - id
+        - payment_id
+        - promo_code_id
+        - code
+        - discount_amount
+        - metadata
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        payment_id:
+          type: string
+          format: uuid
+        promo_code_id:
+          type: string
+          format: uuid
+          nullable: true
+        code:
+          type: string
+          example: INTRO10
+        discount_amount:
+          type: number
+          example: 1.5
+        metadata:
+          $ref: '#/components/schemas/PaymentMetadata'
+        created_at:
+          type: string
+          format: date-time
+
+    PaymentReceiptSummary:
+      type: object
+      required:
+        - payment_id
+        - payment_number
+        - receipt_number
+        - user_id
+        - target_type
+        - amount
+        - discount_amount
+        - final_amount
+        - currency
+        - payment_method
+        - payment_provider
+        - paid_at
+      properties:
+        payment_id:
+          type: string
+          format: uuid
+        payment_number:
+          type: string
+        receipt_number:
+          type: string
+        user_id:
+          type: string
+          format: uuid
+        target_type:
+          $ref: '#/components/schemas/PaymentTargetType'
+        amount:
+          type: number
+        discount_amount:
+          type: number
+        final_amount:
+          type: number
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+        payment_method:
+          $ref: '#/components/schemas/PaymentMethod'
+        payment_provider:
+          $ref: '#/components/schemas/PaymentProvider'
+        paid_at:
+          type: string
+          format: date-time
+
+    PaymentPaginatedSummary:
+      type: object
+      required:
+        - items
+        - total
+        - limit
+        - offset
+        - has_more
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentSummary'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+        has_more:
+          type: boolean
+
+    PaymentPaginatedTransactions:
+      type: object
+      required:
+        - items
+        - total
+        - limit
+        - offset
+        - has_more
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentTransactionSummary'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+        has_more:
+          type: boolean
+
+    PaymentCheckoutData:
+      type: object
+      required:
+        - payment
+        - requires_redirect
+        - redirect_url
+      properties:
+        payment:
+          $ref: '#/components/schemas/PaymentSummary'
+        requires_redirect:
+          type: boolean
+          example: true
+        redirect_url:
+          type: string
+          format: uri
+          nullable: true
+        wallet_account:
+          allOf:
+            - $ref: '#/components/schemas/WalletAccountSummary'
+          nullable: true
+
+    PaymentListData:
+      type: object
+      required:
+        - payments
+      properties:
+        payments:
+          $ref: '#/components/schemas/PaymentPaginatedSummary'
+
+    PaymentDetailData:
+      type: object
+      required:
+        - payment
+      properties:
+        payment:
+          $ref: '#/components/schemas/PaymentDetail'
+
+    PaymentTransactionListData:
+      type: object
+      required:
+        - transactions
+      properties:
+        transactions:
+          $ref: '#/components/schemas/PaymentPaginatedTransactions'
+
+    PaymentVerificationData:
+      type: object
+      required:
+        - payment
+        - receipt
+      properties:
+        payment:
+          $ref: '#/components/schemas/PaymentSummary'
+        receipt:
+          allOf:
+            - $ref: '#/components/schemas/PaymentReceiptSummary'
+          nullable: true
+
+    PaymentRefundData:
+      type: object
+      required:
+        - payment
+      properties:
+        payment:
+          $ref: '#/components/schemas/PaymentSummary'
+
+    PaymentExpireUnpaidData:
+      type: object
+      required:
+        - expired
+        - expired_count
+      properties:
+        expired:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentSummary'
+        expired_count:
+          type: integer
+          minimum: 0
+          example: 3
+
+    PaymentWebhookData:
+      type: object
+      required:
+        - accepted
+        - ignored
+        - payment_id
+        - status
+      properties:
+        accepted:
+          type: boolean
+          example: true
+        ignored:
+          type: boolean
+          example: false
+        payment_id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          allOf:
+            - $ref: '#/components/schemas/PaymentStatus'
+          nullable: true
+
+    WalletAccountSummary:
+      type: object
+      required:
+        - id
+        - user_id
+        - currency
+        - available_balance
+        - pending_balance
+        - status
+        - created_at
+        - updated_at
+        - realtime_version
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+        available_balance:
+          type: number
+          example: 25
+        pending_balance:
+          type: number
+          example: 0
+        status:
+          $ref: '#/components/schemas/WalletAccountStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        realtime_version:
+          type: integer
+          format: int64
+          minimum: 1
+
+    WalletLedgerEntrySummary:
+      type: object
+      required:
+        - id
+        - wallet_account_id
+        - user_id
+        - payment_id
+        - booking_id
+        - private_booking_id
+        - entry_type
+        - entry_status
+        - amount
+        - balance_before
+        - balance_after
+        - description
+        - metadata
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        wallet_account_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        payment_id:
+          type: string
+          format: uuid
+          nullable: true
+        booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        entry_type:
+          $ref: '#/components/schemas/WalletLedgerEntryType'
+        entry_status:
+          $ref: '#/components/schemas/WalletLedgerEntryStatus'
+        amount:
+          type: number
+          example: 15
+        balance_before:
+          type: number
+          example: 30
+        balance_after:
+          type: number
+          example: 15
+        description:
+          type: string
+          nullable: true
+        metadata:
+          $ref: '#/components/schemas/PaymentMetadata'
+        created_at:
+          type: string
+          format: date-time
+
+    WalletPaginatedLedgerEntries:
+      type: object
+      required:
+        - items
+        - total
+        - limit
+        - offset
+        - has_more
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WalletLedgerEntrySummary'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+        has_more:
+          type: boolean
+
+    WalletAccountData:
+      type: object
+      required:
+        - wallet
+      properties:
+        wallet:
+          $ref: '#/components/schemas/WalletAccountSummary'
+
+    WalletLedgerListData:
+      type: object
+      required:
+        - transactions
+      properties:
+        transactions:
+          $ref: '#/components/schemas/WalletPaginatedLedgerEntries'
+
+    WalletLedgerEntryData:
+      type: object
+      required:
+        - transaction
+      properties:
+        transaction:
+          $ref: '#/components/schemas/WalletLedgerEntrySummary'
+
+    WalletTopUpData:
+      type: object
+      required:
+        - payment
+        - redirect_url
+      properties:
+        payment:
+          $ref: '#/components/schemas/PaymentSummary'
+        redirect_url:
+          type: string
+          format: uri
+
+    AdminWalletListData:
+      type: object
+      required:
+        - wallets
+      properties:
+        wallets:
+          type: object
+          required:
+            - items
+            - total
+            - limit
+            - offset
+            - has_more
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/WalletAccountSummary'
+            total:
+              type: integer
+              minimum: 0
+            limit:
+              type: integer
+              minimum: 1
+            offset:
+              type: integer
+              minimum: 0
+            has_more:
+              type: boolean
+
+    AdminWalletAdjustmentData:
+      type: object
+      required:
+        - wallet
+        - ledger_entry
+      properties:
+        wallet:
+          $ref: '#/components/schemas/WalletAccountSummary'
+        ledger_entry:
+          $ref: '#/components/schemas/WalletLedgerEntrySummary'
+
+    PaymentCheckoutSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PaymentCheckoutData'
+
+    PaymentListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PaymentListData'
+
+    PaymentDetailSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PaymentDetailData'
+
+    PaymentTransactionListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PaymentTransactionListData'
+
+    PaymentVerificationSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PaymentVerificationData'
+
+    PaymentRefundSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PaymentRefundData'
+
+    PaymentExpireUnpaidSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PaymentExpireUnpaidData'
+
+    PaymentWebhookSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PaymentWebhookData'
+
+    WalletAccountSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/WalletAccountData'
+
+    WalletLedgerListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/WalletLedgerListData'
+
+    WalletLedgerEntrySuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/WalletLedgerEntryData'
+
+    WalletTopUpSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/WalletTopUpData'
+
+    AdminWalletListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AdminWalletListData'
+
+    AdminWalletAdjustmentSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AdminWalletAdjustmentData'
   securitySchemes:
     BearerAuth:
       type: http

@@ -22,6 +22,20 @@ export const NODE_ENV_VALUES = [
 
 export type NodeEnvironment = (typeof NODE_ENV_VALUES)[number];
 
+export const PAYMENT_PROVIDER_VALUES = [
+  'mock',
+  'knet',
+  'tap',
+  'myfatoorah',
+  'checkout',
+] as const;
+
+export type PaymentProvider = (typeof PAYMENT_PROVIDER_VALUES)[number];
+
+export const PAYMENT_MODE_VALUES = ['sandbox', 'production'] as const;
+
+export type PaymentMode = (typeof PAYMENT_MODE_VALUES)[number];
+
 export type EnvironmentVariableName =
   | 'NODE_ENV'
   | 'PORT'
@@ -47,7 +61,18 @@ export type EnvironmentVariableName =
   | 'AUTH_GUEST_SESSION_TTL_HOURS'
   | 'AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR'
   | 'AUTH_GUEST_REQUIRE_CAPTCHA'
-  | 'AUTH_GUEST_CLEANUP_ENABLED';
+  | 'AUTH_GUEST_CLEANUP_ENABLED'
+  | 'PAYMENT_PROVIDER'
+  | 'PAYMENT_MODE'
+  | 'PAYMENT_DEFAULT_CURRENCY'
+  | 'PAYMENT_PUBLIC_BASE_URL'
+  | 'PAYMENT_FRONTEND_SUCCESS_URL'
+  | 'PAYMENT_FRONTEND_FAILURE_URL'
+  | 'KNET_MERCHANT_ID'
+  | 'KNET_SECRET_KEY'
+  | 'KNET_WEBHOOK_SECRET'
+  | 'KNET_API_BASE_URL'
+  | 'KNET_SANDBOX_API_BASE_URL';
 
 export type RawEnvironment = Partial<
   Record<EnvironmentVariableName, string | undefined>
@@ -96,6 +121,20 @@ export interface AuthEnvironment {
   readonly guestCleanupEnabled: boolean;
 }
 
+export interface PaymentEnvironment {
+  readonly provider: PaymentProvider;
+  readonly mode: PaymentMode;
+  readonly defaultCurrency: string;
+  readonly publicBaseUrl: string;
+  readonly frontendSuccessUrl: string;
+  readonly frontendFailureUrl: string;
+  readonly knetMerchantId: string;
+  readonly knetSecretKey: string;
+  readonly knetWebhookSecret: string;
+  readonly knetApiBaseUrl: string;
+  readonly knetSandboxApiBaseUrl: string;
+}
+
 export interface ValidatedEnvironment {
   readonly app: AppEnvironment;
   readonly supabase: SupabaseEnvironment;
@@ -103,6 +142,7 @@ export interface ValidatedEnvironment {
   readonly brevo: BrevoEnvironment;
   readonly security: SecurityEnvironment;
   readonly auth: AuthEnvironment;
+  readonly payment: PaymentEnvironment;
 }
 
 export const ENVIRONMENT_VARIABLE_NAMES = [
@@ -131,6 +171,17 @@ export const ENVIRONMENT_VARIABLE_NAMES = [
   'AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR',
   'AUTH_GUEST_REQUIRE_CAPTCHA',
   'AUTH_GUEST_CLEANUP_ENABLED',
+  'PAYMENT_PROVIDER',
+  'PAYMENT_MODE',
+  'PAYMENT_DEFAULT_CURRENCY',
+  'PAYMENT_PUBLIC_BASE_URL',
+  'PAYMENT_FRONTEND_SUCCESS_URL',
+  'PAYMENT_FRONTEND_FAILURE_URL',
+  'KNET_MERCHANT_ID',
+  'KNET_SECRET_KEY',
+  'KNET_WEBHOOK_SECRET',
+  'KNET_API_BASE_URL',
+  'KNET_SANDBOX_API_BASE_URL',
 ] as const satisfies readonly EnvironmentVariableName[];
 
 export const REQUIRED_ENVIRONMENT_VARIABLE_NAMES = [
@@ -156,12 +207,23 @@ export const REQUIRED_ENVIRONMENT_VARIABLE_NAMES = [
   'AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR',
   'AUTH_GUEST_REQUIRE_CAPTCHA',
   'AUTH_GUEST_CLEANUP_ENABLED',
+  'PAYMENT_PROVIDER',
+  'PAYMENT_MODE',
+  'PAYMENT_DEFAULT_CURRENCY',
+  'PAYMENT_PUBLIC_BASE_URL',
+  'PAYMENT_FRONTEND_SUCCESS_URL',
+  'PAYMENT_FRONTEND_FAILURE_URL',
 ] as const satisfies readonly EnvironmentVariableName[];
 
 export const OPTIONAL_ENVIRONMENT_VARIABLE_NAMES = [
   'SENTRY_DSN',
   'BREVO_API_KEY',
   'BREVO_SENDER_EMAIL',
+  'KNET_MERCHANT_ID',
+  'KNET_SECRET_KEY',
+  'KNET_WEBHOOK_SECRET',
+  'KNET_API_BASE_URL',
+  'KNET_SANDBOX_API_BASE_URL',
 ] as const satisfies readonly EnvironmentVariableName[];
 
 export const SENSITIVE_ENVIRONMENT_VARIABLE_NAMES = [
@@ -170,6 +232,9 @@ export const SENSITIVE_ENVIRONMENT_VARIABLE_NAMES = [
   'SENTRY_DSN',
   'BREVO_API_KEY',
   'AUTH_ACCESS_TOKEN_HASH_PEPPER',
+  'KNET_MERCHANT_ID',
+  'KNET_SECRET_KEY',
+  'KNET_WEBHOOK_SECRET',
 ] as const satisfies readonly EnvironmentVariableName[];
 
 export type SensitiveEnvironmentVariableName =

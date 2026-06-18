@@ -18,9 +18,11 @@ import type {
   PilatesClassRow,
   PilatesClassScheduleRow,
   PilatesScheduleSeriesRow,
+  PilatesScheduleSeriesTimeSlotRow,
   StaffProfileRow,
 } from '../../../database/database.types';
 import type {
+  PilatesClassCurrency,
   PilatesClassEvent,
   PilatesClassLevel,
   PilatesClassScheduleSortField,
@@ -49,6 +51,8 @@ export type PilatesIsoTimestamp = string;
 export type PilatesClassRecord = PilatesClassRow;
 export type PilatesClassScheduleRecord = PilatesClassScheduleRow;
 export type PilatesScheduleSeriesRecord = PilatesScheduleSeriesRow;
+export type PilatesScheduleSeriesTimeSlotRecord =
+  PilatesScheduleSeriesTimeSlotRow;
 export interface PilatesClassImageUploadFile {
   readonly buffer: Buffer;
   readonly mimetype: string;
@@ -60,6 +64,46 @@ export interface PilatesClassImageUploadResult {
   readonly image_path: string;
   readonly image_url: string;
 }
+export interface PilatesClassPriceSnapshot {
+  readonly amount: number;
+  readonly currency: PilatesClassCurrency;
+}
+
+export interface PilatesScheduleTimeSlotInput {
+  readonly studio?: string;
+  readonly start_time: string;
+  readonly duration_minutes: number;
+  readonly capacity?: number;
+  readonly price_amount?: number;
+  readonly currency?: PilatesClassCurrency;
+}
+
+export interface PilatesScheduleSeriesTimeSlotCreateInput {
+  readonly slot_index: number;
+  readonly studio: string;
+  readonly start_time: string;
+  readonly end_time: string;
+  readonly duration_minutes: number;
+  readonly capacity: number;
+  readonly price_amount?: number | null;
+  readonly currency?: PilatesClassCurrency | null;
+}
+
+export interface PilatesScheduleSeriesTimeSlotSummary {
+  readonly id: string;
+  readonly series_id: string;
+  readonly slot_index: number;
+  readonly studio: string;
+  readonly start_time: string;
+  readonly end_time: string;
+  readonly duration_minutes: number;
+  readonly capacity: number;
+  readonly price_amount: number | null;
+  readonly currency: PilatesClassCurrency | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
 export interface PilatesClassTrainerSummary {
   readonly id: string;
   readonly app_user_id: string;
@@ -85,6 +129,8 @@ export interface PilatesClassAdminSummary {
   readonly description: string | null;
   readonly default_duration_minutes: number;
   readonly default_capacity: number;
+  readonly default_price_amount?: number;
+  readonly currency?: PilatesClassCurrency;
   readonly level: PilatesClassLevel;
   readonly status: PilatesClassStatus;
   readonly image_path: string | null;
@@ -107,6 +153,8 @@ export interface PilatesClassPublicSummary {
   readonly description: string | null;
   readonly default_duration_minutes: number;
   readonly default_capacity: number;
+  readonly default_price_amount?: number;
+  readonly currency?: PilatesClassCurrency;
   readonly level: PilatesClassLevel;
   readonly image_url: string | null;
   readonly realtime_version: number;
@@ -131,6 +179,11 @@ export interface PilatesScheduleSeriesAdminSummary {
   readonly end_time: string;
   readonly duration_minutes: number;
   readonly capacity: number;
+  readonly price_amount?: number | null;
+  readonly currency?: PilatesClassCurrency | null;
+  readonly uses_multiple_time_slots?: boolean;
+  readonly time_slot_count?: number;
+  readonly time_slots?: readonly PilatesScheduleSeriesTimeSlotSummary[];
   readonly excluded_dates: readonly string[];
   readonly status: PilatesScheduleSeriesStatus;
   readonly created_by_admin_id: string | null;
@@ -161,6 +214,8 @@ export interface PilatesClassScheduleAdminSummary {
   readonly end_time: string;
   readonly duration_minutes: number;
   readonly capacity: number;
+  readonly price_amount?: number | null;
+  readonly currency?: PilatesClassCurrency | null;
   readonly status: PilatesClassScheduleStatus;
   readonly cancellation_reason: string | null;
   readonly created_by_admin_id: string | null;
@@ -173,6 +228,9 @@ export interface PilatesClassScheduleAdminSummary {
   readonly realtime_version: number;
   readonly series_id: string | null;
   readonly series_occurrence_index: number | null;
+  readonly series_time_slot_id?: string | null;
+  readonly series_date_index?: number | null;
+  readonly series_slot_index?: number | null;
   readonly generation_source: PilatesScheduleGenerationSource;
   readonly class?: PilatesClassAdminSummary;
   readonly trainer?: PilatesClassTrainerSummary;
@@ -195,11 +253,16 @@ export interface PilatesClassSchedulePublicSummary {
   readonly end_time: string;
   readonly duration_minutes: number;
   readonly capacity: number;
+  readonly price_amount?: number | null;
+  readonly currency?: PilatesClassCurrency | null;
   readonly status: PilatesClassScheduleStatus;
   readonly availability: PilatesClassAvailabilitySnapshot;
   readonly realtime_version: number;
   readonly series_id: string | null;
   readonly series_occurrence_index: number | null;
+  readonly series_time_slot_id?: string | null;
+  readonly series_date_index?: number | null;
+  readonly series_slot_index?: number | null;
   readonly generation_source: PilatesScheduleGenerationSource;
 }
 
@@ -273,6 +336,8 @@ export interface CreatePilatesClassInput {
   readonly description?: string | null;
   readonly default_duration_minutes?: number;
   readonly default_capacity?: number;
+  readonly default_price_amount?: number;
+  readonly currency?: PilatesClassCurrency;
   readonly level?: PilatesClassLevel;
   readonly status?: PilatesClassStatus;
   readonly image_file?: PilatesClassImageUploadFile | null;
@@ -285,6 +350,8 @@ export interface UpdatePilatesClassInput {
   readonly description?: string | null;
   readonly default_duration_minutes?: number;
   readonly default_capacity?: number;
+  readonly default_price_amount?: number;
+  readonly currency?: PilatesClassCurrency;
   readonly level?: PilatesClassLevel;
   readonly status?: PilatesClassStatus;
   readonly image_file?: PilatesClassImageUploadFile | null;
@@ -323,6 +390,8 @@ export interface CreateSinglePilatesClassScheduleInput {
   readonly start_time: string;
   readonly duration_minutes: number;
   readonly capacity?: number;
+  readonly price_amount?: number;
+  readonly currency?: PilatesClassCurrency;
   readonly actor_admin_user_id: string;
 }
 
@@ -336,6 +405,9 @@ export interface CreateRecurringPilatesClassScheduleInput {
   readonly start_time: string;
   readonly duration_minutes: number;
   readonly capacity?: number;
+  readonly price_amount?: number;
+  readonly currency?: PilatesClassCurrency;
+  readonly time_slots?: readonly PilatesScheduleTimeSlotInput[];
   readonly recurrence: PilatesScheduleRecurrenceInput;
   readonly actor_admin_user_id: string;
 }
@@ -354,6 +426,8 @@ export interface UpdatePilatesClassScheduleInput {
   readonly start_time?: string;
   readonly duration_minutes?: number;
   readonly capacity?: number;
+  readonly price_amount?: number | null;
+  readonly currency?: PilatesClassCurrency | null;
   readonly actor_admin_user_id: string;
 }
 
@@ -404,6 +478,12 @@ export interface PilatesScheduleGeneratedOccurrence {
   readonly end_time: string;
   readonly duration_minutes: number;
   readonly capacity: number;
+  readonly studio?: string;
+  readonly price_amount?: number | null;
+  readonly currency?: PilatesClassCurrency | null;
+  readonly series_time_slot_id?: string | null;
+  readonly series_date_index?: number | null;
+  readonly series_slot_index?: number | null;
 }
 
 export interface PilatesScheduleRecurrenceGenerationInput {
@@ -413,6 +493,9 @@ export interface PilatesScheduleRecurrenceGenerationInput {
   readonly start_time: string;
   readonly duration_minutes: number;
   readonly capacity: number;
+  readonly price_amount?: number | null;
+  readonly currency?: PilatesClassCurrency | null;
+  readonly time_slots?: readonly PilatesScheduleSeriesTimeSlotCreateInput[];
   readonly days_of_week?: readonly PilatesScheduleWeekday[];
   readonly monthly_rule?: PilatesScheduleMonthlyRule | null;
   readonly day_of_month?: number | null;
@@ -430,6 +513,7 @@ export interface PilatesGeneratedScheduleConflict {
   readonly start_time: string;
   readonly end_time: string;
   readonly reason: string;
+  readonly series_slot_index?: number | null;
   readonly conflicting_schedule_id?: string;
 }
 
@@ -447,6 +531,11 @@ export interface PilatesScheduleSeriesCreateInput {
   readonly end_time: string;
   readonly duration_minutes: number;
   readonly capacity: number;
+  readonly price_amount?: number | null;
+  readonly currency?: PilatesClassCurrency | null;
+  readonly uses_multiple_time_slots: boolean;
+  readonly time_slot_count: number;
+  readonly time_slots: readonly PilatesScheduleSeriesTimeSlotCreateInput[];
   readonly excluded_dates: readonly string[];
   readonly actor_admin_user_id: string;
 }
@@ -645,12 +734,14 @@ export interface PilatesClassScheduleWithRelations {
   readonly class: PilatesClassRecord;
   readonly trainer: StaffProfileRow;
   readonly series?: PilatesScheduleSeriesRecord | null;
+  readonly series_time_slot?: PilatesScheduleSeriesTimeSlotRecord | null;
 }
 
 export interface PilatesScheduleSeriesWithRelations {
   readonly series: PilatesScheduleSeriesRecord;
   readonly class: PilatesClassRecord;
   readonly trainer: StaffProfileRow;
+  readonly time_slots?: readonly PilatesScheduleSeriesTimeSlotRecord[];
   readonly generated_schedules?: readonly PilatesClassScheduleWithRelations[];
 }
 

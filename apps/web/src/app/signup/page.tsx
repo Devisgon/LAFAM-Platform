@@ -1,17 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { type FormEvent, type ReactNode, useState } from "react";
 import {
   ArrowRight,
-  Eye,
   EyeOff,
-  Lock,
+  LockKeyhole,
   Mail,
   Phone,
   ShieldCheck,
-  User,
+  UserRound,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -30,6 +30,7 @@ function normalizePhone(phone: string): string | undefined {
 
 export default function RegisterScreen() {
   const router = useRouter();
+
   const {
     pendingVerificationEmail,
     isSigningUp,
@@ -76,7 +77,7 @@ export default function RegisterScreen() {
         timezone: getBrowserTimezone(),
       });
     } catch {
-      // The shared auth error is rendered below the form.
+      // useAuth handles the error state
     }
   };
 
@@ -89,7 +90,7 @@ export default function RegisterScreen() {
       await verifyEmail(otp);
       router.replace("/?verified=1");
     } catch {
-      // The shared auth error is rendered below the form.
+      // useAuth handles the error state
     }
   };
 
@@ -101,111 +102,57 @@ export default function RegisterScreen() {
       await resendVerificationOtp();
       setResendMessage("A new verification code was sent.");
     } catch {
-      // The shared auth error is rendered below the form.
+      // useAuth handles the error state
     }
   };
 
   return (
-    <main className="relative flex min-h-screen w-full font-sans text-text-primary">
-      <section
-        aria-label="LAFAM introduction"
-        className="relative hidden flex-col items-center justify-center border-r border-text-secondary/10 p-12 lg:flex lg:w-[70%]"
+    <main className="relative flex min-h-screen w-full items-center justify-center overflow-hidden px-4 py-10 font-sans text-black">
+      <div
+        className="absolute inset-0 scale-105 bg-cover bg-center"
         style={{
-          backgroundImage:
-            "linear-gradient(to bottom, color-mix(in srgb, var(--primary) 20%, transparent), color-mix(in srgb, var(--background-secondary) 60%, transparent)), url('/signup_screen_bg_image.png')",
-          backgroundSize: "cover",
-          backgroundPosition: "center right",
+          backgroundImage: "url('/login_bg.jpg')",
         }}
-      >
-        <div className="relative z-10 flex w-full max-w-lg flex-col items-center px-6 text-center text-white">
-          <h1 className="font-serif text-5xl font-bold leading-tight tracking-tight drop-shadow-sm">
-            Begin Your
-            <br />
-            Journey.
-          </h1>
+      />
+
+      <div className="absolute inset-0 bg-black/55" />
+
+      <section className="relative z-10 flex w-full flex-col items-center">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <Image
+            src="/login-logo.svg"
+            alt="LA FORME"
+            width={170}
+            height={170}
+            priority
+            className="h-auto w-[170px] object-contain"
+          />
         </div>
-      </section>
 
-      <section className="relative z-10 ml-auto flex w-full flex-col justify-center px-6 py-12 sm:px-16 lg:w-[30%] lg:bg-background lg:px-8 xl:px-12">
-        <div className="mx-auto w-full max-w-md rounded-3xl border border-text-secondary/5 bg-card-bg-primary/95 p-6 shadow-xl backdrop-blur-md sm:p-10 lg:rounded-none lg:border-none lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+        <div className="w-full max-w-[500px] overflow-hidden rounded-md bg-white shadow-2xl">
           {pendingVerificationEmail ? (
-            <>
-              <div className="mb-7 text-center lg:text-left">
-                <ShieldCheck className="mb-4 h-9 w-9 text-primary" />
-                <h2 className="mb-2 text-3xl font-semibold tracking-tight">
-                  Verify your email
-                </h2>
-                <p className="text-xs leading-relaxed text-text-secondary">
-                  Enter the code sent to{" "}
-                  <strong className="text-text-primary">
-                    {pendingVerificationEmail}
-                  </strong>
-                  .
-                </p>
-              </div>
-
-              <form onSubmit={handleVerify} className="space-y-4">
-                <label
-                  htmlFor="otp"
-                  className="block text-xs font-semibold text-text-secondary"
-                >
-                  Verification code
-                </label>
-                <input
-                  id="otp"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  minLength={4}
-                  maxLength={10}
-                  value={otp}
-                  onChange={(event) => setOtp(event.target.value)}
-                  className="w-full rounded-2xl border border-text-secondary/10 bg-background-primary px-4 py-3.5 text-center text-lg font-semibold tracking-[0.3em] outline-none transition-all focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
-                  disabled={isBusy}
-                  required
-                  autoFocus
-                />
-
-                {error ? <AuthError message={error} /> : null}
-                {resendMessage ? (
-                  <p className="rounded-xl border border-success/20 bg-success/10 px-4 py-3 text-sm text-success">
-                    {resendMessage}
-                  </p>
-                ) : null}
-
-                <button
-                  type="submit"
-                  disabled={isBusy}
-                  className="flex w-full items-center justify-center rounded-2xl bg-button-primary py-3.5 text-sm font-semibold text-white transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isVerifyingEmail ? "Verifying..." : "Verify Email"}
-                </button>
-              </form>
-
-              <button
-                type="button"
-                onClick={handleResend}
-                disabled={isBusy}
-                className="mt-4 w-full text-center text-xs font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isResendingVerification ? "Sending..." : "Resend code"}
-              </button>
-            </>
+            <VerificationForm
+              email={pendingVerificationEmail}
+              otp={otp}
+              setOtp={setOtp}
+              error={error}
+              resendMessage={resendMessage}
+              isBusy={isBusy}
+              isVerifyingEmail={isVerifyingEmail}
+              isResendingVerification={isResendingVerification}
+              onVerify={handleVerify}
+              onResend={handleResend}
+            />
           ) : (
             <>
-              <div className="mb-6 text-center lg:text-left">
-                <span className="mb-2 inline-block font-serif text-xl font-bold tracking-wider text-primary">
-                  LAFAM
-                </span>
-                <h2 className="mb-1.5 text-3xl font-semibold tracking-tight">
-                  Create an Account
-                </h2>
-                <p className="text-xs leading-relaxed text-text-secondary">
-                  Please fill in your details to get started.
-                </p>
+              <div className="flex h-15 items-center justify-center gap-3 bg-[#e9caca] text-black">
+                <UserRound size={30} strokeWidth={2.5} />
+                <h1 className="text-xl font-bold uppercase tracking-wide">
+                  Create Account
+                </h1>
               </div>
 
-              <form onSubmit={handleSignUp} className="space-y-4">
+              <form onSubmit={handleSignUp} className="space-y-4 px-10 py-4">
                 <AuthInput
                   id="name"
                   label="Full Name"
@@ -213,10 +160,11 @@ export default function RegisterScreen() {
                   value={name}
                   onChange={setName}
                   autoComplete="name"
-                  placeholder="Sarah Sanctuary"
-                  icon={<User className="h-4 w-4" />}
+                  placeholder=""
+                  icon={<UserRound size={22} strokeWidth={2} />}
                   disabled={isBusy}
                 />
+
                 <AuthInput
                   id="email"
                   label="Email Address"
@@ -224,10 +172,11 @@ export default function RegisterScreen() {
                   value={email}
                   onChange={setEmail}
                   autoComplete="email"
-                  placeholder="sarah@example.com"
-                  icon={<Mail className="h-4 w-4" />}
+                  placeholder=""
+                  icon={<Mail size={22} strokeWidth={2} />}
                   disabled={isBusy}
                 />
+
                 <AuthInput
                   id="phone"
                   label="Phone Number"
@@ -235,10 +184,11 @@ export default function RegisterScreen() {
                   value={phone}
                   onChange={setPhone}
                   autoComplete="tel"
-                  placeholder="+96550000000"
-                  icon={<Phone className="h-4 w-4" />}
+                  placeholder=""
+                  icon={<Phone size={22} strokeWidth={2} />}
                   disabled={isBusy}
                 />
+
                 <PasswordInput
                   id="password"
                   label="Password"
@@ -249,6 +199,7 @@ export default function RegisterScreen() {
                   setShowPassword={setShowPassword}
                   disabled={isBusy}
                 />
+
                 <PasswordInput
                   id="confirmPassword"
                   label="Confirm Password"
@@ -266,13 +217,14 @@ export default function RegisterScreen() {
                     type="checkbox"
                     checked={agreeToTerms}
                     onChange={(event) => setAgreeToTerms(event.target.checked)}
-                    className="mt-0.5 h-4 w-4 accent-primary"
+                    className="mt-1 size-5 rounded border-gray-300 accent-black"
                     disabled={isBusy}
                     required
                   />
+
                   <label
                     htmlFor="terms"
-                    className="select-none text-xs leading-normal text-text-secondary"
+                    className="select-none text-[15px] font-medium leading-normal text-gray-500"
                   >
                     I agree to the Terms of Service and Privacy Policy.
                   </label>
@@ -285,27 +237,122 @@ export default function RegisterScreen() {
                 <button
                   type="submit"
                   disabled={isBusy}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-button-primary py-3.5 text-sm font-semibold text-white shadow-md shadow-primary/10 transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex w-full items-center justify-center gap-2 rounded bg-[#e9caca] px-5 py-3.5 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSigningUp ? "Creating Account..." : "Create Account"}
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight size={18} />
                 </button>
-              </form>
 
-              <p className="mt-8 text-center text-sm text-text-secondary">
-                Already have an account?{" "}
-                <Link
-                  href="/"
-                  className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
-                >
-                  Sign In <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              </p>
+                <p className="pt-2 text-center text-[15px] text-gray-500">
+                  Already have an account?{" "}
+                  <Link
+                    href="/"
+                    className="font-semibold text-[#e9caca] transition hover:text-black"
+                  >
+                    Sign In
+                  </Link>
+                </p>
+              </form>
             </>
           )}
         </div>
+
+        <p className="mt-7 text-center text-[16px] text-white/60">
+          © Copyright 2026. All Rights Reserved.
+        </p>
       </section>
     </main>
+  );
+}
+
+function VerificationForm({
+  email,
+  otp,
+  setOtp,
+  error,
+  resendMessage,
+  isBusy,
+  isVerifyingEmail,
+  isResendingVerification,
+  onVerify,
+  onResend,
+}: {
+  email: string;
+  otp: string;
+  setOtp: (value: string) => void;
+  error: string | null;
+  resendMessage: string | null;
+  isBusy: boolean;
+  isVerifyingEmail: boolean;
+  isResendingVerification: boolean;
+  onVerify: (event: FormEvent<HTMLFormElement>) => void;
+  onResend: () => void;
+}) {
+  return (
+    <>
+      <div className="flex h-16 items-center justify-center gap-3 bg-[#e9caca] text-black">
+        <ShieldCheck size={30} strokeWidth={2.5} />
+        <h1 className="text-xl font-bold uppercase tracking-wide">
+          Verify Email
+        </h1>
+      </div>
+
+      <form onSubmit={onVerify} className="space-y-5 px-10 py-6">
+        <p className="text-center text-[15px] font-medium leading-relaxed text-gray-500">
+          Enter the verification code sent to{" "}
+          <strong className="text-black">{email}</strong>.
+        </p>
+
+        <div>
+          <label
+            htmlFor="otp"
+            className="mb-1 block text-[16px] font-medium text-gray-500"
+          >
+            Verification Code
+          </label>
+
+          <input
+            id="otp"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            minLength={4}
+            maxLength={15}
+            value={otp}
+            onChange={(event) => setOtp(event.target.value)}
+            disabled={isBusy}
+            required
+            autoFocus
+            className="h-[48px] w-full rounded border border-gray-300 bg-white px-4 text-center text-lg font-semibold tracking-[0.35em] text-black outline-none disabled:cursor-not-allowed disabled:opacity-60"
+          />
+        </div>
+
+        {error ? <AuthError message={error} /> : null}
+
+        {resendMessage ? (
+          <p className="border border-green-500/20 bg-green-500/10 px-4 py-3 text-sm font-medium text-green-700">
+            {resendMessage}
+          </p>
+        ) : null}
+
+        <button
+          type="submit"
+          disabled={isBusy}
+          className="w-full rounded bg-[#e9caca] px-5 py-3.5 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isVerifyingEmail ? "Verifying..." : "Verify Email"}
+        </button>
+
+        <button
+          type="button"
+          onClick={onResend}
+          disabled={isBusy}
+          className="w-full text-center text-[15px] font-semibold text-[#e9caca] transition hover:text-black disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isResendingVerification ? "Sending..." : "Resend Code"}
+        </button>
+      </form>
+    </>
   );
 }
 
@@ -333,12 +380,15 @@ function AuthInput({
   disabled,
 }: AuthInputProps) {
   return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-xs font-semibold text-text-secondary">
+    <div>
+      <label
+        htmlFor={id}
+        className="mb-1 block text-[16px] font-medium text-gray-500"
+      >
         {label}
       </label>
-      <div className="relative flex items-center">
-        <span className="absolute left-4 text-text-secondary/60">{icon}</span>
+
+      <div className="flex h-[54px] overflow-hidden rounded border border-gray-300 bg-white">
         <input
           id={id}
           type={type}
@@ -347,9 +397,13 @@ function AuthInput({
           autoComplete={autoComplete}
           placeholder={placeholder}
           disabled={disabled}
-          className="w-full rounded-2xl border border-text-secondary/10 bg-background-primary py-3.5 pl-12 pr-4 text-sm outline-none transition-all placeholder:text-text-secondary/40 focus:border-primary/40 focus:bg-card-bg-primary focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
           required
+          className="h-full flex-1 px-4 text-base text-black outline-none disabled:cursor-not-allowed disabled:opacity-60"
         />
+
+        <span className="flex h-full w-14 items-center justify-center border-l border-gray-300 bg-gray-100 text-black">
+          {icon}
+        </span>
       </div>
     </div>
   );
@@ -377,12 +431,15 @@ function PasswordInput({
   disabled,
 }: PasswordInputProps) {
   return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-xs font-semibold text-text-secondary">
+    <div>
+      <label
+        htmlFor={id}
+        className="mb-1 block text-[16px] font-medium text-gray-500"
+      >
         {label}
       </label>
-      <div className="relative flex items-center">
-        <Lock className="absolute left-4 h-4 w-4 text-text-secondary/60" />
+
+      <div className="flex h-[54px] overflow-hidden rounded border border-gray-300 bg-white">
         <input
           id={id}
           type={showPassword ? "text" : "password"}
@@ -392,20 +449,21 @@ function PasswordInput({
           minLength={8}
           maxLength={128}
           disabled={disabled}
-          className="w-full rounded-2xl border border-text-secondary/10 bg-background-primary py-3.5 pl-12 pr-12 text-sm outline-none transition-all focus:border-primary/40 focus:bg-card-bg-primary focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
           required
+          className="h-full flex-1 px-4 text-base text-black outline-none disabled:cursor-not-allowed disabled:opacity-60"
         />
+
         <button
           type="button"
           onClick={() => setShowPassword(!showPassword)}
-          className="absolute right-4 text-text-secondary/60 transition-colors hover:text-text-primary"
           disabled={disabled}
           aria-label={showPassword ? "Hide password" : "Show password"}
+          className="flex h-full w-14 items-center justify-center border-l border-gray-300 bg-gray-100 text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
         >
           {showPassword ? (
-            <EyeOff className="h-4 w-4" />
+            <EyeOff size={22} strokeWidth={2} />
           ) : (
-            <Eye className="h-4 w-4" />
+            <LockKeyhole size={22} strokeWidth={2} />
           )}
         </button>
       </div>
@@ -417,7 +475,7 @@ function AuthError({ message }: { message: string }) {
   return (
     <p
       role="alert"
-      className="rounded-xl border border-error/20 bg-error/10 px-4 py-3 text-sm text-error"
+      className="border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-600"
     >
       {message}
     </p>

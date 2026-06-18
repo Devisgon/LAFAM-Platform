@@ -143,6 +143,78 @@ export type DatabasePrivateBookingHistoryAction =
   | 'private_booking_expired'
   | 'private_booking_rescheduled'
   | 'private_booking_admin_override';
+export type DatabasePaymentMethod = 'knet' | 'card' | 'wallet';
+
+export type DatabasePaymentStatus =
+  | 'pending'
+  | 'requires_redirect'
+  | 'processing'
+  | 'paid'
+  | 'failed'
+  | 'cancelled'
+  | 'expired'
+  | 'refund_requested'
+  | 'refund_processing'
+  | 'manual_refund_required'
+  | 'refunded';
+
+export type DatabasePaymentTargetType =
+  | 'booking'
+  | 'private_booking'
+  | 'wallet_top_up';
+
+export type DatabasePaymentProvider =
+  | 'mock'
+  | 'knet'
+  | 'tap'
+  | 'myfatoorah'
+  | 'checkout'
+  | 'wallet'
+  | 'manual';
+
+export type DatabasePaymentTransactionType =
+  | 'intent_created'
+  | 'provider_request'
+  | 'provider_response'
+  | 'callback_received'
+  | 'webhook_received'
+  | 'verification'
+  | 'status_change'
+  | 'wallet_debit'
+  | 'wallet_credit'
+  | 'refund_requested'
+  | 'refund_processed'
+  | 'refund_failed';
+
+export type DatabasePaymentTransactionStatus =
+  | 'pending'
+  | 'succeeded'
+  | 'failed'
+  | 'ignored';
+
+export type DatabaseWalletAccountStatus = 'active' | 'frozen' | 'closed';
+
+export type DatabaseWalletLedgerEntryType =
+  | 'wallet_top_up'
+  | 'booking_payment'
+  | 'private_booking_payment'
+  | 'refund_credit'
+  | 'admin_adjustment_credit'
+  | 'admin_adjustment_debit';
+
+export type DatabaseWalletLedgerEntryStatus =
+  | 'pending'
+  | 'posted'
+  | 'reversed'
+  | 'failed';
+
+export type DatabasePromoDiscountType = 'fixed_amount' | 'percentage';
+
+export type DatabasePromoCodeStatus =
+  | 'active'
+  | 'inactive'
+  | 'expired'
+  | 'deleted';
 
 export interface Database {
   public: {
@@ -506,6 +578,8 @@ export interface Database {
           description: string | null;
           default_duration_minutes: number;
           default_capacity: number;
+          default_price_amount: number;
+          currency: string;
           level: DatabasePilatesClassLevel;
           status: DatabasePilatesClassStatus;
           image_path: string | null;
@@ -522,6 +596,8 @@ export interface Database {
           description?: string | null;
           default_duration_minutes?: number;
           default_capacity?: number;
+          default_price_amount?: number;
+          currency?: string;
           level?: DatabasePilatesClassLevel;
           status?: DatabasePilatesClassStatus;
           image_path?: string | null;
@@ -538,6 +614,8 @@ export interface Database {
           description?: string | null;
           default_duration_minutes?: number;
           default_capacity?: number;
+          default_price_amount?: number;
+          currency?: string;
           level?: DatabasePilatesClassLevel;
           status?: DatabasePilatesClassStatus;
           image_path?: string | null;
@@ -582,6 +660,8 @@ export interface Database {
           end_time: string;
           duration_minutes: number;
           capacity: number;
+          uses_multiple_time_slots: boolean;
+          time_slot_count: number;
           excluded_dates: string[];
           status: DatabasePilatesScheduleSeriesStatus;
           created_by_admin_id: string | null;
@@ -607,6 +687,8 @@ export interface Database {
           end_time: string;
           duration_minutes: number;
           capacity: number;
+          uses_multiple_time_slots?: boolean;
+          time_slot_count?: number;
           excluded_dates?: string[];
           status?: DatabasePilatesScheduleSeriesStatus;
           created_by_admin_id?: string | null;
@@ -632,6 +714,8 @@ export interface Database {
           end_time?: string;
           duration_minutes?: number;
           capacity?: number;
+          uses_multiple_time_slots?: boolean;
+          time_slot_count?: number;
           excluded_dates?: string[];
           status?: DatabasePilatesScheduleSeriesStatus;
           created_by_admin_id?: string | null;
@@ -673,6 +757,59 @@ export interface Database {
           },
         ];
       };
+      pilates_schedule_series_time_slots: {
+        Row: {
+          id: string;
+          series_id: string;
+          slot_index: number;
+          studio: string;
+          start_time: string;
+          end_time: string;
+          duration_minutes: number;
+          capacity: number;
+          price_amount: number | null;
+          currency: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          series_id: string;
+          slot_index: number;
+          studio?: string;
+          start_time: string;
+          end_time: string;
+          duration_minutes: number;
+          capacity: number;
+          price_amount?: number | null;
+          currency?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          series_id?: string;
+          slot_index?: number;
+          studio?: string;
+          start_time?: string;
+          end_time?: string;
+          duration_minutes?: number;
+          capacity?: number;
+          price_amount?: number | null;
+          currency?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'pilates_schedule_series_time_slots_series_id_fkey';
+            columns: ['series_id'];
+            isOneToOne: false;
+            referencedRelation: 'pilates_schedule_series';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
 
       pilates_class_schedules: {
         Row: {
@@ -685,6 +822,8 @@ export interface Database {
           end_time: string;
           duration_minutes: number;
           capacity: number;
+          price_amount: number | null;
+          currency: string | null;
           status: DatabasePilatesClassScheduleStatus;
           cancellation_reason: string | null;
           created_by_admin_id: string | null;
@@ -698,6 +837,9 @@ export interface Database {
           series_id: string | null;
           series_occurrence_index: number | null;
           generation_source: DatabasePilatesScheduleGenerationSource;
+          series_time_slot_id: string | null;
+          series_date_index: number | null;
+          series_slot_index: number | null;
         };
         Insert: {
           id?: string;
@@ -709,6 +851,8 @@ export interface Database {
           end_time: string;
           duration_minutes: number;
           capacity: number;
+          price_amount?: number | null;
+          currency?: string | null;
           status?: DatabasePilatesClassScheduleStatus;
           cancellation_reason?: string | null;
           created_by_admin_id?: string | null;
@@ -722,6 +866,9 @@ export interface Database {
           series_id?: string | null;
           series_occurrence_index?: number | null;
           generation_source?: DatabasePilatesScheduleGenerationSource;
+          series_time_slot_id?: string | null;
+          series_date_index?: number | null;
+          series_slot_index?: number | null;
         };
         Update: {
           id?: string;
@@ -733,6 +880,8 @@ export interface Database {
           end_time?: string;
           duration_minutes?: number;
           capacity?: number;
+          price_amount?: number | null;
+          currency?: string | null;
           status?: DatabasePilatesClassScheduleStatus;
           cancellation_reason?: string | null;
           created_by_admin_id?: string | null;
@@ -746,6 +895,9 @@ export interface Database {
           series_id?: string | null;
           series_occurrence_index?: number | null;
           generation_source?: DatabasePilatesScheduleGenerationSource;
+          series_time_slot_id?: string | null;
+          series_date_index?: number | null;
+          series_slot_index?: number | null;
         };
         Relationships: [
           {
@@ -781,6 +933,13 @@ export interface Database {
             columns: ['series_id'];
             isOneToOne: false;
             referencedRelation: 'pilates_schedule_series';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'pilates_class_schedules_series_time_slot_id_fkey';
+            columns: ['series_time_slot_id'];
+            isOneToOne: false;
+            referencedRelation: 'pilates_schedule_series_time_slots';
             referencedColumns: ['id'];
           },
         ];
@@ -952,6 +1111,8 @@ export interface Database {
           end_time: string;
           duration_minutes: number;
           studio: string;
+          price_amount: number;
+          currency: string;
           status: DatabaseBookingStatus;
           source: DatabaseBookingSource;
           payment_status: DatabaseBookingPaymentStatus;
@@ -986,6 +1147,8 @@ export interface Database {
           end_time: string;
           duration_minutes: number;
           studio?: string;
+          price_amount?: number;
+          currency?: string;
           status?: DatabaseBookingStatus;
           source?: DatabaseBookingSource;
           payment_status?: DatabaseBookingPaymentStatus;
@@ -1020,6 +1183,8 @@ export interface Database {
           end_time?: string;
           duration_minutes?: number;
           studio?: string;
+          price_amount?: number;
+          currency?: string;
           status?: DatabaseBookingStatus;
           source?: DatabaseBookingSource;
           payment_status?: DatabaseBookingPaymentStatus;
@@ -1329,6 +1494,7 @@ export interface Database {
           booking_id: string | null;
           waitlist_id: string | null;
           private_booking_id: string | null;
+          payment_id: string | null;
           payload: DatabaseJsonObject;
           created_at: string;
           published_at: string | null;
@@ -1340,6 +1506,7 @@ export interface Database {
           booking_id?: string | null;
           waitlist_id?: string | null;
           private_booking_id?: string | null;
+          payment_id?: string | null;
           payload?: DatabaseJsonObject;
           created_at?: string;
           published_at?: string | null;
@@ -1351,6 +1518,7 @@ export interface Database {
           booking_id?: string | null;
           waitlist_id?: string | null;
           private_booking_id?: string | null;
+          payment_id?: string | null;
           payload?: DatabaseJsonObject;
           created_at?: string;
           published_at?: string | null;
@@ -1382,6 +1550,458 @@ export interface Database {
             columns: ['private_booking_id'];
             isOneToOne: false;
             referencedRelation: 'private_trainer_bookings';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'booking_domain_events_payment_id_fkey';
+            columns: ['payment_id'];
+            isOneToOne: false;
+            referencedRelation: 'payments';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      payments: {
+        Row: {
+          id: string;
+          payment_number: string;
+          receipt_number: string | null;
+          user_id: string;
+          target_type: DatabasePaymentTargetType;
+          booking_id: string | null;
+          private_booking_id: string | null;
+          amount: number;
+          discount_amount: number;
+          final_amount: number;
+          currency: string;
+          payment_method: DatabasePaymentMethod;
+          payment_provider: DatabasePaymentProvider;
+          status: DatabasePaymentStatus;
+          gateway_reference: string | null;
+          gateway_payment_id: string | null;
+          gateway_invoice_id: string | null;
+          redirect_url: string | null;
+          callback_url: string | null;
+          webhook_verified_at: string | null;
+          paid_at: string | null;
+          failed_at: string | null;
+          cancelled_at: string | null;
+          expired_at: string | null;
+          refunded_at: string | null;
+          refunded_amount: number;
+          expires_at: string | null;
+          idempotency_key: string | null;
+          failure_code: string | null;
+          failure_message: string | null;
+          metadata: DatabaseJsonObject;
+          created_at: string;
+          updated_at: string;
+          realtime_version: number;
+        };
+        Insert: {
+          id?: string;
+          payment_number?: string;
+          receipt_number?: string | null;
+          user_id: string;
+          target_type: DatabasePaymentTargetType;
+          booking_id?: string | null;
+          private_booking_id?: string | null;
+          amount: number;
+          discount_amount?: number;
+          final_amount: number;
+          currency?: string;
+          payment_method: DatabasePaymentMethod;
+          payment_provider?: DatabasePaymentProvider;
+          status?: DatabasePaymentStatus;
+          gateway_reference?: string | null;
+          gateway_payment_id?: string | null;
+          gateway_invoice_id?: string | null;
+          redirect_url?: string | null;
+          callback_url?: string | null;
+          webhook_verified_at?: string | null;
+          paid_at?: string | null;
+          failed_at?: string | null;
+          cancelled_at?: string | null;
+          expired_at?: string | null;
+          refunded_at?: string | null;
+          refunded_amount?: number;
+          expires_at?: string | null;
+          idempotency_key?: string | null;
+          failure_code?: string | null;
+          failure_message?: string | null;
+          metadata?: DatabaseJsonObject;
+          created_at?: string;
+          updated_at?: string;
+          realtime_version?: number;
+        };
+        Update: {
+          id?: string;
+          payment_number?: string;
+          receipt_number?: string | null;
+          user_id?: string;
+          target_type?: DatabasePaymentTargetType;
+          booking_id?: string | null;
+          private_booking_id?: string | null;
+          amount?: number;
+          discount_amount?: number;
+          final_amount?: number;
+          currency?: string;
+          payment_method?: DatabasePaymentMethod;
+          payment_provider?: DatabasePaymentProvider;
+          status?: DatabasePaymentStatus;
+          gateway_reference?: string | null;
+          gateway_payment_id?: string | null;
+          gateway_invoice_id?: string | null;
+          redirect_url?: string | null;
+          callback_url?: string | null;
+          webhook_verified_at?: string | null;
+          paid_at?: string | null;
+          failed_at?: string | null;
+          cancelled_at?: string | null;
+          expired_at?: string | null;
+          refunded_at?: string | null;
+          refunded_amount?: number;
+          expires_at?: string | null;
+          idempotency_key?: string | null;
+          failure_code?: string | null;
+          failure_message?: string | null;
+          metadata?: DatabaseJsonObject;
+          created_at?: string;
+          updated_at?: string;
+          realtime_version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'payments_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'payments_booking_id_fkey';
+            columns: ['booking_id'];
+            isOneToOne: false;
+            referencedRelation: 'bookings';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'payments_private_booking_id_fkey';
+            columns: ['private_booking_id'];
+            isOneToOne: false;
+            referencedRelation: 'private_trainer_bookings';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      payment_transactions: {
+        Row: {
+          id: string;
+          payment_id: string;
+          transaction_type: DatabasePaymentTransactionType;
+          transaction_status: DatabasePaymentTransactionStatus;
+          provider: DatabasePaymentProvider;
+          provider_reference: string | null;
+          gateway_request: DatabaseJsonObject;
+          gateway_response: DatabaseJsonObject;
+          failure_code: string | null;
+          failure_message: string | null;
+          metadata: DatabaseJsonObject;
+          processed_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          payment_id: string;
+          transaction_type: DatabasePaymentTransactionType;
+          transaction_status?: DatabasePaymentTransactionStatus;
+          provider?: DatabasePaymentProvider;
+          provider_reference?: string | null;
+          gateway_request?: DatabaseJsonObject;
+          gateway_response?: DatabaseJsonObject;
+          failure_code?: string | null;
+          failure_message?: string | null;
+          metadata?: DatabaseJsonObject;
+          processed_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          payment_id?: string;
+          transaction_type?: DatabasePaymentTransactionType;
+          transaction_status?: DatabasePaymentTransactionStatus;
+          provider?: DatabasePaymentProvider;
+          provider_reference?: string | null;
+          gateway_request?: DatabaseJsonObject;
+          gateway_response?: DatabaseJsonObject;
+          failure_code?: string | null;
+          failure_message?: string | null;
+          metadata?: DatabaseJsonObject;
+          processed_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'payment_transactions_payment_id_fkey';
+            columns: ['payment_id'];
+            isOneToOne: false;
+            referencedRelation: 'payments';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      wallet_accounts: {
+        Row: {
+          id: string;
+          user_id: string;
+          currency: string;
+          available_balance: number;
+          pending_balance: number;
+          status: DatabaseWalletAccountStatus;
+          created_at: string;
+          updated_at: string;
+          realtime_version: number;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          currency?: string;
+          available_balance?: number;
+          pending_balance?: number;
+          status?: DatabaseWalletAccountStatus;
+          created_at?: string;
+          updated_at?: string;
+          realtime_version?: number;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          currency?: string;
+          available_balance?: number;
+          pending_balance?: number;
+          status?: DatabaseWalletAccountStatus;
+          created_at?: string;
+          updated_at?: string;
+          realtime_version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'wallet_accounts_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      wallet_ledger_entries: {
+        Row: {
+          id: string;
+          wallet_account_id: string;
+          user_id: string;
+          payment_id: string | null;
+          booking_id: string | null;
+          private_booking_id: string | null;
+          entry_type: DatabaseWalletLedgerEntryType;
+          entry_status: DatabaseWalletLedgerEntryStatus;
+          amount: number;
+          balance_before: number;
+          balance_after: number;
+          description: string | null;
+          metadata: DatabaseJsonObject;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          wallet_account_id: string;
+          user_id: string;
+          payment_id?: string | null;
+          booking_id?: string | null;
+          private_booking_id?: string | null;
+          entry_type: DatabaseWalletLedgerEntryType;
+          entry_status?: DatabaseWalletLedgerEntryStatus;
+          amount: number;
+          balance_before: number;
+          balance_after: number;
+          description?: string | null;
+          metadata?: DatabaseJsonObject;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          wallet_account_id?: string;
+          user_id?: string;
+          payment_id?: string | null;
+          booking_id?: string | null;
+          private_booking_id?: string | null;
+          entry_type?: DatabaseWalletLedgerEntryType;
+          entry_status?: DatabaseWalletLedgerEntryStatus;
+          amount?: number;
+          balance_before?: number;
+          balance_after?: number;
+          description?: string | null;
+          metadata?: DatabaseJsonObject;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'wallet_ledger_entries_wallet_account_id_fkey';
+            columns: ['wallet_account_id'];
+            isOneToOne: false;
+            referencedRelation: 'wallet_accounts';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'wallet_ledger_entries_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'wallet_ledger_entries_payment_id_fkey';
+            columns: ['payment_id'];
+            isOneToOne: false;
+            referencedRelation: 'payments';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'wallet_ledger_entries_booking_id_fkey';
+            columns: ['booking_id'];
+            isOneToOne: false;
+            referencedRelation: 'bookings';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'wallet_ledger_entries_private_booking_id_fkey';
+            columns: ['private_booking_id'];
+            isOneToOne: false;
+            referencedRelation: 'private_trainer_bookings';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      promo_codes: {
+        Row: {
+          id: string;
+          code: string;
+          description: string | null;
+          discount_type: DatabasePromoDiscountType;
+          discount_value: number;
+          max_discount_amount: number | null;
+          starts_at: string | null;
+          ends_at: string | null;
+          max_redemptions: number | null;
+          per_user_limit: number | null;
+          redemption_count: number;
+          status: DatabasePromoCodeStatus;
+          created_by_admin_id: string | null;
+          updated_by_admin_id: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          code: string;
+          description?: string | null;
+          discount_type: DatabasePromoDiscountType;
+          discount_value: number;
+          max_discount_amount?: number | null;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          max_redemptions?: number | null;
+          per_user_limit?: number | null;
+          redemption_count?: number;
+          status?: DatabasePromoCodeStatus;
+          created_by_admin_id?: string | null;
+          updated_by_admin_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          code?: string;
+          description?: string | null;
+          discount_type?: DatabasePromoDiscountType;
+          discount_value?: number;
+          max_discount_amount?: number | null;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          max_redemptions?: number | null;
+          per_user_limit?: number | null;
+          redemption_count?: number;
+          status?: DatabasePromoCodeStatus;
+          created_by_admin_id?: string | null;
+          updated_by_admin_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'promo_codes_created_by_admin_id_fkey';
+            columns: ['created_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'promo_codes_updated_by_admin_id_fkey';
+            columns: ['updated_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      payment_discounts: {
+        Row: {
+          id: string;
+          payment_id: string;
+          promo_code_id: string | null;
+          code: string;
+          discount_amount: number;
+          metadata: DatabaseJsonObject;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          payment_id: string;
+          promo_code_id?: string | null;
+          code: string;
+          discount_amount: number;
+          metadata?: DatabaseJsonObject;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          payment_id?: string;
+          promo_code_id?: string | null;
+          code?: string;
+          discount_amount?: number;
+          metadata?: DatabaseJsonObject;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'payment_discounts_payment_id_fkey';
+            columns: ['payment_id'];
+            isOneToOne: false;
+            referencedRelation: 'payments';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'payment_discounts_promo_code_id_fkey';
+            columns: ['promo_code_id'];
+            isOneToOne: false;
+            referencedRelation: 'promo_codes';
             referencedColumns: ['id'];
           },
         ];
@@ -1598,6 +2218,150 @@ export interface Database {
           new_payment_status: DatabaseBookingPaymentStatus;
         }[];
       };
+      create_payment_intent_atomic: {
+        Args: {
+          p_user_id: string;
+          p_target_type: DatabasePaymentTargetType;
+          p_booking_id: string | null;
+          p_private_booking_id: string | null;
+          p_amount: number;
+          p_discount_amount: number;
+          p_final_amount: number;
+          p_currency: string;
+          p_payment_method: DatabasePaymentMethod;
+          p_payment_provider: DatabasePaymentProvider;
+          p_idempotency_key?: string | null;
+          p_redirect_url?: string | null;
+          p_callback_url?: string | null;
+          p_gateway_reference?: string | null;
+          p_gateway_payment_id?: string | null;
+          p_gateway_invoice_id?: string | null;
+          p_expires_at?: string | null;
+          p_metadata?: DatabaseJsonObject;
+        };
+        Returns: {
+          payment_id: string;
+          payment_number: string;
+          target_type: DatabasePaymentTargetType;
+          booking_id: string | null;
+          private_booking_id: string | null;
+          status: DatabasePaymentStatus;
+          payment_method: DatabasePaymentMethod;
+          payment_provider: DatabasePaymentProvider;
+          final_amount: number;
+          currency: string;
+          redirect_url: string | null;
+          expires_at: string | null;
+        }[];
+      };
+
+      mark_payment_paid_atomic: {
+        Args: {
+          p_payment_id: string;
+          p_provider_reference?: string | null;
+          p_gateway_response?: DatabaseJsonObject;
+          p_webhook_verified?: boolean;
+        };
+        Returns: {
+          payment_id: string;
+          payment_number: string;
+          target_type: DatabasePaymentTargetType;
+          booking_id: string | null;
+          private_booking_id: string | null;
+          status: DatabasePaymentStatus;
+          receipt_number: string | null;
+          paid_at: string | null;
+        }[];
+      };
+
+      mark_payment_failed_atomic: {
+        Args: {
+          p_payment_id: string;
+          p_failure_code?: string | null;
+          p_failure_message?: string | null;
+          p_gateway_response?: DatabaseJsonObject;
+        };
+        Returns: {
+          payment_id: string;
+          target_type: DatabasePaymentTargetType;
+          booking_id: string | null;
+          private_booking_id: string | null;
+          status: DatabasePaymentStatus;
+        }[];
+      };
+
+      mark_payment_cancelled_atomic: {
+        Args: {
+          p_payment_id: string;
+          p_reason?: string | null;
+          p_gateway_response?: DatabaseJsonObject;
+        };
+        Returns: {
+          payment_id: string;
+          target_type: DatabasePaymentTargetType;
+          booking_id: string | null;
+          private_booking_id: string | null;
+          status: DatabasePaymentStatus;
+        }[];
+      };
+
+      expire_payment_intents_atomic: {
+        Args: Record<string, never>;
+        Returns: {
+          payment_id: string;
+          target_type: DatabasePaymentTargetType;
+          booking_id: string | null;
+          private_booking_id: string | null;
+          status: DatabasePaymentStatus;
+        }[];
+      };
+
+      debit_wallet_for_booking_atomic: {
+        Args: {
+          p_payment_id: string;
+          p_description?: string | null;
+          p_metadata?: DatabaseJsonObject;
+        };
+        Returns: {
+          payment_id: string;
+          wallet_account_id: string;
+          ledger_entry_id: string;
+          available_balance: number;
+          booking_id: string | null;
+          private_booking_id: string | null;
+        }[];
+      };
+
+      credit_wallet_atomic: {
+        Args: {
+          p_user_id: string;
+          p_amount: number;
+          p_currency?: string;
+          p_payment_id?: string | null;
+          p_description?: string | null;
+          p_metadata?: DatabaseJsonObject;
+        };
+        Returns: {
+          wallet_account_id: string;
+          ledger_entry_id: string;
+          available_balance: number;
+        }[];
+      };
+
+      refund_payment_atomic: {
+        Args: {
+          p_payment_id: string;
+          p_actor_admin_id?: string | null;
+          p_reason?: string | null;
+          p_gateway_response?: DatabaseJsonObject;
+        };
+        Returns: {
+          payment_id: string;
+          status: DatabasePaymentStatus;
+          refunded_amount: number;
+          refunded_at: string | null;
+        }[];
+      };
     };
     Enums: {
       staff_profile_status: DatabaseStaffProfileStatus;
@@ -1614,6 +2378,17 @@ export interface Database {
       waitlist_status: DatabaseWaitlistStatus;
       booking_history_action: DatabaseBookingHistoryAction;
       private_booking_history_action: DatabasePrivateBookingHistoryAction;
+      payment_method: DatabasePaymentMethod;
+      payment_status: DatabasePaymentStatus;
+      payment_target_type: DatabasePaymentTargetType;
+      payment_provider: DatabasePaymentProvider;
+      payment_transaction_type: DatabasePaymentTransactionType;
+      payment_transaction_status: DatabasePaymentTransactionStatus;
+      wallet_account_status: DatabaseWalletAccountStatus;
+      wallet_ledger_entry_type: DatabaseWalletLedgerEntryType;
+      wallet_ledger_entry_status: DatabaseWalletLedgerEntryStatus;
+      promo_discount_type: DatabasePromoDiscountType;
+      promo_code_status: DatabasePromoCodeStatus;
     };
     CompositeTypes: Record<string, never>;
   };
@@ -1671,6 +2446,12 @@ export type PilatesScheduleSeriesInsert =
   Database['public']['Tables']['pilates_schedule_series']['Insert'];
 export type PilatesScheduleSeriesUpdate =
   Database['public']['Tables']['pilates_schedule_series']['Update'];
+export type PilatesScheduleSeriesTimeSlotRow =
+  Database['public']['Tables']['pilates_schedule_series_time_slots']['Row'];
+export type PilatesScheduleSeriesTimeSlotInsert =
+  Database['public']['Tables']['pilates_schedule_series_time_slots']['Insert'];
+export type PilatesScheduleSeriesTimeSlotUpdate =
+  Database['public']['Tables']['pilates_schedule_series_time_slots']['Update'];
 
 export type PilatesClassScheduleRow =
   Database['public']['Tables']['pilates_class_schedules']['Row'];
@@ -1715,7 +2496,43 @@ export type BookingDomainEventInsert =
   Database['public']['Tables']['booking_domain_events']['Insert'];
 export type BookingDomainEventUpdate =
   Database['public']['Tables']['booking_domain_events']['Update'];
+export type PaymentRow = Database['public']['Tables']['payments']['Row'];
+export type PaymentInsert = Database['public']['Tables']['payments']['Insert'];
+export type PaymentUpdate = Database['public']['Tables']['payments']['Update'];
 
+export type PaymentTransactionRow =
+  Database['public']['Tables']['payment_transactions']['Row'];
+export type PaymentTransactionInsert =
+  Database['public']['Tables']['payment_transactions']['Insert'];
+export type PaymentTransactionUpdate =
+  Database['public']['Tables']['payment_transactions']['Update'];
+
+export type WalletAccountRow =
+  Database['public']['Tables']['wallet_accounts']['Row'];
+export type WalletAccountInsert =
+  Database['public']['Tables']['wallet_accounts']['Insert'];
+export type WalletAccountUpdate =
+  Database['public']['Tables']['wallet_accounts']['Update'];
+
+export type WalletLedgerEntryRow =
+  Database['public']['Tables']['wallet_ledger_entries']['Row'];
+export type WalletLedgerEntryInsert =
+  Database['public']['Tables']['wallet_ledger_entries']['Insert'];
+export type WalletLedgerEntryUpdate =
+  Database['public']['Tables']['wallet_ledger_entries']['Update'];
+
+export type PromoCodeRow = Database['public']['Tables']['promo_codes']['Row'];
+export type PromoCodeInsert =
+  Database['public']['Tables']['promo_codes']['Insert'];
+export type PromoCodeUpdate =
+  Database['public']['Tables']['promo_codes']['Update'];
+
+export type PaymentDiscountRow =
+  Database['public']['Tables']['payment_discounts']['Row'];
+export type PaymentDiscountInsert =
+  Database['public']['Tables']['payment_discounts']['Insert'];
+export type PaymentDiscountUpdate =
+  Database['public']['Tables']['payment_discounts']['Update'];
 export type PilatesScheduleAvailabilityRpcRow =
   Database['public']['Functions']['get_pilates_schedule_availability']['Returns'][number];
 
@@ -1741,6 +2558,29 @@ export type CancelPrivateTrainerBookingAtomicRpcRow =
 
 export type ReschedulePrivateTrainerBookingAtomicRpcRow =
   Database['public']['Functions']['reschedule_private_trainer_booking_atomic']['Returns'][number];
+export type CreatePaymentIntentAtomicRpcRow =
+  Database['public']['Functions']['create_payment_intent_atomic']['Returns'][number];
+
+export type MarkPaymentPaidAtomicRpcRow =
+  Database['public']['Functions']['mark_payment_paid_atomic']['Returns'][number];
+
+export type MarkPaymentFailedAtomicRpcRow =
+  Database['public']['Functions']['mark_payment_failed_atomic']['Returns'][number];
+
+export type MarkPaymentCancelledAtomicRpcRow =
+  Database['public']['Functions']['mark_payment_cancelled_atomic']['Returns'][number];
+
+export type ExpirePaymentIntentsAtomicRpcRow =
+  Database['public']['Functions']['expire_payment_intents_atomic']['Returns'][number];
+
+export type DebitWalletForBookingAtomicRpcRow =
+  Database['public']['Functions']['debit_wallet_for_booking_atomic']['Returns'][number];
+
+export type CreditWalletAtomicRpcRow =
+  Database['public']['Functions']['credit_wallet_atomic']['Returns'][number];
+
+export type RefundPaymentAtomicRpcRow =
+  Database['public']['Functions']['refund_payment_atomic']['Returns'][number];
 
 export type LAFAMSupabaseClient = SupabaseClient<Database>;
 

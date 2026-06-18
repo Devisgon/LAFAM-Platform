@@ -28,6 +28,7 @@ import { CoreModule } from './modules/core/core.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { ClassesModule } from './modules/classes/classes.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 const DEFAULT_THROTTLE_TTL_MS = 60_000;
 const DEFAULT_THROTTLE_LIMIT = 120;
@@ -47,6 +48,7 @@ const DEFAULT_THROTTLE_LIMIT = 120;
     StaffModule,
     ClassesModule,
     BookingsModule,
+    PaymentsModule,
   ],
   providers: [
     {

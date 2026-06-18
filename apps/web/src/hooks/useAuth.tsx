@@ -15,6 +15,7 @@ import {
   getCachedPasswordResetEmail,
   getDashboardPath,
   getCachedVerificationEmail,
+  isEmailVerificationRequiredError,
   type AuthUser,
   type ForgotPasswordResult,
   type LoginPayload,
@@ -94,19 +95,33 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const refreshUser = useCallback(async () => {
-    setIsChecking(true);
+  setIsChecking(true);
 
-    try {
-      const currentUser = await authClient.getCurrentUser();
+  try {
+    const currentUser = await authClient.getCurrentUser();
+
+    if (currentUser) {
       setUser(currentUser);
       return currentUser;
-    } catch {
+    }
+
+    const refreshed = await refreshAuthSession();
+
+    if (!refreshed) {
       setUser(null);
       return null;
-    } finally {
-      setIsChecking(false);
     }
-  }, []);
+
+    const userAfterRefresh = await authClient.getCurrentUser();
+    setUser(userAfterRefresh);
+    return userAfterRefresh;
+  } catch {
+    setUser(null);
+    return null;
+  } finally {
+    setIsChecking(false);
+  }
+}, []);
 
   const refreshAvatar = useCallback(async () => {
     try {
@@ -160,7 +175,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         void refreshAvatar();
         return result;
       } catch (err: unknown) {
-        setError(getErrorMessage(err, "Login failed."));
+        if (isEmailVerificationRequiredError(err)) {
+          setPendingVerificationEmail(getCachedVerificationEmail());
+          setError(null);
+        } else {
+          setError(getErrorMessage(err, "Login failed."));
+        }
         throw err;
       } finally {
         setIsLoggingIn(false);

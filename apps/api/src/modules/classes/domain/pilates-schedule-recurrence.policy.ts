@@ -6,16 +6,21 @@
  * - Generates concrete bookable Pilates schedule occurrences from recurrence input.
  * - Keeps recurrence date math outside DTOs, controllers, and repositories.
  * - Applies backend safety limits before database writes happen.
+ * - Supports single-time recurrence and multi-time recurrence.
+ * - Carries backend-owned price/currency snapshots into generated occurrences.
  *
  * Important:
  * - This policy does not write to the database.
  * - This policy does not check trainer availability or trainer conflicts.
  * - Repository/service logic must validate generated occurrences against existing schedules.
  * - Customers still book generated pilates_class_schedules rows, not recurrence templates.
+ * - For multi-time recurrence, every recurrence date produces one schedule row per time slot.
  */
 
 import { AppError } from '../../../common/errors/app-error';
 import {
+  PILATES_CLASS_ALLOWED_CURRENCIES,
+  PILATES_CLASS_PRICE_AMOUNT_MIN,
   PILATES_SCHEDULE_MONTH_DAY_MAX,
   PILATES_SCHEDULE_MONTH_DAY_MIN,
   PILATES_SCHEDULE_MONTHLY_RULE_DAY_OF_MONTH,
@@ -23,20 +28,46 @@ import {
   PILATES_SCHEDULE_RECURRENCE_MAX_RANGE_MONTHS,
   PILATES_SCHEDULE_SERIES_FREQUENCY_MONTHLY,
   PILATES_SCHEDULE_SERIES_FREQUENCY_WEEKLY,
+  PILATES_SCHEDULE_TIME_SLOT_INDEX_MIN,
+  PILATES_SCHEDULE_TIME_SLOT_MAX_COUNT,
+  PILATES_SCHEDULE_TIME_SLOT_MIN_COUNT,
   PILATES_SCHEDULE_WEEKDAY_MAX,
   PILATES_SCHEDULE_WEEKDAY_MIN,
+  type PilatesClassCurrency,
   type PilatesScheduleWeekday,
 } from '../constants/pilates-class.constants';
 import type {
   PilatesScheduleGeneratedOccurrence,
   PilatesScheduleRecurrenceGenerationInput,
   PilatesScheduleRecurrenceGenerationResult,
+  PilatesScheduleSeriesTimeSlotCreateInput,
 } from '../types/pilates-class.types';
 
 interface ParsedIsoDateParts {
   readonly year: number;
   readonly month: number;
   readonly day: number;
+}
+
+interface NormalizedScheduleTimeSlot {
+  readonly slotIndex: number | null;
+  readonly studio?: string;
+  readonly startTime: string;
+  readonly endTime: string;
+  readonly durationMinutes: number;
+  readonly capacity: number;
+  readonly priceAmount: number | null;
+  readonly currency: PilatesClassCurrency | null;
+  readonly startTotalMinutes: number;
+  readonly endTotalMinutes: number;
+}
+
+interface OccurrenceGenerationContext {
+  readonly startDate: Date;
+  readonly endDate: Date;
+  readonly excludedDates: ReadonlySet<string>;
+  readonly timeSlots: readonly NormalizedScheduleTimeSlot[];
+  readonly usesMultipleTimeSlots: boolean;
 }
 
 const MINUTES_PER_HOUR = 60;
@@ -56,32 +87,29 @@ export class PilatesScheduleRecurrencePolicy {
     this.assertDateRangeAllowed(startDate, endDate, input);
     this.assertCapacity(input.capacity);
     this.assertDuration(input.duration_minutes);
-
-    const endTime = this.calculateEndTime(
-      input.start_time,
-      input.duration_minutes,
-    );
+    this.assertPriceAmount(input.price_amount ?? null);
+    this.assertCurrency(input.currency ?? null);
 
     const excludedDates = this.normalizeExcludedDates(
       input.excluded_dates ?? [],
     );
+    const timeSlots = this.normalizeTimeSlots(input);
+    const usesMultipleTimeSlots = this.usesMultipleTimeSlots(input);
+
+    const context: OccurrenceGenerationContext = {
+      startDate,
+      endDate,
+      excludedDates,
+      timeSlots,
+      usesMultipleTimeSlots,
+    };
 
     if (input.frequency === PILATES_SCHEDULE_SERIES_FREQUENCY_WEEKLY) {
-      return this.generateWeeklyOccurrences(input, {
-        startDate,
-        endDate,
-        endTime,
-        excludedDates,
-      });
+      return this.generateWeeklyOccurrences(input, context);
     }
 
     if (input.frequency === PILATES_SCHEDULE_SERIES_FREQUENCY_MONTHLY) {
-      return this.generateMonthlyOccurrences(input, {
-        startDate,
-        endDate,
-        endTime,
-        excludedDates,
-      });
+      return this.generateMonthlyOccurrences(input, context);
     }
 
     throw AppError.invalidRequest('Unsupported Pilates schedule frequency.', {
@@ -91,12 +119,7 @@ export class PilatesScheduleRecurrencePolicy {
 
   private static generateWeeklyOccurrences(
     input: PilatesScheduleRecurrenceGenerationInput,
-    context: {
-      readonly startDate: Date;
-      readonly endDate: Date;
-      readonly endTime: string;
-      readonly excludedDates: ReadonlySet<string>;
-    },
+    context: OccurrenceGenerationContext,
   ): PilatesScheduleRecurrenceGenerationResult {
     const weekdays = this.normalizeWeekdays(input.days_of_week);
     const weekdaySet = new Set<number>(weekdays);
@@ -104,6 +127,7 @@ export class PilatesScheduleRecurrencePolicy {
     const skippedDates = new Set<string>();
 
     let cursor = new Date(context.startDate.getTime());
+    let generatedDateIndex = 0;
 
     while (cursor.getTime() <= context.endDate.getTime()) {
       const classDate = this.formatIsoDate(cursor);
@@ -112,18 +136,13 @@ export class PilatesScheduleRecurrencePolicy {
         if (context.excludedDates.has(classDate)) {
           skippedDates.add(classDate);
         } else {
-          occurrences.push(
-            this.createOccurrence({
-              occurrenceIndex: occurrences.length + 1,
-              classDate,
-              startTime: input.start_time,
-              endTime: context.endTime,
-              durationMinutes: input.duration_minutes,
-              capacity: input.capacity,
-            }),
-          );
+          generatedDateIndex += 1;
 
-          this.assertOccurrenceLimit(occurrences.length);
+          this.appendOccurrencesForDate(occurrences, {
+            classDate,
+            generatedDateIndex,
+            context,
+          });
         }
       }
 
@@ -140,12 +159,7 @@ export class PilatesScheduleRecurrencePolicy {
 
   private static generateMonthlyOccurrences(
     input: PilatesScheduleRecurrenceGenerationInput,
-    context: {
-      readonly startDate: Date;
-      readonly endDate: Date;
-      readonly endTime: string;
-      readonly excludedDates: ReadonlySet<string>;
-    },
+    context: OccurrenceGenerationContext,
   ): PilatesScheduleRecurrenceGenerationResult {
     this.assertMonthlyRule(input);
 
@@ -161,6 +175,7 @@ export class PilatesScheduleRecurrencePolicy {
 
     let cursor = this.firstDayOfMonth(context.startDate);
     const lastMonth = this.firstDayOfMonth(context.endDate);
+    let generatedDateIndex = 0;
 
     while (cursor.getTime() <= lastMonth.getTime()) {
       const year = cursor.getUTCFullYear();
@@ -182,18 +197,13 @@ export class PilatesScheduleRecurrencePolicy {
         if (context.excludedDates.has(classDate)) {
           skippedDates.add(classDate);
         } else {
-          occurrences.push(
-            this.createOccurrence({
-              occurrenceIndex: occurrences.length + 1,
-              classDate,
-              startTime: input.start_time,
-              endTime: context.endTime,
-              durationMinutes: input.duration_minutes,
-              capacity: input.capacity,
-            }),
-          );
+          generatedDateIndex += 1;
 
-          this.assertOccurrenceLimit(occurrences.length);
+          this.appendOccurrencesForDate(occurrences, {
+            classDate,
+            generatedDateIndex,
+            context,
+          });
         }
       }
 
@@ -208,22 +218,269 @@ export class PilatesScheduleRecurrencePolicy {
     };
   }
 
+  private static appendOccurrencesForDate(
+    occurrences: PilatesScheduleGeneratedOccurrence[],
+    input: {
+      readonly classDate: string;
+      readonly generatedDateIndex: number;
+      readonly context: OccurrenceGenerationContext;
+    },
+  ): void {
+    for (const timeSlot of input.context.timeSlots) {
+      occurrences.push(
+        this.createOccurrence({
+          occurrenceIndex: occurrences.length + 1,
+          classDate: input.classDate,
+          generatedDateIndex: input.generatedDateIndex,
+          timeSlot,
+          usesMultipleTimeSlots: input.context.usesMultipleTimeSlots,
+        }),
+      );
+
+      this.assertOccurrenceLimit(occurrences.length);
+    }
+  }
+
   private static createOccurrence(input: {
     readonly occurrenceIndex: number;
     readonly classDate: string;
-    readonly startTime: string;
-    readonly endTime: string;
-    readonly durationMinutes: number;
-    readonly capacity: number;
+    readonly generatedDateIndex: number;
+    readonly timeSlot: NormalizedScheduleTimeSlot;
+    readonly usesMultipleTimeSlots: boolean;
   }): PilatesScheduleGeneratedOccurrence {
     return {
       occurrence_index: input.occurrenceIndex,
       class_date: input.classDate,
-      start_time: input.startTime,
-      end_time: input.endTime,
-      duration_minutes: input.durationMinutes,
-      capacity: input.capacity,
+      start_time: input.timeSlot.startTime,
+      end_time: input.timeSlot.endTime,
+      duration_minutes: input.timeSlot.durationMinutes,
+      capacity: input.timeSlot.capacity,
+      ...(typeof input.timeSlot.studio === 'string'
+        ? {
+            studio: input.timeSlot.studio,
+          }
+        : {}),
+      ...(input.timeSlot.priceAmount !== null
+        ? {
+            price_amount: input.timeSlot.priceAmount,
+          }
+        : {}),
+      ...(input.timeSlot.currency !== null
+        ? {
+            currency: input.timeSlot.currency,
+          }
+        : {}),
+      ...(input.usesMultipleTimeSlots
+        ? {
+            series_time_slot_id: null,
+            series_date_index: input.generatedDateIndex,
+            series_slot_index: input.timeSlot.slotIndex,
+          }
+        : {}),
     };
+  }
+
+  private static normalizeTimeSlots(
+    input: PilatesScheduleRecurrenceGenerationInput,
+  ): readonly NormalizedScheduleTimeSlot[] {
+    if (!this.usesMultipleTimeSlots(input)) {
+      const endTime = this.calculateEndTime(
+        input.start_time,
+        input.duration_minutes,
+      );
+
+      return [
+        {
+          slotIndex: null,
+          startTime: input.start_time,
+          endTime,
+          durationMinutes: input.duration_minutes,
+          capacity: input.capacity,
+          priceAmount: input.price_amount ?? null,
+          currency: input.currency ?? null,
+          startTotalMinutes: this.timeToMinutes(input.start_time, 'start_time'),
+          endTotalMinutes: this.timeToMinutes(endTime, 'end_time'),
+        },
+      ];
+    }
+
+    const rawTimeSlots = input.time_slots ?? [];
+
+    if (
+      rawTimeSlots.length < PILATES_SCHEDULE_TIME_SLOT_MIN_COUNT ||
+      rawTimeSlots.length > PILATES_SCHEDULE_TIME_SLOT_MAX_COUNT
+    ) {
+      throw AppError.pilatesScheduleTimeSlotInvalid(
+        `Recurring schedule time_slots must include between ${PILATES_SCHEDULE_TIME_SLOT_MIN_COUNT} and ${PILATES_SCHEDULE_TIME_SLOT_MAX_COUNT} slots.`,
+        {
+          time_slot_count: rawTimeSlots.length,
+          min_time_slots: PILATES_SCHEDULE_TIME_SLOT_MIN_COUNT,
+          max_time_slots: PILATES_SCHEDULE_TIME_SLOT_MAX_COUNT,
+        },
+      );
+    }
+
+    const normalizedTimeSlots = rawTimeSlots.map((timeSlot) =>
+      this.normalizeTimeSlot(timeSlot),
+    );
+
+    this.assertUniqueTimeSlotIndexes(normalizedTimeSlots);
+    this.assertNoDuplicateTimeSlotWindows(normalizedTimeSlots);
+    this.assertTimeSlotsDoNotOverlap(normalizedTimeSlots);
+
+    return normalizedTimeSlots;
+  }
+
+  private static normalizeTimeSlot(
+    input: PilatesScheduleSeriesTimeSlotCreateInput,
+  ): NormalizedScheduleTimeSlot {
+    this.assertTimeSlotIndex(input.slot_index);
+    this.assertDuration(input.duration_minutes);
+    this.assertCapacity(input.capacity);
+    this.assertPriceAmount(input.price_amount ?? null);
+    this.assertCurrency(input.currency ?? null);
+
+    const calculatedEndTime = this.calculateEndTime(
+      input.start_time,
+      input.duration_minutes,
+    );
+
+    if (input.end_time !== calculatedEndTime) {
+      throw AppError.pilatesScheduleTimeSlotInvalid(
+        'Time-slot end_time must match start_time plus duration_minutes.',
+        {
+          slot_index: input.slot_index,
+          start_time: input.start_time,
+          duration_minutes: input.duration_minutes,
+          expected_end_time: calculatedEndTime,
+          received_end_time: input.end_time,
+        },
+      );
+    }
+
+    return {
+      slotIndex: input.slot_index,
+      studio: input.studio,
+      startTime: input.start_time,
+      endTime: input.end_time,
+      durationMinutes: input.duration_minutes,
+      capacity: input.capacity,
+      priceAmount: input.price_amount ?? null,
+      currency: input.currency ?? null,
+      startTotalMinutes: this.timeToMinutes(
+        input.start_time,
+        'time_slot.start_time',
+      ),
+      endTotalMinutes: this.timeToMinutes(input.end_time, 'time_slot.end_time'),
+    };
+  }
+
+  private static usesMultipleTimeSlots(
+    input: PilatesScheduleRecurrenceGenerationInput,
+  ): boolean {
+    return Array.isArray(input.time_slots) && input.time_slots.length > 0;
+  }
+
+  private static assertTimeSlotIndex(slotIndex: number): void {
+    if (
+      !Number.isInteger(slotIndex) ||
+      slotIndex < PILATES_SCHEDULE_TIME_SLOT_INDEX_MIN
+    ) {
+      throw AppError.pilatesScheduleTimeSlotInvalid(
+        `Time-slot slot_index must be an integer greater than or equal to ${PILATES_SCHEDULE_TIME_SLOT_INDEX_MIN}.`,
+        {
+          slot_index: slotIndex,
+          min_slot_index: PILATES_SCHEDULE_TIME_SLOT_INDEX_MIN,
+        },
+      );
+    }
+  }
+
+  private static assertUniqueTimeSlotIndexes(
+    timeSlots: readonly NormalizedScheduleTimeSlot[],
+  ): void {
+    const seenSlotIndexes = new Set<number>();
+
+    for (const timeSlot of timeSlots) {
+      if (timeSlot.slotIndex === null) {
+        continue;
+      }
+
+      if (seenSlotIndexes.has(timeSlot.slotIndex)) {
+        throw AppError.pilatesScheduleDuplicateTimeSlot(
+          'Recurring schedule time_slots must not contain duplicate slot_index values.',
+          {
+            slot_index: timeSlot.slotIndex,
+          },
+        );
+      }
+
+      seenSlotIndexes.add(timeSlot.slotIndex);
+    }
+  }
+
+  private static assertNoDuplicateTimeSlotWindows(
+    timeSlots: readonly NormalizedScheduleTimeSlot[],
+  ): void {
+    const seenTimeWindows = new Set<string>();
+
+    for (const timeSlot of timeSlots) {
+      const timeWindowKey = [
+        timeSlot.studio ?? '',
+        timeSlot.startTime,
+        timeSlot.endTime,
+      ].join('|');
+
+      if (seenTimeWindows.has(timeWindowKey)) {
+        throw AppError.pilatesScheduleDuplicateTimeSlot(
+          'Recurring schedule time_slots must not contain duplicate time windows.',
+          {
+            studio: timeSlot.studio ?? null,
+            start_time: timeSlot.startTime,
+            end_time: timeSlot.endTime,
+          },
+        );
+      }
+
+      seenTimeWindows.add(timeWindowKey);
+    }
+  }
+
+  private static assertTimeSlotsDoNotOverlap(
+    timeSlots: readonly NormalizedScheduleTimeSlot[],
+  ): void {
+    const sortedTimeSlots = [...timeSlots].sort(
+      (firstTimeSlot, secondTimeSlot) =>
+        firstTimeSlot.startTotalMinutes - secondTimeSlot.startTotalMinutes,
+    );
+
+    for (let index = 1; index < sortedTimeSlots.length; index += 1) {
+      const previousTimeSlot = sortedTimeSlots[index - 1];
+      const currentTimeSlot = sortedTimeSlots[index];
+
+      if (
+        typeof previousTimeSlot === 'undefined' ||
+        typeof currentTimeSlot === 'undefined'
+      ) {
+        continue;
+      }
+
+      if (
+        previousTimeSlot.endTotalMinutes > currentTimeSlot.startTotalMinutes
+      ) {
+        throw AppError.pilatesScheduleTimeSlotInvalid(
+          'Recurring schedule time_slots must not overlap.',
+          {
+            previous_slot_index: previousTimeSlot.slotIndex,
+            previous_start_time: previousTimeSlot.startTime,
+            previous_end_time: previousTimeSlot.endTime,
+            current_slot_index: currentTimeSlot.slotIndex,
+            current_start_time: currentTimeSlot.startTime,
+            current_end_time: currentTimeSlot.endTime,
+          },
+        );
+      }
+    }
   }
 
   private static assertDateRangeAllowed(
@@ -272,6 +529,42 @@ export class PilatesScheduleRecurrencePolicy {
         'Schedule duration_minutes must be positive.',
         {
           duration_minutes: durationMinutes,
+        },
+      );
+    }
+  }
+
+  private static assertPriceAmount(priceAmount: number | null): void {
+    if (priceAmount === null) {
+      return;
+    }
+
+    if (
+      typeof priceAmount !== 'number' ||
+      !Number.isFinite(priceAmount) ||
+      priceAmount < PILATES_CLASS_PRICE_AMOUNT_MIN
+    ) {
+      throw AppError.paymentAmountInvalid(
+        `Schedule price_amount must be at least ${PILATES_CLASS_PRICE_AMOUNT_MIN}.`,
+        {
+          price_amount: priceAmount,
+          min_price_amount: PILATES_CLASS_PRICE_AMOUNT_MIN,
+        },
+      );
+    }
+  }
+
+  private static assertCurrency(currency: PilatesClassCurrency | null): void {
+    if (currency === null) {
+      return;
+    }
+
+    if (!PILATES_CLASS_ALLOWED_CURRENCIES.includes(currency)) {
+      throw AppError.paymentCurrencyUnsupported(
+        'Schedule currency must be KWD.',
+        {
+          currency,
+          allowed_currencies: [...PILATES_CLASS_ALLOWED_CURRENCIES],
         },
       );
     }
@@ -392,31 +685,7 @@ export class PilatesScheduleRecurrencePolicy {
     startTime: string,
     durationMinutes: number,
   ): string {
-    const match = this.TIME_VALUE_PATTERN.exec(startTime);
-
-    if (!match) {
-      throw AppError.invalidRequest(
-        'start_time must use HH:mm 24-hour format.',
-        {
-          start_time: startTime,
-        },
-      );
-    }
-
-    const hourText = match[1];
-    const minuteText = match[2];
-
-    if (typeof hourText !== 'string' || typeof minuteText !== 'string') {
-      throw AppError.invalidRequest(
-        'start_time must use HH:mm 24-hour format.',
-        {
-          start_time: startTime,
-        },
-      );
-    }
-
-    const startTotalMinutes =
-      Number(hourText) * MINUTES_PER_HOUR + Number(minuteText);
+    const startTotalMinutes = this.timeToMinutes(startTime, 'start_time');
     const endTotalMinutes = startTotalMinutes + durationMinutes;
 
     if (endTotalMinutes >= MINUTES_PER_DAY) {
@@ -443,6 +712,33 @@ export class PilatesScheduleRecurrencePolicy {
     const endMinute = endTotalMinutes % MINUTES_PER_HOUR;
 
     return `${this.pad2(endHour)}:${this.pad2(endMinute)}`;
+  }
+
+  private static timeToMinutes(value: string, fieldName: string): number {
+    const match = this.TIME_VALUE_PATTERN.exec(value);
+
+    if (!match) {
+      throw AppError.invalidRequest(
+        `${fieldName} must use HH:mm 24-hour format.`,
+        {
+          [fieldName]: value,
+        },
+      );
+    }
+
+    const hourText = match[1];
+    const minuteText = match[2];
+
+    if (typeof hourText !== 'string' || typeof minuteText !== 'string') {
+      throw AppError.invalidRequest(
+        `${fieldName} must use HH:mm 24-hour format.`,
+        {
+          [fieldName]: value,
+        },
+      );
+    }
+
+    return Number(hourText) * MINUTES_PER_HOUR + Number(minuteText);
   }
 
   private static parseIsoDate(value: string, fieldName: string): Date {

@@ -2,61 +2,30 @@
 
 :root {
   color-scheme: light;
-  /* --- App / Base Light Mode --- */
-  --background: #ffffff;
-  --background-primary: #f8fafc;           /* Light gray page wrapper */
-  --background-secondary: #f1f5f9;         /* Accent section gray */
+  --background: #64748b;
+  --background-primary: #f8fafc;           
+  --background-secondary: #f1f5f9;        
+  --primary: #EDCDCE;                    
+  --secondary: #64748b;                  
 
-  /* Pilates Theme Default (Purple Side) */
-  --primary: #7c3aed;                      /* Primary Purple Accent */
-  --secondary: #64748b;                    /* Slate secondary */
-
-  --button-primary: #7c3aed;               /* Main action purple */
-  --button-secondary: #f5f3ff;             /* Soft purple light bg */
-
+  --button-primary: #EDCDCE;              
+  --button-secondary: #000000;           
   --card-background-primary: #ffffff;
   --card-background-secondary: #f8fafc;
 
-  --text-primary: #0f172a;                 /* Deep slate primary text */
+  --text-primary: #0f172a;                
   --text-secondary: #64748b;
 
-  --error: #ef4444;                        /* Cancelled red */
-  --warning: #f59e0b;                      /* Pending yellow */
-  --success: #10b981;                      /* Confirmed green */
+  --error: #ef4444;                        
+  --warning: #f59e0b;                      
+  --success: #10b981;                      
 
-  --foreground: #0f172a;
+  --foreground: #EDCDCE;
 }
 
-/* --- Web Portal Dark Themes (Dashboard / Salon / Pilates Modes) --- */
-html[data-theme="dark"] {
-  color-scheme: dark;
-  /* Dashboard Admin / Sidebar Mode Colors */
-  --background: #0b1329;                   /* Deep Navy/Black Sidebar Base */
-  --background-primary: #111c44;           /* Dark inner component surfaces */
-  --background-secondary: #1d283c;         /* Selected dark states */
 
-  /* Salon Active Palette Override (Pink Side) */
-  --primary: #f43f5e;                      /* Branding Pink */
-  --secondary: #94a3b8;
-
-  --button-primary: #f43f5e;               /* Salon call-to-actions */
-  --button-secondary: #fff1f2;             /* Soft pink highlight */
-
-  --card-background-primary: #111c44;
-  --card-background-secondary: #16224f;
-
-  --text-primary: #f8fafc;                 /* Bright typography contrast */
-  --text-secondary: #94a3b8;
-
-  --error: #f43f5e;                        /* Pink/Red balance alert */
-  --warning: #f59e0b;
-  --success: #10b981;
-
-  --foreground: #f8fafc;
-}
 
 @theme inline {
-  /* Core Variable System Mapped Directly to Tailwind v4 Engine */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
@@ -71,21 +40,21 @@ html[data-theme="dark"] {
   --color-card-bg-primary: var(--card-background-primary);
   --color-card-bg-secondary: var(--card-background-secondary);
 
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
+  --color-txt-primary: var(--text-primary);
+  --color-txt-secondary: var(--text-secondary);
 
   --color-error: var(--error);
   --color-warning: var(--warning);
   --color-success: var(--success);
 
-  --font-sans: Arial, Helvetica, sans-serif;
+  --font-sans: Poppins, Poppins, sans-serif;
   --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans);
+  font-family: var(--font-Poppins);
 }
 
 .calendar-card .fc {
@@ -229,4 +198,8 @@ body {
     flex-wrap: wrap;
     justify-content: center;
   }
+}
+html{
+font-size: 80%;
+
 }

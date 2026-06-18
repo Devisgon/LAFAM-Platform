@@ -1,18 +1,19 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Mail } from "lucide-react";
-import {
-  PasswordResetError,
-  PasswordResetShell,
-} from "@/components/password_reset_shell";
+import { PasswordResetError } from "@/components/password_reset_shell";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
+
   const { forgotPassword, isRequestingPasswordReset, error, clearError } =
     useAuth();
+
   const [email, setEmail] = useState("");
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -28,46 +29,87 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <PasswordResetShell
-      title="Forgot password?"
-      description="Enter your email and we will send a password reset code."
-    >
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="flex flex-col gap-2">
-          <label
-            htmlFor="email"
-            className="text-xs font-semibold text-text-secondary"
-          >
-            Email Address
-          </label>
-          <div className="relative flex items-center">
-            <Mail className="absolute left-4 h-5 w-5 text-text-secondary/60" />
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-2xl border border-text-secondary/10 bg-background-primary py-4 pl-12 pr-4 text-sm outline-none transition-all focus:border-primary/40 focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
-              placeholder="name@example.com"
-              disabled={isRequestingPasswordReset}
-              required
-              autoFocus
-            />
-          </div>
+    <main className="flex h-screen w-full items-center justify-center bg-[#f4dddd] px-4 py-10 font-sans text-black">
+      <section className="flex w-full flex-col items-center">
+        <div className="mb-10 flex flex-col items-center text-center">
+          <Image
+            src="/login-logo.svg"
+            alt="LA FORME"
+            width={150}
+            height={150}
+            priority
+            className="h-auto w-[150px] object-contain"
+          />
         </div>
 
-        {error ? <PasswordResetError message={error} /> : null}
+        <div className="w-full max-w-[560px] overflow-hidden rounded-md bg-white shadow-2xl">
+          <div className="flex h-20 items-center justify-center gap-3 bg-[#e9caca] text-black">
+            <Mail size={30} strokeWidth={2.5} />
+            <h1 className="text-xl font-bold uppercase tracking-wide">
+              Forgot Password
+            </h1>
+          </div>
 
-        <button
-          type="submit"
-          disabled={isRequestingPasswordReset}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-button-primary py-4 text-sm font-semibold text-white transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isRequestingPasswordReset ? "Sending..." : "Send reset code"}
-          <ArrowRight className="h-4 w-4" />
-        </button>
-      </form>
-    </PasswordResetShell>
+          <form onSubmit={handleSubmit} className="space-y-5 px-10 py-12">
+            <p className="text-center text-[15px] font-medium leading-relaxed text-gray-500">
+              Enter your email address and we will send you a password reset
+              code.
+            </p>
+
+            <div>
+              <label
+                htmlFor="email"
+                className="mb-1 block text-[16px] font-medium text-gray-500"
+              >
+                Email Address
+              </label>
+
+              <div className="flex h-[58px] overflow-hidden rounded border border-gray-300 bg-white">
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  disabled={isRequestingPasswordReset}
+                  required
+                  autoFocus
+                  className="h-full flex-1 px-4 text-base text-black outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                />
+
+                <span className="flex h-full w-14 items-center justify-center border-l border-gray-300 bg-gray-100 text-black">
+                  <Mail size={23} strokeWidth={2} />
+                </span>
+              </div>
+            </div>
+
+            {error ? <PasswordResetError message={error} /> : null}
+
+            <button
+              type="submit"
+              disabled={isRequestingPasswordReset}
+              className="flex w-full items-center justify-center gap-2 rounded bg-[#e9caca] px-5 py-3.5 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isRequestingPasswordReset ? "Sending..." : "Send Reset Code"}
+              <ArrowRight size={18} />
+            </button>
+
+            <p className="pt-2 text-center text-[15px] text-gray-500">
+              Remember your password?{" "}
+              <Link
+                href="/"
+                className="font-semibold text-[#d8abab] transition hover:text-black"
+              >
+                Sign In
+              </Link>
+            </p>
+          </form>
+        </div>
+
+        <p className="mt-7 text-center text-[16px] text-black/45">
+          © Copyright 2026. All Rights Reserved.
+        </p>
+      </section>
+    </main>
   );
 }

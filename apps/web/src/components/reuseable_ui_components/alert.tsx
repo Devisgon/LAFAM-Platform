@@ -10,10 +10,10 @@ export interface AlertProps extends HTMLAttributes<HTMLDivElement> {
 
 export function Alert({ children, className, title, tone = "info", ...props }: AlertProps) {
   const tones: Record<Tone, string> = {
-    neutral: "border-secondary text-text-secondary",
+    neutral: "border-secondary text-txt-secondary",
     info: "border-primary text-primary",
     success: "border-success text-success",
-    warning: "border-warning text-text-primary",
+    warning: "border-warning text-txt-primary",
     error: "border-error text-error",
   };
 

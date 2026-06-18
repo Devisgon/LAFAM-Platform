@@ -5,8 +5,10 @@ import {
   type InputHTMLAttributes,
   type ReactNode,
   useEffect,
+  useMemo,
   useState,
 } from "react";
+import { ChevronDown, FileSpreadsheet, Pencil } from "lucide-react";
 import { Avatar } from "./reuseable_ui_components/avatar";
 import { Badge } from "./reuseable_ui_components/badge";
 import { ConfirmationCard } from "./reuseable_ui_components/confirmation_card";
@@ -31,7 +33,9 @@ type ResultToast = {
 };
 
 const inputClass =
-  "min-h-10 w-full rounded-lg border border-background-secondary bg-background px-3 py-2 text-sm text-text-primary outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-60";
+  "min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-4 py-2 text-base text-txt-primary outline-none transition placeholder:text-txt-secondary focus:border-primary disabled:cursor-not-allowed disabled:opacity-60";
+
+const pageSizeOptions = [10, 25, 50];
 
 const days: Array<{ label: string; short: string; value: StaffDayOfWeek }> = [
   { label: "Sunday", short: "Sun", value: 0 },
@@ -57,6 +61,14 @@ function statusTone(status: StaffStatus): "success" | "warning" | "error" {
   if (status === "available") return "success";
   if (status === "deactivated" || status === "deleted") return "error";
   return "warning";
+}
+
+function isActiveStaff(member: StaffMember): boolean {
+  return member.staff_status !== "deactivated" && member.staff_status !== "deleted";
+}
+
+function usernameFromEmail(email: string): string {
+  return email.split("@")[0] || email;
 }
 
 function availabilitySummary(member: StaffMember): {
@@ -132,7 +144,6 @@ function buildCreatePayload(formData: FormData): CreateStaffPayload {
 export function StaffDirectory() {
   const {
     staff,
-    total,
     isLoading,
     isCreating,
     error: loadError,
@@ -147,6 +158,49 @@ export function StaffDirectory() {
   } = useStaff();
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
   const [toast, setToast] = useState<ResultToast | null>(null);
+  const [search, setSearch] = useState("");
+  const [pageSize, setPageSize] = useState(pageSizeOptions[0]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isCreateMode, setIsCreateMode] = useState(() =>
+    typeof window === "undefined" ? false : window.location.hash === "#add-staff",
+  );
+
+  useEffect(() => {
+    const syncCreateMode = () => {
+      setIsCreateMode(window.location.hash === "#add-staff");
+    };
+
+    window.addEventListener("hashchange", syncCreateMode);
+    return () => window.removeEventListener("hashchange", syncCreateMode);
+  }, []);
+
+  const filteredStaff = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    if (!query) return staff;
+
+    return staff.filter((member) =>
+      [
+        member.display_name,
+        member.phone ?? "",
+        member.email,
+        usernameFromEmail(member.email),
+        member.portal_role,
+        member.post_title,
+        member.staff_status,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [search, staff]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredStaff.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, pageCount);
+  const pageStart = (safeCurrentPage - 1) * pageSize;
+  const pagedStaff = filteredStaff.slice(pageStart, pageStart + pageSize);
+  const visibleStart = filteredStaff.length === 0 ? 0 : pageStart + 1;
+  const visibleEnd = Math.min(pageStart + pagedStaff.length, filteredStaff.length);
 
   const createStaff = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -159,6 +213,7 @@ export function StaffDirectory() {
 
       form.reset();
       window.history.replaceState(null, "", window.location.pathname);
+      setIsCreateMode(false);
       setToast({
         message: `${createdStaff.display_name} was created and must verify their email before login.`,
         title: "Staff member created",
@@ -175,18 +230,43 @@ export function StaffDirectory() {
 
   return (
     <>
-      <section className="mb-5" id="staff-directory-heading">
-        <p className="mt-1 text-sm text-text-secondary">
-          {total} staff members |{" "}
-          {staff.filter((member) => member.staff_status === "available").length}{" "}
-          available
-        </p>
-      </section>
-
       <section
-        className="overflow-hidden rounded-xl border border-background-secondary bg-card-bg-primary shadow-sm"
-        aria-label="Staff member list"
+        className="grid px-8 gap-10  text-txt-primary"
+        id="staff-directory-heading"
       >
+        {isCreateMode ? (
+          <AddStaffCard
+            isCreating={isCreating}
+            onCancel={() => {
+              window.history.replaceState(null, "", window.location.pathname);
+              setIsCreateMode(false);
+            }}
+            onSubmit={createStaff}
+          />
+        ) : (
+          <>
+            <section className="flex items-center justify-between gap-4 rounded-md bg-card-bg-primary px-5 py-5 shadow-lg shadow-slate-900/10">
+              <h2 className="text-2xl font-medium">Add New User</h2>
+              <button
+                className="min-h-12 rounded-sm bg-button-primary px-5 text-base font-semibold text-txt-primary transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                onClick={() => {
+                  window.history.replaceState(null, "", "#add-staff");
+                  setIsCreateMode(true);
+                }}
+                type="button"
+              >
+                + Add staff
+              </button>
+            </section>
+
+            <section
+              className="overflow-hidden rounded-md bg-card-bg-primary shadow-sm"
+              aria-label="Staff member list"
+            >
+              <header className="border-b border-background-secondary bg-card-bg-secondary px-5 py-5">
+                <h2 className="text-2xl font-medium">User List</h2>
+              </header>
+
         {isLoading ? (
           <LoadingState className="p-6" label="Loading staff members" />
         ) : loadError ? (
@@ -204,299 +284,188 @@ export function StaffDirectory() {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] border-collapse text-left text-xs">
+            <div className="flex flex-col gap-4 px-5 py-5 md:flex-row md:items-center md:justify-between">
+              <button
+                aria-label="Export staff list"
+                className="flex size-12 items-center justify-center rounded-md bg-black text-white transition hover:opacity-80"
+                type="button"
+              >
+                <FileSpreadsheet aria-hidden="true" size={22} strokeWidth={2.4} />
+              </button>
+
+              <label className="md:w-[340px]">
+                <span className="sr-only">Search staff members</span>
+                <input
+                  className="min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-4 text-base text-txt-primary outline-none transition placeholder:text-txt-secondary focus:border-primary"
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder="Search..."
+                  type="search"
+                  value={search}
+                />
+              </label>
+            </div>
+
+            <div className="overflow-x-auto px-5">
+              <table className="w-full  border text-left text-base">
                 <thead>
-                  <tr className="border-b border-background-secondary bg-card-bg-secondary text-text-secondary">
+                  <tr className="border-b-2  text-txt-primary">
                     {[
-                      "Staff member",
-                      "Contact",
-                      "Role / post",
-                      "Available time",
-                      "Status",
-                      "Actions",
+                      "Active/Inactive",
+                      "Full Name",
+                      "Mobile Number",
+                      "Email",
+                      "Username",
+                      "Password",
+                      "Role",
+                      "Action",
                     ].map((heading) => (
-                      <th className="px-5 py-3 font-bold" key={heading}>
-                        {heading}
-                      </th>
+                      <TableHeading heading={heading} key={heading} />
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {staff.map((member) => {
-                    const availability = availabilitySummary(member);
-
-                    return (
+                  {pagedStaff.length > 0 ? (
+                    pagedStaff.map((member) => (
                       <tr
-                        className="border-b border-background-secondary last:border-0 hover:bg-card-bg-secondary"
+                        className="border-b border-background-secondary bg-background-secondary last:border-0"
                         key={member.id}
                       >
-                        <td className="px-5 py-4">
-                          <span className="flex items-center gap-3 font-bold">
-                            <Avatar
-                              alt={`${member.display_name} avatar`}
-                              className="bg-primary/10 text-primary"
-                              name={member.display_name}
-                              size="sm"
-                            />
-                            <span>
-                              {member.display_name}
-                              {member.email_verification_required ? (
-                                <span className="mt-1 block text-[10px] font-semibold text-warning">
-                                  Email verification pending
-                                </span>
-                              ) : null}
-                            </span>
-                          </span>
+                        <td className="border-r border-background-secondary px-1 py-3">
+                          <input
+                            aria-label={`${member.display_name} active status`}
+                            checked={isActiveStaff(member)}
+                            className="size-8 rounded-md border-background-secondary accent-primary"
+                            readOnly
+                            type="checkbox"
+                          />
                         </td>
-                        <td className="px-5 py-4">
-                          <strong>{member.email}</strong>
-                          <span className="mt-0.5 block text-text-secondary">
-                            {member.phone ?? "No phone provided"}
-                          </span>
+                        <td className="border-r border-background-secondary px-1 py-3 font-medium">
+                          {member.display_name}
                         </td>
-                        <td className="max-w-64 px-5 py-4">
-                          <strong>{member.post_title}</strong>
-                          <span className="mt-0.5 block capitalize text-text-secondary">
-                            {member.portal_role} | {member.id}
-                          </span>
+                        <td className="border-r border-background-secondary px-1 py-3">
+                          {member.phone ?? "Not provided"}
                         </td>
-                        <td className="px-5 py-4">
-                          <strong>{availability.time}</strong>
-                          <span className="mt-0.5 block text-text-secondary">
-                            {availability.days}
-                          </span>
+                        <td className="border-r border-background-secondary px-1 py-3">
+                          {member.email}
                         </td>
-                        <td className="px-5 py-4">
-                          <Badge tone={statusTone(member.staff_status)}>
-                            {statusLabel(member.staff_status)}
-                          </Badge>
+                        <td className="border-r border-background-secondary px-1 py-3">
+                          {usernameFromEmail(member.email)}
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="border-r border-background-secondary px-1 py-3">
+                          Protected
+                        </td>
+                        <td className="border-r border-background-secondary px-1 py-3 capitalize">
+                          {member.portal_role}
+                        </td>
+                        <td className="px-1 py-3">
                           <button
-                            className="font-bold text-primary hover:underline"
+                            aria-label={`Edit ${member.display_name}`}
+                            className="mx-auto flex size-10 items-center justify-center rounded-full bg-button-primary text-white transition hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                             onClick={() => setSelectedStaff(member)}
+                            title="Edit"
                             type="button"
                           >
-                            View profile
+                            <Pencil aria-hidden="true" size={21} strokeWidth={2.5} />
                           </button>
                         </td>
                       </tr>
-                    );
-                  })}
+                    ))
+                  ) : (
+                    <tr className="bg-background-secondary">
+                      <td
+                        className="px-3 py-6 text-center text-txt-secondary"
+                        colSpan={8}
+                      >
+                        No staff members found.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
-            <footer className="border-t border-background-secondary px-5 py-3 text-xs text-text-secondary">
-              Showing {staff.length} of {total} staff members
+
+            <footer className="flex flex-col gap-4 px-5 py-5 text-base text-txt-secondary md:flex-row md:items-center md:justify-between">
+              <label className="flex items-center gap-4">
+                <span className="relative inline-flex">
+                  <select
+                    aria-label="Records per page"
+                    className="min-h-12 appearance-none rounded-sm border border-background-secondary bg-card-bg-primary px-4 pr-10 text-txt-primary outline-none focus:border-primary"
+                    onChange={(event) => {
+                      setPageSize(Number(event.target.value));
+                      setCurrentPage(1);
+                    }}
+                    value={pageSize}
+                  >
+                    {pageSizeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
+                    size={16}
+                  />
+                </span>
+                records per page
+              </label>
+
+              <p>
+                Showing {visibleStart} to {visibleEnd} of {filteredStaff.length} entries
+              </p>
+
+              <nav aria-label="Staff list pagination" className="flex items-center">
+                <button
+                  className="min-h-11 rounded-l-sm border border-background-secondary px-4 text-txt-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={safeCurrentPage === 1}
+                  onClick={() =>
+                    setCurrentPage(() => Math.max(1, safeCurrentPage - 1))
+                  }
+                  type="button"
+                >
+                  Previous
+                </button>
+                <span className="flex min-h-11 min-w-11 items-center justify-center bg-button-primary px-4 font-medium text-white">
+                  {safeCurrentPage}
+                </span>
+                <button
+                  className="min-h-11 rounded-r-sm border border-background-secondary px-4 text-txt-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={safeCurrentPage >= pageCount}
+                  onClick={() =>
+                    setCurrentPage(() => Math.min(pageCount, safeCurrentPage + 1))
+                  }
+                  type="button"
+                >
+                  Next
+                </button>
+              </nav>
             </footer>
           </>
         )}
+            </section>
+          </>
+        )}
+
+        {selectedStaff ? (
+          <StaffProfile
+            member={selectedStaff}
+            onClose={() => setSelectedStaff(null)}
+            onDeleted={() => setSelectedStaff(null)}
+            onUpdated={setSelectedStaff}
+            showToast={setToast}
+            getStaff={getStaff}
+            updateStaff={updateStaff}
+            updateAvailability={updateAvailability}
+            deactivateStaff={deactivateStaff}
+            reactivateStaff={reactivateStaff}
+            deleteStaff={deleteStaff}
+          />
+        ) : null}
       </section>
-
-      <section
-        aria-labelledby="add-staff-title"
-        aria-modal="true"
-        className="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-slate-950/60 p-4 target:flex"
-        id="add-staff"
-        role="dialog"
-      >
-        <a
-          aria-label="Close add staff form"
-          className="absolute inset-0 cursor-default"
-          href="#staff-directory-heading"
-        />
-        <form
-          onSubmit={createStaff}
-          className="relative z-10 my-auto w-full max-w-3xl rounded-2xl border border-background-secondary bg-card-bg-primary p-6 text-text-primary shadow-2xl"
-        >
-          <a
-            aria-label="Close add staff form"
-            className="absolute right-4 top-4 flex size-8 items-center justify-center rounded-full bg-background-secondary text-text-secondary hover:text-text-primary"
-            href="#staff-directory-heading"
-          >
-            X
-          </a>
-          <h2 className="text-xl font-bold" id="add-staff-title">
-            Add new staff member
-          </h2>
-          <p className="mt-1 text-sm text-text-secondary">
-            The new staff member must verify their email before login.
-          </p>
-
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <FormInput
-              label="Display name"
-              name="display_name"
-              autoComplete="name"
-              maxLength={120}
-              disabled={isCreating}
-              required
-            />
-            <label className="grid gap-1.5 text-xs font-bold">
-              Portal role
-              <select
-                className={inputClass}
-                defaultValue="trainer"
-                disabled={isCreating}
-                name="portal_role"
-              >
-                <option value="trainer">Trainer</option>
-                <option value="staff">Staff</option>
-              </select>
-            </label>
-            <FormInput
-              label="Email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              maxLength={254}
-              disabled={isCreating}
-              required
-            />
-            <FormInput
-              label="Phone"
-              name="phone"
-              type="tel"
-              autoComplete="tel"
-              placeholder="+96550000000"
-              maxLength={32}
-              disabled={isCreating}
-            />
-            <FormInput
-              label="Password"
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              minLength={8}
-              maxLength={128}
-              disabled={isCreating}
-              required
-            />
-            <FormInput
-              label="Confirm password"
-              name="confirm_password"
-              type="password"
-              autoComplete="new-password"
-              minLength={8}
-              maxLength={128}
-              disabled={isCreating}
-              required
-            />
-            <FormInput
-              label="Post title"
-              name="post_title"
-              placeholder="Pilates Trainer"
-              maxLength={100}
-              disabled={isCreating}
-              required
-            />
-            <label className="grid gap-1.5 text-xs font-bold">
-              Status
-              <select
-                className={inputClass}
-                defaultValue="available"
-                disabled={isCreating}
-                name="status"
-              >
-                <option value="available">Available</option>
-                <option value="unavailable">Unavailable</option>
-                <option value="on_leave">On leave</option>
-              </select>
-            </label>
-            <FormInput
-              label="Address"
-              name="address"
-              autoComplete="street-address"
-              maxLength={500}
-              disabled={isCreating}
-              className="sm:col-span-2"
-            />
-            <fieldset className="grid gap-2 sm:col-span-2">
-              <legend className="text-xs font-bold">Working days</legend>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {days.map((day) => (
-                  <label
-                    className="flex items-center gap-2 rounded-lg border border-background-secondary px-3 py-2 text-xs font-semibold"
-                    key={day.value}
-                  >
-                    <input
-                      type="checkbox"
-                      name="working_days"
-                      value={day.value}
-                      disabled={isCreating}
-                      className="accent-primary"
-                    />
-                    {day.label}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <FormInput
-              label="Start time"
-              name="start_time"
-              type="time"
-              disabled={isCreating}
-              required
-            />
-            <FormInput
-              label="End time"
-              name="end_time"
-              type="time"
-              disabled={isCreating}
-              required
-            />
-            <FormInput
-              label="Specialties"
-              name="specialties"
-              placeholder="Reformer Pilates, Mat Pilates"
-              disabled={isCreating}
-              className="sm:col-span-2"
-            />
-            <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">
-              Bio
-              <textarea
-                className={`${inputClass} min-h-24 resize-y`}
-                disabled={isCreating}
-                maxLength={1000}
-                name="bio"
-              />
-            </label>
-          </div>
-
-          <footer className="mt-6 flex justify-end gap-2 border-t border-background-secondary pt-4">
-            <a
-              className="rounded-lg border border-background-secondary px-4 py-2 text-xs font-bold hover:bg-background-secondary"
-              href="#staff-directory-heading"
-            >
-              Cancel
-            </a>
-            <button
-              className="rounded-lg bg-button-primary px-4 py-2 text-xs font-bold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isCreating}
-              type="submit"
-            >
-              {isCreating ? "Creating..." : "Create staff member"}
-            </button>
-          </footer>
-        </form>
-      </section>
-
-      {selectedStaff ? (
-        <StaffProfile
-          member={selectedStaff}
-          onClose={() => setSelectedStaff(null)}
-          onDeleted={() => setSelectedStaff(null)}
-          onUpdated={setSelectedStaff}
-          showToast={setToast}
-          getStaff={getStaff}
-          updateStaff={updateStaff}
-          updateAvailability={updateAvailability}
-          deactivateStaff={deactivateStaff}
-          reactivateStaff={reactivateStaff}
-          deleteStaff={deleteStaff}
-        />
-      ) : null}
       {toast ? (
         <div className="fixed right-4 top-4 z-[70]">
           <Toast
@@ -509,6 +478,203 @@ export function StaffDirectory() {
         </div>
       ) : null}
     </>
+  );
+}
+
+function TableHeading({ heading }: { heading: string }) {
+  return (
+    <th className="border-r border-background-secondary px-1 py-2 align-bottom font-bold last:border-r-0">
+      <span className="flex min-h-12 items-end justify-between gap-2">
+        <span>{heading}</span>
+      </span>
+    </th>
+  );
+}
+
+function AddStaffCard({
+  isCreating,
+  onCancel,
+  onSubmit,
+}: {
+  isCreating: boolean;
+  onCancel: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form
+      className="overflow-hidden rounded-md border border-background-secondary bg-card-bg-primary text-txt-primary shadow-sm"
+      id="add-staff"
+      onSubmit={onSubmit}
+    >
+      <header className="border-b border-background-secondary bg-card-bg-primary px-5 py-5">
+        <h2 className="text-2xl font-medium" id="add-staff-title">
+          Add New User
+        </h2>
+      </header>
+
+      <div className="px-5 py-5">
+        <p className="mb-5 text-sm text-txt-secondary">
+          The new staff member must verify their email before login.
+        </p>
+        <div className="grid gap-5 md:grid-cols-2">
+          <FormInput
+            label="Display name"
+            name="display_name"
+            autoComplete="name"
+            maxLength={120}
+            disabled={isCreating}
+            required
+          />
+          <label className="grid gap-1.5 text-xs font-bold">
+            Portal role
+            <select
+              className={inputClass}
+              defaultValue="trainer"
+              disabled={isCreating}
+              name="portal_role"
+            >
+              <option value="trainer">Trainer</option>
+              <option value="staff">Staff</option>
+            </select>
+          </label>
+          <FormInput
+            label="Email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            maxLength={254}
+            disabled={isCreating}
+            required
+          />
+          <FormInput
+            label="Phone"
+            name="phone"
+            type="tel"
+            autoComplete="tel"
+            placeholder="+96550000000"
+            maxLength={32}
+            disabled={isCreating}
+          />
+          <FormInput
+            label="Password"
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            minLength={8}
+            maxLength={128}
+            disabled={isCreating}
+            required
+          />
+          <FormInput
+            label="Confirm password"
+            name="confirm_password"
+            type="password"
+            autoComplete="new-password"
+            minLength={8}
+            maxLength={128}
+            disabled={isCreating}
+            required
+          />
+          <FormInput
+            label="Post title"
+            name="post_title"
+            placeholder="Pilates Trainer"
+            maxLength={100}
+            disabled={isCreating}
+            required
+          />
+          <label className="grid gap-1.5 text-xs font-bold">
+            Status
+            <select
+              className={inputClass}
+              defaultValue="available"
+              disabled={isCreating}
+              name="status"
+            >
+              <option value="available">Available</option>
+              <option value="unavailable">Unavailable</option>
+              <option value="on_leave">On leave</option>
+            </select>
+          </label>
+          <FormInput
+            label="Address"
+            name="address"
+            autoComplete="street-address"
+            maxLength={500}
+            disabled={isCreating}
+            className="md:col-span-2"
+          />
+          <fieldset className="grid gap-2 md:col-span-2">
+            <legend className="text-xs font-bold">Working days</legend>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {days.map((day) => (
+                <label
+                  className="flex items-center gap-2 rounded-sm border border-background-secondary px-3 py-2 text-xs font-semibold"
+                  key={day.value}
+                >
+                  <input
+                    type="checkbox"
+                    name="working_days"
+                    value={day.value}
+                    disabled={isCreating}
+                    className="accent-primary"
+                  />
+                  {day.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <FormInput
+            label="Start time"
+            name="start_time"
+            type="time"
+            disabled={isCreating}
+            required
+          />
+          <FormInput
+            label="End time"
+            name="end_time"
+            type="time"
+            disabled={isCreating}
+            required
+          />
+          <FormInput
+            label="Specialties"
+            name="specialties"
+            placeholder="Reformer Pilates, Mat Pilates"
+            disabled={isCreating}
+            className="md:col-span-2"
+          />
+          <label className="grid gap-1.5 text-xs font-bold md:col-span-2">
+            Bio
+            <textarea
+              className={`${inputClass} min-h-24 resize-y`}
+              disabled={isCreating}
+              maxLength={1000}
+              name="bio"
+            />
+          </label>
+        </div>
+      </div>
+
+      <footer className="flex justify-start gap-2 border-t border-background-secondary px-5 py-5">
+        <button
+          className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-xs font-bold text-txt-primary hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isCreating}
+          type="submit"
+        >
+          {isCreating ? "Creating..." : "Create staff member"}
+        </button>
+        <button
+          className="min-h-11 rounded-sm border border-background-secondary px-4 py-3 text-xs font-bold text-txt-secondary transition hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isCreating}
+          onClick={onCancel}
+          type="button"
+        >
+          Back to staff
+        </button>
+      </footer>
+    </form>
   );
 }
 
@@ -720,27 +886,19 @@ function StaffProfile({
   return (
     <section
       aria-labelledby="profile-title"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"
-      role="dialog"
+      className="overflow-hidden rounded-md border border-background-secondary bg-card-bg-primary text-txt-primary shadow-sm"
     >
-      <button
-        aria-label="Close profile"
-        className="absolute inset-0 cursor-default"
-        onClick={onClose}
-        type="button"
-      />
-      <article className="relative z-10 max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-background-secondary bg-card-bg-primary p-6 text-text-primary shadow-2xl">
+      <article className="relative">
         <button
           aria-label="Close profile"
-          className="absolute right-4 top-4 flex size-8 items-center justify-center rounded-full bg-background-secondary text-text-secondary"
+          className="absolute right-4 top-4 flex size-8 items-center justify-center rounded-sm bg-background-secondary text-txt-secondary"
           onClick={onClose}
           type="button"
         >
           X
         </button>
         {isLoading ? (
-          <LoadingState label="Loading complete staff details" />
+          <LoadingState className="p-6" label="Loading complete staff details" />
         ) : isEditing ? (
           <StaffEditForm
             member={staff}
@@ -749,7 +907,7 @@ function StaffProfile({
             onSubmit={saveProfile}
           />
         ) : (
-          <>
+          <div className="p-6">
             <header className="flex items-start gap-4 pr-10">
               <Avatar
                 alt={`${staff.display_name} avatar`}
@@ -760,10 +918,10 @@ function StaffProfile({
                 <h3 className="text-xl font-bold" id="profile-title">
                   {staff.display_name}
                 </h3>
-                <p className="mt-1 font-mono text-xs text-text-secondary">
+                <p className="mt-1 font-mono text-xs text-txt-secondary">
                   {staff.id}
                 </p>
-                <p className="mt-1 text-sm font-semibold text-text-secondary">
+                <p className="mt-1 text-sm font-semibold text-txt-secondary">
                   {staff.post_title} | {staff.portal_role}
                 </p>
                 <Badge className="mt-3" tone={statusTone(staff.staff_status)}>
@@ -771,13 +929,13 @@ function StaffProfile({
                 </Badge>
               </div>
             </header>
-            <p className="mt-5 border-y border-background-secondary py-4 text-sm leading-6 text-text-secondary">
+            <p className="mt-5 border-y border-background-secondary py-4 text-sm leading-6 text-txt-secondary">
               {staff.bio ?? "No bio provided."}
             </p>
             <dl className="mt-5 grid gap-5 sm:grid-cols-2">
               <ProfileDetail title="Contact">
                 {staff.email}
-                <span className="mt-1 block text-xs text-text-secondary">
+                <span className="mt-1 block text-xs text-txt-secondary">
                   {staff.phone ?? "No phone provided"}
                 </span>
               </ProfileDetail>
@@ -786,7 +944,7 @@ function StaffProfile({
               </ProfileDetail>
               <ProfileDetail title="Available time">
                 {availability.time}
-                <span className="mt-1 block text-xs text-text-secondary">
+                <span className="mt-1 block text-xs text-txt-secondary">
                   {availability.days}
                 </span>
               </ProfileDetail>
@@ -794,7 +952,7 @@ function StaffProfile({
                 {statusLabel(staff.auth_status)}
               </ProfileDetail>
               <div className="sm:col-span-2">
-                <dt className="text-xs font-bold uppercase tracking-wide text-text-secondary">
+                <dt className="text-xs font-bold uppercase tracking-wide text-txt-secondary">
                   Specialties
                 </dt>
                 <dd className="mt-2 flex flex-wrap gap-2">
@@ -844,7 +1002,7 @@ function StaffProfile({
                 Delete
               </button>
             </footer>
-          </>
+          </div>
         )}
       </article>
     </section>
@@ -860,7 +1018,7 @@ function ProfileDetail({
 }) {
   return (
     <div>
-      <dt className="text-xs font-bold uppercase tracking-wide text-text-secondary">
+      <dt className="text-xs font-bold uppercase tracking-wide text-txt-secondary">
         {title}
       </dt>
       <dd className="mt-2 text-sm font-bold">{children}</dd>
@@ -889,11 +1047,14 @@ function StaffEditForm({
 
   return (
     <form onSubmit={onSubmit}>
-      <h3 className="text-xl font-bold">Edit {member.display_name}</h3>
-      <p className="mt-1 text-sm text-text-secondary">
-        Email and portal role cannot be changed through this form.
-      </p>
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+      <header className="border-b border-background-secondary bg-card-bg-primary px-5 py-5">
+        <h3 className="text-2xl font-medium">Edit {member.display_name}</h3>
+      </header>
+      <div className="px-5 py-5">
+        <p className="mb-5 text-sm text-txt-secondary">
+          Email and portal role cannot be changed through this form.
+        </p>
+        <div className="grid gap-5 md:grid-cols-2">
         <FormInput
           defaultValue={member.display_name}
           disabled={isSaving}
@@ -998,10 +1159,11 @@ function StaffEditForm({
           required
           type="time"
         />
+        </div>
       </div>
-      <footer className="mt-6 flex justify-end gap-2 border-t border-background-secondary pt-4">
+      <footer className="flex justify-start gap-2 border-t border-background-secondary px-5 py-5">
         <button
-          className="rounded-lg border border-background-secondary px-4 py-2 text-xs font-bold"
+          className="min-h-11 rounded-sm border border-background-secondary px-4 py-3 text-xs font-bold"
           disabled={isSaving}
           onClick={onCancel}
           type="button"
@@ -1009,7 +1171,7 @@ function StaffEditForm({
           Cancel
         </button>
         <button
-          className="rounded-lg bg-button-primary px-4 py-2 text-xs font-bold text-white disabled:opacity-60"
+          className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-xs font-bold text-white disabled:opacity-60"
           disabled={isSaving}
           type="submit"
         >
@@ -1024,7 +1186,7 @@ function ConfirmationOverlay({ children }: { children: ReactNode }) {
   return (
     <section
       aria-modal="true"
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 p-4"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-background p-4"
       role="dialog"
     >
       {children}

@@ -7,11 +7,14 @@
  * - Exposes only active Pilates classes and scheduled future occurrences.
  * - Converts repository records into public-safe response contracts.
  * - Resolves public Pilates class image URLs from backend-owned storage paths.
+ * - Exposes backend-owned class/schedule pricing snapshots required by checkout.
  *
  * Important:
  * - This service does not expose admin metadata.
  * - This service does not expose internal image_path values to public clients.
  * - This service does not create bookings, payments, memberships, or waitlist rows.
+ * - This service does not calculate payment amounts dynamically.
+ * - Public payment flows must use stored backend-owned schedule pricing snapshots.
  * - Availability is temporary until the Booking module owns confirmed bookings/waitlist counts.
  */
 
@@ -27,6 +30,8 @@ import {
   PILATES_CLASS_TEMPORARY_BOOKED_COUNT,
   PILATES_CLASS_TEMPORARY_WAITLIST_AVAILABLE,
   PILATES_CLASS_TEMPORARY_WAITLIST_COUNT,
+  isPilatesClassCurrency,
+  type PilatesClassCurrency,
 } from '../constants/pilates-class.constants';
 import type { ListPublicPilatesClassesQueryDto } from '../dto/list-pilates-classes-query.dto';
 import type { ListPublicPilatesSchedulesQueryDto } from '../dto/list-pilates-schedules-query.dto';
@@ -80,6 +85,26 @@ function shouldApplyClassScheduleFilter(
 
 function resolveFutureFromDate(fromDate?: string): string {
   return maxIsoDate(fromDate ?? todayIsoDate(), todayIsoDate());
+}
+
+function resolvePilatesClassCurrency(value: string): PilatesClassCurrency {
+  if (isPilatesClassCurrency(value)) {
+    return value;
+  }
+
+  throw AppError.paymentCurrencyUnsupported('Schedule currency must be KWD.', {
+    currency: value,
+  });
+}
+
+function resolveNullablePilatesClassCurrency(
+  value: string | null,
+): PilatesClassCurrency | null {
+  if (value === null) {
+    return null;
+  }
+
+  return resolvePilatesClassCurrency(value);
 }
 
 function createAvailabilitySnapshot(
@@ -172,6 +197,8 @@ function mapClassToPublicSummary(
     description: record.description,
     default_duration_minutes: record.default_duration_minutes,
     default_capacity: record.default_capacity,
+    default_price_amount: record.default_price_amount,
+    currency: resolvePilatesClassCurrency(record.currency),
     level: record.level,
     image_url: resolveImageUrl(record.image_path),
     realtime_version: record.realtime_version,
@@ -213,11 +240,16 @@ function mapScheduleToPublicSummary(
     end_time: record.schedule.end_time,
     duration_minutes: record.schedule.duration_minutes,
     capacity: record.schedule.capacity,
+    price_amount: record.schedule.price_amount,
+    currency: resolveNullablePilatesClassCurrency(record.schedule.currency),
     status: record.schedule.status,
     availability: createAvailabilitySnapshot(record.schedule),
     realtime_version: record.schedule.realtime_version,
     series_id: record.schedule.series_id,
     series_occurrence_index: record.schedule.series_occurrence_index,
+    series_time_slot_id: record.schedule.series_time_slot_id,
+    series_date_index: record.schedule.series_date_index,
+    series_slot_index: record.schedule.series_slot_index,
     generation_source: record.schedule.generation_source,
     class: mapClassToPublicSummary(record.class, resolveImageUrl),
     trainer: mapTrainerToSummary(record.trainer),

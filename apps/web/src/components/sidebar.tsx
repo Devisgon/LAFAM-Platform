@@ -1,82 +1,74 @@
 "use client";
-
-import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import type { ReactNode } from "react";
+import {CalendarDays,ChevronDown,CreditCard,Gauge, LogOut, Menu,  Settings,  Star, UserRound,ListChecks,type LucideIcon,} from "lucide-react";
+type IconName =| "bookings"| "calendar" | "dashboard" | "logout"  | "payments" | "reviews"  | "services"| "settings"| "staff";
 
-type IconName =
-  | "bookings"
-  | "calendar"
-  | "customers"
-  | "dashboard"
-  | "logout"
-  | "payments"
-  | "promotions"
-  | "reports"
-  | "reviews"
-  | "services"
-  | "settings"
-  | "staff";
-
-const primaryItems: Array<{ href: string; icon: IconName; label: string }> = [
-  { href: "/admin", icon: "dashboard", label: "Dashboard" },
-  { href: "/admin/bookings", icon: "bookings", label: "Bookings" },
-];
-
-const managementItems: Array<{ href: string; icon: IconName; label: string }> = [
-  { href: "#", icon: "payments", label: "Payments" },
-  { href: "#", icon: "reviews", label: "Reviews" },
-  { href: "/admin/settings", icon: "settings", label: "Settings" },
-];
+type NavItem = {
+  href: string;
+  icon: IconName;
+  label: string;
+};
 
 type NavigationChild = {
   href: string;
   label: string;
 };
 
+const icons: Record<IconName, LucideIcon> = {
+  dashboard: Gauge,
+  bookings: CalendarDays,
+  calendar: CalendarDays,
+  services: ListChecks,
+  staff: UserRound,
+  payments: CreditCard,
+  reviews: Star,
+  settings: Settings,
+  logout: LogOut,
+};
+
+const primaryItems: NavItem[] = [
+  { href: "/admin", icon: "dashboard", label: "Dashboard" },
+  { href: "/admin/bookings", icon: "bookings", label: "Bookings" },
+  { href: "/admin/calendar", icon: "calendar", label: "Calendar" },
+];
+
+const managementItems: NavItem[] = [
+  { href: "#", icon: "payments", label: "Payments" },
+  { href: "#", icon: "reviews", label: "Reviews" },
+  { href: "/admin/settings", icon: "settings", label: "Settings" },
+];
+
 function Icon({ name }: { name: IconName }) {
-  const paths: Record<IconName, ReactNode> = {
-    dashboard: <><path d="M3 11.5 12 4l9 7.5" /><path d="M5.5 10.5V20h13v-9.5M9 20v-6h6v6" /></>,
-    bookings: <><rect x="4" y="4.5" width="16" height="16" rx="3" /><path d="M8 3v4M16 3v4M7 10h10M8 14h3M8 17h5" /></>,
-    calendar: <><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M8 3v4M16 3v4M3.5 10h17M8 14h2M14 14h2M8 17h2M14 17h2" /></>,
-    customers: <><circle cx="12" cy="8" r="3.5" /><path d="M5 20c.5-4.5 3-7 7-7s6.5 2.5 7 7" /><path d="M5 9H3m18 0h-2" /></>,
-    services: <><rect x="4" y="4" width="16" height="16" rx="4" /><path d="M8 9h8M8 13h8M8 17h5" /></>,
-    staff: <><circle cx="12" cy="7.5" r="3.5" /><path d="M5 20c.6-4.7 3-7 7-7s6.4 2.3 7 7" /></>,
-    payments: <><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="M3 9h18M7 15h4" /></>,
-    promotions: <><path d="m4 14 3-3 6 6-3 3zM8 10l8-5c2-1 3 0 2 2l-5 8M15 8l3 3M5 5l2 2M12 3v3M3 12h3" /></>,
-    reviews: <><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" /></>,
-    reports: <><path d="M5 3h10l4 4v14H5zM15 3v5h5M9 17v-5M12 17V9M15 17v-3" /></>,
-    settings: <><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5L9 6a7 7 0 0 0-1.7 1L5 6 3 9.5 5.1 11a7 7 0 0 0 0 2L3 14.5 5 18l2.3-1a7 7 0 0 0 1.7 1l.5 3h5l.5-3a7 7 0 0 0 1.7-1l2.3 1 2-3.5-2.1-1.5a7 7 0 0 0 .1-1Z" /></>,
-    logout: <><path d="M10 17l5-5-5-5M15 12H3M21 3v18" /></>,
-  };
+  const Component = icons[name];
 
-  return (
-    <svg aria-hidden="true" className="size-[18px] shrink-0" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
-      {paths[name]}
-    </svg>
-  );
+  return <Component size={20} strokeWidth={3} className="shrink-0" />;
 }
 
-function Tooltip({ label }: { label: string }) {
-  return (
-    <span className="pointer-events-none absolute left-full z-30 ml-3 hidden whitespace-nowrap rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-semibold text-white shadow-lg group-hover:block group-focus-visible:block">
-      {label}
-    </span>
-  );
-}
-
-function NavigationLink({ active = false, collapsed, href, icon, label }: { active?: boolean; collapsed: boolean; href: string; icon: IconName; label: string }) {
+function NavigationLink({
+  active = false,
+  collapsed,
+  href,
+  icon,
+  label,
+}: {
+  active?: boolean;
+  collapsed: boolean;
+  href: string;
+  icon: IconName;
+  label: string;
+}) {
   return (
     <Link
+      href={href}
+      title={label}
       aria-label={label}
       aria-current={active ? "page" : undefined}
-      className={`group relative flex min-h-10 items-center rounded-lg py-2 text-sm font-medium transition-colors ${collapsed ? "justify-center px-2" : "gap-3 px-3"} ${active ? "bg-primary text-white shadow-sm" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
-      href={href}
-    >
+      className={`flex min-h-14 w-full items-center text-[14px]  transition hover:bg-black hover:text-white ${
+  collapsed ? "justify-center px-0" : "gap-4 px-5"
+} ${active ? "bg-black text-white" : ""}`}>
       <Icon name={icon} />
-      {!collapsed && label}
-      {collapsed && <Tooltip label={label} />}
+      {!collapsed && <span>{label}</span>}
     </Link>
   );
 }
@@ -87,49 +79,61 @@ function NavigationGroup({
   collapsed,
   icon,
   label,
-  open,
-  setOpen,
 }: {
   activeItem?: string;
   children: NavigationChild[];
   collapsed: boolean;
   icon: IconName;
   label: string;
-  open: boolean;
-  setOpen: () => void;
 }) {
+  const [open, setOpen] = useState(true);
+
+  if (collapsed) {
+    return (
+      <NavigationLink
+        collapsed={collapsed}
+        href={children[0]?.href || "#"}
+        icon={icon}
+        label={label}
+      />
+    );
+  }
+
   return (
-    <div>
+    <div className="w-full">
       <button
-        aria-expanded={open}
-        aria-label={label}
-        className={`group relative flex min-h-10 w-full items-center rounded-lg py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white ${collapsed ? "justify-center px-2" : "gap-3 px-3"}`}
-        onClick={setOpen}
         type="button"
+        title={label}
+        aria-label={label}
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className={`flex min-h-14 w-full items-center gap-4 px-5 text-[14px]  transition ${
+          open
+            ? "bg-black text-white"
+            : "text-black hover:bg-black hover:text-white"
+        }`}
       >
         <Icon name={icon} />
-        {!collapsed && (
-          <>
-            <span className="flex-1 text-left">{label}</span>
-            <svg aria-hidden="true" className={`size-4 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="m7 10 5 5 5-5" />
-            </svg>
-          </>
-        )}
-        {collapsed && <Tooltip label={label} />}
+
+        <span className="flex-1 text-left">{label}</span>
+
+        <ChevronDown
+          size={18}
+          strokeWidth={3}
+          className={`transition ${open ? "rotate-180" : ""}`}
+        />
       </button>
-      {!collapsed && open && (
-        <div className="ml-[30px] grid border-l border-white/10 pl-3">
+
+      {open && (
+        <div className="w-full border-b border-black/20 bg-[#f7e5e5] py-3 shadow-sm">
           {children.map((child) => (
             <Link
-              aria-current={child.label === activeItem ? "page" : undefined}
-              className={`rounded-md px-2 py-1.5 text-sm ${
-                child.label === activeItem
-                  ? "bg-white/10 font-semibold text-white"
-                  : "text-slate-400 hover:bg-white/10 hover:text-white"
-              }`}
-              href={child.href}
               key={child.label}
+              href={child.href}
+              aria-current={child.label === activeItem ? "page" : undefined}
+              className={`block w-full px-[72px] py-2 text-[16px] font-medium text-black transition hover:bg-black/10 ${
+                child.label === activeItem ? "bg-black/10" : ""
+              }`}
             >
               {child.label}
             </Link>
@@ -142,70 +146,85 @@ function NavigationGroup({
 
 export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
   const [collapsed, setCollapsed] = useState(false);
-  const [servicesOpen, setServicesOpen] = useState(true);
-  const width = collapsed ? "md:w-20" : "md:w-56";
+  const width = collapsed ? "md:w-[72px]" : "md:w-[300px]";
 
   return (
     <>
-      <aside className={`relative z-20 flex w-full shrink-0 flex-col bg-[#06243a] p-4 text-white transition-[width] duration-200 md:fixed md:inset-y-0 md:left-0 md:h-screen ${collapsed ? "md:overflow-visible" : "md:overflow-y-auto"} ${width}`}>
-        <button
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className={`group mb-6 flex min-h-12 w-full items-center rounded-xl text-left transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${
-            collapsed ? "justify-center px-2" : "gap-3 px-3"
+      <aside
+        className={`relative z-20   flex shrink-0 flex-col bg-foreground py-4 text-black transition-[width] duration-300 md:fixed md:bottom-0 md:left-0 md:top-20 md:overflow-y-auto ${width}`}
+      >
+        <div
+          className={`flex items-center px-5 ${
+            collapsed ? "justify-center" : "justify-between"
           }`}
-          onClick={() => setCollapsed((current) => !current)}
-          type="button"
         >
-          <span className="relative flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary">
-            <Image
-              alt=""
-              className="size-7 object-contain transition-opacity group-hover:opacity-0"
-              height={28}
-              priority
-              src="/logo.png"
-              width={28}
-            />
-            <svg
-              aria-hidden="true"
-              className="absolute size-5 opacity-0 transition-opacity group-hover:opacity-100"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.8"
-              viewBox="0 0 24 24"
-            >
-              <rect height="16" rx="2" width="18" x="3" y="4" />
-              <path d="M9 4v16M14 9l-3 3 3 3" />
-            </svg>
-          </span>
           {!collapsed && (
-            <span>
-              <strong className="block text-base tracking-[0.18em]">LAFAM</strong>
-              <span className="block text-[10px] font-medium tracking-wide text-slate-400">
-                Wellness portal
-              </span>
-            </span>
+            <h2 className="text-[16px] ">Navigation</h2>
           )}
-          {collapsed && <Tooltip label="Expand sidebar" />}
-        </button>
 
-        <nav className="grid gap-1" aria-label="Main navigation">
-          {primaryItems.map((item) => <NavigationLink active={item.label === activeItem} collapsed={collapsed} key={item.label} {...item} />)}
-          <NavigationGroup activeItem={activeItem} collapsed={collapsed} icon="services" label="Services" open={servicesOpen} setOpen={() => setServicesOpen((current) => !current)}>
+          <button
+            type="button"
+            aria-label="Toggle sidebar"
+            onClick={() => setCollapsed((value) => !value)}
+            className="rounded-md p-1  transition "
+          >
+            <Menu size={24} strokeWidth={3} />
+          </button>
+        </div>
+
+        <nav className="mt-8 grid " aria-label="Main navigation">
+          {primaryItems.map((item) => (
+            <NavigationLink
+              key={item.label}
+              active={item.label === activeItem}
+              collapsed={collapsed}
+              {...item}
+            />
+          ))}
+
+          <NavigationGroup
+            activeItem={activeItem}
+            collapsed={collapsed}
+            icon="services"
+            label="Services"
+          >
             {[{ href: "/admin/services/pilates", label: "Pilates" }]}
           </NavigationGroup>
-          <NavigationLink active={activeItem === "Staff"} collapsed={collapsed} href="/admin/staff" icon="staff" label="Staff" />
-          {managementItems.map((item) => <NavigationLink collapsed={collapsed} key={item.label} {...item} />)}
+
+          <NavigationLink
+            active={activeItem === "Staff"}
+            collapsed={collapsed}
+            href="/admin/staff"
+            icon="staff"
+            label="Staff"
+          />
+
+          {managementItems.map((item) => (
+            <NavigationLink
+              key={item.label}
+              active={item.label === activeItem}
+              collapsed={collapsed}
+              {...item}
+            />
+          ))}
         </nav>
 
-        <a className={`group relative mt-6 flex min-h-10 items-center rounded-lg bg-error/15 py-2 text-sm font-semibold text-red-300 hover:bg-error hover:text-white md:mt-auto ${collapsed ? "justify-center px-2" : "gap-3 px-3"}`} href="#">
+        <a
+          href="#"
+          title="Log Out"
+          className={`mt-8 flex min-h-10 items-center rounded-lg text-[17px] font-medium text-black transition hover:bg-black/10 md:mt-auto ${
+            collapsed ? "justify-center px-2" : "gap-4 px-3"
+          }`}
+        >
           <Icon name="logout" />
-          {!collapsed && "Log Out"}
-          {collapsed && <Tooltip label="Log Out" />}
+          {!collapsed && <span>Log Out</span>}
         </a>
       </aside>
-      <div aria-hidden="true" className={`hidden shrink-0 transition-[width] duration-200 md:block ${width}`} />
+
+      <div
+        aria-hidden="true"
+        className={`hidden shrink-0 transition-[width] duration-300 md:block ${width}`}
+      />
     </>
   );
 }

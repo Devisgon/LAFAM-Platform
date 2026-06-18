@@ -14,11 +14,11 @@ export function PasswordResetShell({
   children,
 }: PasswordResetShellProps) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-6 py-12 text-text-primary">
+    <main className="flex min-h-screen items-center justify-center bg-background px-6 py-12 text-txt-primary">
       <section className="w-full max-w-md rounded-3xl border border-text-secondary/10 bg-card-bg-primary p-7 shadow-xl sm:p-10">
         <KeyRound className="mb-5 h-9 w-9 text-primary" aria-hidden="true" />
         <h1 className="mb-2 text-3xl font-semibold tracking-tight">{title}</h1>
-        <p className="mb-7 text-sm leading-relaxed text-text-secondary">
+        <p className="mb-7 text-sm leading-relaxed text-txt-secondary">
           {description}
         </p>
 

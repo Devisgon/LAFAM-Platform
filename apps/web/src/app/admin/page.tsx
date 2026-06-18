@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/sidebar";
 import { TopBar } from "@/components/top_bar";
+import { PageHeader } from "@/components/page_header";
 import { Avatar } from "@/components/reuseable_ui_components/avatar";
 import { Badge } from "@/components/reuseable_ui_components/badge";
 import { Card } from "@/components/reuseable_ui_components/cards";
@@ -31,7 +32,7 @@ const stats = {
 function SectionHeading({ action, children }: { action?: string; children: React.ReactNode }) {
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
-      <h2 className="text-sm font-bold text-text-primary">{children}</h2>
+      <h2 className="text-sm font-bold text-txt-primary">{children}</h2>
       {action && <button className="text-xs font-semibold text-primary" type="button">{action}</button>}
     </div>
   );
@@ -63,22 +64,22 @@ export default function AdminDashboardPage() {
   ] as const;
 
   return (
-    <div className="min-h-screen bg-background-primary md:flex">
-      <Sidebar activeItem="Dashboard" />
-
-      <div className="min-w-0 flex-1">
-        <TopBar />
-
-        <main className="p-4 lg:p-5">
+    <div className="min-h-screen bg-background-primary">
+      <TopBar />
+      <div className="md:flex">
+        <Sidebar activeItem="Dashboard" />
+        <div className="min-w-0 flex-1">
+          <PageHeader title="Dashboard" />
+          <main className="p-4 lg:p-5">
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Dashboard metrics">
             {metrics.map((metric) => (
               <Card className="p-4" key={metric.label}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs text-text-secondary">{metric.label}</p>
-                    <p className="mt-2 text-2xl font-bold text-text-primary">{metric.value}</p>
+                    <p className="text-xs text-txt-secondary">{metric.label}</p>
+                    <p className="mt-2 text-2xl font-bold text-txt-primary">{metric.value}</p>
                     <p className={`mt-1 text-xs font-semibold ${metric.change.startsWith("-") ? "text-error" : "text-success"}`}>
-                      {metric.change} <span className="font-normal text-text-secondary">vs last week</span>
+                      {metric.change} <span className="font-normal text-txt-secondary">vs last week</span>
                     </p>
                   </div>
                   <span className={`flex size-9 items-center justify-center rounded-full text-sm font-bold ${metric.tone}`} aria-hidden="true">{metric.icon}</span>
@@ -92,7 +93,7 @@ export default function AdminDashboardPage() {
               <SectionHeading action="This Week">Revenue Overview</SectionHeading>
               <div className="mt-3">
                 <div className="flex h-52 gap-3">
-                  <div className="flex flex-col justify-between pb-5 text-[10px] text-text-secondary">
+                  <div className="flex flex-col justify-between pb-5 text-[10px] text-txt-secondary">
                     <span>{Math.round(chartMaximum / 1000)}K</span><span>8K</span><span>6K</span><span>4K</span><span>2K</span><span>0</span>
                   </div>
                   <svg aria-label="Weekly revenue line chart" className="h-full min-w-0 flex-1" role="img" viewBox="0 0 500 220">
@@ -103,7 +104,7 @@ export default function AdminDashboardPage() {
                     {chartPoints.map(({ value, x, y }) => <circle cx={x} cy={y} fill="var(--primary)" key={`${x}-${value}`} r="5" />)}
                   </svg>
                 </div>
-                <div className="ml-8 grid grid-cols-7 text-center text-[10px] text-text-secondary">
+                <div className="ml-8 grid grid-cols-7 text-center text-[10px] text-txt-secondary">
                   {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <span key={day}>{day}</span>)}
                 </div>
               </div>
@@ -119,13 +120,13 @@ export default function AdminDashboardPage() {
                     <circle cx="60" cy="60" fill="none" r="44" stroke="#f43f5e" strokeDasharray={`${salonArc} ${circumference}`} strokeDashoffset={-pilatesArc} strokeWidth="22" />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <strong className="text-2xl text-text-primary">{totalBookings}</strong>
-                    <span className="text-xs text-text-secondary">Total</span>
+                    <strong className="text-2xl text-txt-primary">{totalBookings}</strong>
+                    <span className="text-xs text-txt-secondary">Total</span>
                   </div>
                 </div>
-                <div className="grid gap-4 text-xs text-text-secondary">
-                  <p><span className="mr-2 inline-block size-2 rounded-full bg-primary" />Pilates Studio<br /><strong className="ml-4 text-text-primary">{stats.pilates} ({Math.round(stats.pilates / totalBookings * 100)}%)</strong></p>
-                  <p><span className="mr-2 inline-block size-2 rounded-full bg-[#f43f5e]" />Ladies Salon<br /><strong className="ml-4 text-text-primary">{stats.salon} ({Math.round(stats.salon / totalBookings * 100)}%)</strong></p>
+                <div className="grid gap-4 text-xs text-txt-secondary">
+                  <p><span className="mr-2 inline-block size-2 rounded-full bg-primary" />Pilates Studio<br /><strong className="ml-4 text-txt-primary">{stats.pilates} ({Math.round(stats.pilates / totalBookings * 100)}%)</strong></p>
+                  <p><span className="mr-2 inline-block size-2 rounded-full bg-[#f43f5e]" />Ladies Salon<br /><strong className="ml-4 text-txt-primary">{stats.salon} ({Math.round(stats.salon / totalBookings * 100)}%)</strong></p>
                 </div>
               </div>
             </Card>
@@ -135,8 +136,8 @@ export default function AdminDashboardPage() {
               <div className="divide-y divide-background-secondary">
                 {upcomingBookings.map(([time, service, customer]) => (
                   <div className="grid grid-cols-[4.5rem_1fr_auto] items-center gap-2 py-3 text-xs" key={`${time}-${customer}`}>
-                    <span className="font-semibold text-text-primary">{time}</span>
-                    <span className="text-text-primary">{service}<small className="block text-text-secondary">{customer}</small></span>
+                    <span className="font-semibold text-txt-primary">{time}</span>
+                    <span className="text-txt-primary">{service}<small className="block text-txt-secondary">{customer}</small></span>
                     <Badge tone="success">Confirmed</Badge>
                   </div>
                 ))}
@@ -153,22 +154,22 @@ export default function AdminDashboardPage() {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[700px] border-collapse text-left text-xs">
                   <thead>
-                    <tr className="border-b border-background-secondary text-text-secondary">
+                    <tr className="border-b border-background-secondary text-txt-secondary">
                       {["Customer", "Service", "Date & Time", "Amount", "Status"].map((heading) => <th className="px-2 py-3 font-semibold" key={heading}>{heading}</th>)}
                     </tr>
                   </thead>
                   <tbody>
                     {recentBookings.map(([customer, service, date, amount, status, avatarStyle]) => (
                       <tr className="border-b border-background-secondary last:border-0" key={`${customer}-${date}`}>
-                        <td className="px-2 py-3 font-semibold text-text-primary">
+                        <td className="px-2 py-3 font-semibold text-txt-primary">
                           <span className="flex items-center gap-2">
                             <Avatar alt={`${customer} avatar`} className={avatarStyle} name={customer} size="sm" />
                             {customer}
                           </span>
                         </td>
-                        <td className="px-2 py-3 text-text-secondary">{service}</td>
-                        <td className="px-2 py-3 text-text-secondary">{date}</td>
-                        <td className="px-2 py-3 text-text-primary">{amount}</td>
+                        <td className="px-2 py-3 text-txt-secondary">{service}</td>
+                        <td className="px-2 py-3 text-txt-secondary">{date}</td>
+                        <td className="px-2 py-3 text-txt-primary">{amount}</td>
                         <td className="px-2 py-3"><Badge tone={status === "Pending" ? "warning" : "success"}>{status}</Badge></td>
                       </tr>
                     ))}
@@ -183,8 +184,8 @@ export default function AdminDashboardPage() {
                 {services.map(([service, count], index) => (
                   <div key={service}>
                     <div className="mb-2 flex justify-between gap-3 text-xs">
-                      <strong className="text-text-primary">{service}</strong>
-                      <span className="text-text-secondary">{count} Bookings</span>
+                      <strong className="text-txt-primary">{service}</strong>
+                      <span className="text-txt-secondary">{count} Bookings</span>
                     </div>
                     <progress
                       aria-label={`${service} bookings`}
@@ -197,7 +198,8 @@ export default function AdminDashboardPage() {
               </div>
             </Card>
           </section>
-        </main>
+          </main>
+        </div>
       </div>
     </div>
   );
