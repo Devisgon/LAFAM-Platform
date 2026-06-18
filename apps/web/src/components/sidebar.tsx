@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import {CalendarDays,ChevronDown,CreditCard,Gauge, LogOut, Menu,  Settings,  Star, UserRound,ListChecks,type LucideIcon,} from "lucide-react";
-type IconName =| "bookings"| "dashboard" | "logout"  | "payments" | "reviews"  | "services"| "settings"| "staff";
+type IconName =| "bookings"| "calendar" | "dashboard" | "logout"  | "payments" | "reviews"  | "services"| "settings"| "staff";
 
 type NavItem = {
   href: string;
@@ -18,6 +18,7 @@ type NavigationChild = {
 const icons: Record<IconName, LucideIcon> = {
   dashboard: Gauge,
   bookings: CalendarDays,
+  calendar: CalendarDays,
   services: ListChecks,
   staff: UserRound,
   payments: CreditCard,
@@ -29,6 +30,7 @@ const icons: Record<IconName, LucideIcon> = {
 const primaryItems: NavItem[] = [
   { href: "/admin", icon: "dashboard", label: "Dashboard" },
   { href: "/admin/bookings", icon: "bookings", label: "Bookings" },
+  { href: "/admin/calendar", icon: "calendar", label: "Calendar" },
 ];
 
 const managementItems: NavItem[] = [

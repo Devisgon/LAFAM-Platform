@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   type FormEvent,
   type InputHTMLAttributes,
+  useEffect,
   useState,
 } from "react";
 import { usePilates } from "@/hooks/usePilates";
@@ -14,12 +15,11 @@ import {
   type PilatesClassStatus,
 } from "@/lib/pilates";
 import { Badge } from "./reuseable_ui_components/badge";
-import { CreateActionBar } from "./reuseable_ui_components/create_action_bar";
 import { LoadingState } from "./reuseable_ui_components/loading_state";
 import { Toast } from "./reuseable_ui_components/toast";
 
 const fieldClass =
-  "min-h-10 w-full rounded-lg border border-background-secondary bg-background px-3 py-2 text-sm text-txt-primary outline-none focus:border-primary disabled:opacity-60";
+  "min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-3 py-2 text-sm text-txt-primary outline-none focus:border-primary disabled:opacity-60";
 const buttonClass =
   "inline-flex min-h-10 items-center justify-center rounded-lg border border-background-secondary px-4 py-2 text-xs font-bold transition hover:bg-background-secondary";
 
@@ -49,11 +49,23 @@ function classPayload(form: HTMLFormElement): CreatePilatesClassPayload {
 
 export function PilatesClassManager() {
   const api = usePilates();
+  const [isCreateMode, setIsCreateMode] = useState(() =>
+    typeof window === "undefined" ? false : window.location.hash === "#create-class",
+  );
   const [toast, setToast] = useState<{
     message: string;
     title: string;
     tone: "success" | "error";
   } | null>(null);
+
+  useEffect(() => {
+    const syncCreateMode = () => {
+      setIsCreateMode(window.location.hash === "#create-class");
+    };
+
+    window.addEventListener("hashchange", syncCreateMode);
+    return () => window.removeEventListener("hashchange", syncCreateMode);
+  }, []);
 
   const createClass = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -62,6 +74,7 @@ export function PilatesClassManager() {
       const created = await api.createClass(classPayload(form));
       form.reset();
       window.history.replaceState(null, "", window.location.pathname);
+      setIsCreateMode(false);
       setToast({
         message: `${created.title} is ready to manage and schedule.`,
         title: "Class created",
@@ -82,14 +95,6 @@ export function PilatesClassManager() {
 
   return (
     <>
-      <section className="mb-10 px-8">
-        <CreateActionBar
-          actionHref="#create-class"
-          actionLabel="Add New Class"
-          title="Add New Class"
-        />
-      </section>
-
       {api.error ? (
         <section className="mb-5 rounded-xl border border-error/30 bg-error/10 p-4">
           <p className="text-sm text-error" role="alert">{api.error}</p>
@@ -97,50 +102,44 @@ export function PilatesClassManager() {
         </section>
       ) : null}
 
-      <section className="grid gap-5" aria-labelledby="pilates-classes-heading">
-        <h2 className="sr-only" id="pilates-classes-heading">Pilates classes</h2>
-        {api.classes.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-background-secondary bg-card-bg-primary p-10 text-center text-sm text-txt-secondary">
-            Create your first Pilates class.
-          </div>
-        ) : (
-          api.classes.map((item) => <ClassListCard item={item} key={item.id} />)
-        )}
-      </section>
+      {isCreateMode ? (
+        <section className="px-8">
+          <CreateClassCard
+            isSaving={api.isMutating}
+            onCancel={() => {
+              window.history.replaceState(null, "", window.location.pathname);
+              setIsCreateMode(false);
+            }}
+            onSubmit={createClass}
+          />
+        </section>
+      ) : (
+        <section className="grid gap-7 px-8" aria-labelledby="pilates-classes-heading">
+          <header className="flex min-h-22 items-center justify-between gap-4 rounded-md bg-card-bg-primary px-5 shadow-lg shadow-slate-900/10 md:px-6">
+            <h2 className="text-2xl font-medium text-txt-primary" id="pilates-classes-heading">Pilates classes</h2>
+            <button
+              className="inline-flex min-h-12 items-center rounded-sm bg-button-primary px-5 text-base font-semibold text-txt-primary transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              onClick={() => {
+                window.history.replaceState(null, "", "#create-class");
+                setIsCreateMode(true);
+              }}
+              type="button"
+            >
+              + Create New Class
+            </button>
+          </header>
 
-      <section aria-labelledby="create-class-title" aria-modal="true" className="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-slate-950/60 p-4 target:flex" id="create-class" role="dialog">
-        <a aria-label="Close create class form" className="absolute inset-0" href="#pilates-classes-heading" />
-        <article className="relative z-10 my-auto w-full max-w-2xl rounded-2xl border border-background-secondary bg-card-bg-primary p-6 text-txt-primary shadow-2xl">
-          <a aria-label="Close create class form" className="absolute right-4 top-4" href="#pilates-classes-heading">X</a>
-          <h2 className="text-xl font-bold" id="create-class-title">Create Pilates class</h2>
-          <form onSubmit={createClass}>
-            <p className="mt-1 text-sm text-txt-secondary">
-              After creation, open the class page to edit it and add schedules.
-            </p>
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <FormInput className="sm:col-span-2" label="Class title" maxLength={160} name="title" required />
-              <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">
-                Description
-                <textarea className={`${fieldClass} min-h-24 resize-y`} maxLength={2000} name="description" />
-              </label>
-              <FormInput defaultValue={60} label="Default duration (minutes)" max={240} min={15} name="default_duration_minutes" required type="number" />
-              <FormInput defaultValue={8} label="Default capacity" max={100} min={1} name="default_capacity" required type="number" />
-              <Select defaultValue="all_levels" label="Level" name="level" options={["beginner", "intermediate", "advanced", "all_levels"]} />
-              <Select defaultValue="active" label="Status" name="status" options={["draft", "active", "inactive"]} />
-              <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">
-                Cover image
-                <input accept="image/jpeg,image/png,image/webp" className={fieldClass} name="image" type="file" />
-              </label>
-            </div>
-            <footer className="mt-6 flex justify-end gap-2 border-t border-background-secondary pt-4">
-              <a className={buttonClass} href="#pilates-classes-heading">Cancel</a>
-              <button className="rounded-lg bg-button-primary px-4 py-2 text-xs font-bold text-white disabled:opacity-60" disabled={api.isMutating} type="submit">
-                {api.isMutating ? "Creating..." : "Create class"}
-              </button>
-            </footer>
-          </form>
-        </article>
-      </section>
+          <div className="grid gap-5">
+            {api.classes.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-background-secondary bg-card-bg-primary p-10 text-center text-sm text-txt-secondary">
+                No Pilates classes found. Create a new class to get started.
+              </div>
+            ) : (
+              api.classes.map((item) => <ClassListCard item={item} key={item.id} />)
+            )}
+          </div>
+        </section>
+      )}
 
       {toast ? (
         <div className="fixed right-4 top-4 z-[90]">
@@ -148,6 +147,63 @@ export function PilatesClassManager() {
         </div>
       ) : null}
     </>
+  );
+}
+
+function CreateClassCard({
+  isSaving,
+  onCancel,
+  onSubmit,
+}: {
+  isSaving: boolean;
+  onCancel: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form
+      className="overflow-hidden rounded-md border border-background-secondary bg-card-bg-primary text-txt-primary shadow-sm"
+      id="create-class"
+      onSubmit={onSubmit}
+    >
+      <header className="border-b border-background-secondary bg-card-bg-primary px-5 py-5">
+        <h2 className="text-2xl font-medium" id="create-class-title">
+          Add New Class
+        </h2>
+      </header>
+      <div className="px-5 py-5">
+        <p className="mb-5 text-sm text-txt-secondary">
+          After creation, open the class page to edit it and add schedules.
+        </p>
+        <div className="grid gap-5 md:grid-cols-2">
+          <FormInput className="md:col-span-2" label="Class title" maxLength={160} name="title" required />
+          <label className="grid gap-1.5 text-xs font-bold md:col-span-2">
+            Description
+            <textarea className={`${fieldClass} min-h-24 resize-y`} maxLength={2000} name="description" />
+          </label>
+          <FormInput defaultValue={60} label="Default duration (minutes)" max={240} min={15} name="default_duration_minutes" required type="number" />
+          <FormInput defaultValue={8} label="Default capacity" max={100} min={1} name="default_capacity" required type="number" />
+          <Select defaultValue="all_levels" label="Level" name="level" options={["beginner", "intermediate", "advanced", "all_levels"]} />
+          <Select defaultValue="active" label="Status" name="status" options={["draft", "active", "inactive"]} />
+          <label className="grid gap-1.5 text-xs font-bold md:col-span-2">
+            Cover image
+            <input accept="image/jpeg,image/png,image/webp" className={fieldClass} name="image" type="file" />
+          </label>
+        </div>
+      </div>
+      <footer className="flex justify-start gap-2 border-t border-background-secondary px-5 py-5">
+        <button className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-xs font-bold text-white disabled:opacity-60" disabled={isSaving} type="submit">
+          {isSaving ? "Creating..." : "Create class"}
+        </button>
+        <button
+          className="min-h-11 rounded-sm border border-background-secondary px-4 py-3 text-xs font-bold text-txt-secondary transition hover:bg-background-secondary disabled:opacity-60"
+          disabled={isSaving}
+          onClick={onCancel}
+          type="button"
+        >
+          Back to classes
+        </button>
+      </footer>
+    </form>
   );
 }
 
@@ -179,7 +235,7 @@ function ClassListCard({ item }: { item: PilatesClassDefinition }) {
             <span className="rounded-lg bg-primary/10 px-3 py-2">Level: {label(item.level)}</span>
           </div>
         </div>
-        <Link className="inline-flex min-h-10 items-center justify-center rounded-lg bg-button-primary px-5 py-2 text-sm font-bold text-white transition hover:opacity-90" href={`/admin/services/pilates/${item.id}`}>
+        <Link className="inline-flex min-h-10 items-center justify-center rounded-lg bg-button-primary px-5 py-2 text-sm font-bold text-txt-primary transition hover:opacity-90" href={`/admin/services/pilates/${item.id}`}>
           Manage class
         </Link>
       </div>

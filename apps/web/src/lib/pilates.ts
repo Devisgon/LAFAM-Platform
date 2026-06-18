@@ -100,7 +100,8 @@ export type UpdatePilatesClassPayload = Partial<
   remove_image?: boolean;
 };
 
-export type CreatePilatesSchedulePayload = {
+export type CreateSinglePilatesSchedulePayload = {
+  mode?: "single";
   class_id: string;
   trainer_staff_profile_id: string;
   studio: string;
@@ -110,8 +111,38 @@ export type CreatePilatesSchedulePayload = {
   capacity: number;
 };
 
+export type WeeklyPilatesRecurrence = {
+  frequency: "weekly";
+  days_of_week: number[];
+  excluded_dates?: string[];
+};
+
+export type MonthlyPilatesRecurrence = {
+  frequency: "monthly";
+  monthly_rule: "day_of_month";
+  day_of_month: number;
+  excluded_dates?: string[];
+};
+
+export type CreateRecurringPilatesSchedulePayload = {
+  mode: "recurring";
+  class_id: string;
+  trainer_staff_profile_id: string;
+  studio: string;
+  start_date: string;
+  end_date: string;
+  start_time: string;
+  duration_minutes: number;
+  capacity: number;
+  recurrence: WeeklyPilatesRecurrence | MonthlyPilatesRecurrence;
+};
+
+export type CreatePilatesSchedulePayload =
+  | CreateSinglePilatesSchedulePayload
+  | CreateRecurringPilatesSchedulePayload;
+
 export type UpdatePilatesSchedulePayload =
-  Partial<CreatePilatesSchedulePayload>;
+  Partial<Omit<CreateSinglePilatesSchedulePayload, "mode">>;
 
 type PaginatedResult<T> = {
   items: T[];

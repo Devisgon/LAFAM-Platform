@@ -12,7 +12,7 @@ type TopBarProps = {
   title?: string;
 };
 
-export function TopBar({ title }: TopBarProps) {
+export function TopBar({ actionHref, actionLabel, title }: TopBarProps) {
   const { avatarUrl, user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
@@ -31,6 +31,14 @@ export function TopBar({ title }: TopBarProps) {
       />
 
       <div className="flex flex-wrap items-center gap-3">
+        {actionHref && actionLabel ? (
+          <Link
+            className="inline-flex min-h-11 items-center rounded-sm bg-button-primary px-4 text-sm font-semibold text-txt-primary transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            href={actionHref}
+          >
+            {actionLabel}
+          </Link>
+        ) : null}
         <Link
           aria-label="Open profile settings"
           className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"

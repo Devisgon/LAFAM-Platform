@@ -12,7 +12,6 @@ import { ChevronDown, FileSpreadsheet, Pencil } from "lucide-react";
 import { Avatar } from "./reuseable_ui_components/avatar";
 import { Badge } from "./reuseable_ui_components/badge";
 import { ConfirmationCard } from "./reuseable_ui_components/confirmation_card";
-import { CreateActionBar } from "./reuseable_ui_components/create_action_bar";
 import { LoadingState } from "./reuseable_ui_components/loading_state";
 import { Toast } from "./reuseable_ui_components/toast";
 import { useStaff } from "@/hooks/useStaff";
@@ -34,7 +33,7 @@ type ResultToast = {
 };
 
 const inputClass =
-  "min-h-10 w-full rounded-lg border border-background-secondary bg-background px-3 py-2 text-sm text-txt-primary outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-60";
+  "min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-4 py-2 text-base text-txt-primary outline-none transition placeholder:text-txt-secondary focus:border-primary disabled:cursor-not-allowed disabled:opacity-60";
 
 const pageSizeOptions = [10, 25, 50];
 
@@ -162,6 +161,18 @@ export function StaffDirectory() {
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(pageSizeOptions[0]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isCreateMode, setIsCreateMode] = useState(() =>
+    typeof window === "undefined" ? false : window.location.hash === "#add-staff",
+  );
+
+  useEffect(() => {
+    const syncCreateMode = () => {
+      setIsCreateMode(window.location.hash === "#add-staff");
+    };
+
+    window.addEventListener("hashchange", syncCreateMode);
+    return () => window.removeEventListener("hashchange", syncCreateMode);
+  }, []);
 
   const filteredStaff = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -202,6 +213,7 @@ export function StaffDirectory() {
 
       form.reset();
       window.history.replaceState(null, "", window.location.pathname);
+      setIsCreateMode(false);
       setToast({
         message: `${createdStaff.display_name} was created and must verify their email before login.`,
         title: "Staff member created",
@@ -222,19 +234,38 @@ export function StaffDirectory() {
         className="grid px-8 gap-10  text-txt-primary"
         id="staff-directory-heading"
       >
-        <CreateActionBar
-          actionHref="#add-staff"
-          actionLabel="Add New User"
-          title="Add New User"
-        />
+        {isCreateMode ? (
+          <AddStaffCard
+            isCreating={isCreating}
+            onCancel={() => {
+              window.history.replaceState(null, "", window.location.pathname);
+              setIsCreateMode(false);
+            }}
+            onSubmit={createStaff}
+          />
+        ) : (
+          <>
+            <section className="flex items-center justify-between gap-4 rounded-md bg-card-bg-primary px-5 py-5 shadow-lg shadow-slate-900/10">
+              <h2 className="text-2xl font-medium">Add New User</h2>
+              <button
+                className="min-h-12 rounded-sm bg-button-primary px-5 text-base font-semibold text-txt-primary transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                onClick={() => {
+                  window.history.replaceState(null, "", "#add-staff");
+                  setIsCreateMode(true);
+                }}
+                type="button"
+              >
+                + Add staff
+              </button>
+            </section>
 
-        <section
-          className="overflow-hidden rounded-md bg-card-bg-primary shadow-sm"
-          aria-label="Staff member list"
-        >
-          <header className="border-b border-background-secondary bg-card-bg-secondary px-5 py-5">
-            <h2 className="text-2xl font-medium">User List</h2>
-          </header>
+            <section
+              className="overflow-hidden rounded-md bg-card-bg-primary shadow-sm"
+              aria-label="Staff member list"
+            >
+              <header className="border-b border-background-secondary bg-card-bg-secondary px-5 py-5">
+                <h2 className="text-2xl font-medium">User List</h2>
+              </header>
 
         {isLoading ? (
           <LoadingState className="p-6" label="Loading staff members" />
@@ -415,212 +446,26 @@ export function StaffDirectory() {
             </footer>
           </>
         )}
-        </section>
+            </section>
+          </>
+        )}
+
+        {selectedStaff ? (
+          <StaffProfile
+            member={selectedStaff}
+            onClose={() => setSelectedStaff(null)}
+            onDeleted={() => setSelectedStaff(null)}
+            onUpdated={setSelectedStaff}
+            showToast={setToast}
+            getStaff={getStaff}
+            updateStaff={updateStaff}
+            updateAvailability={updateAvailability}
+            deactivateStaff={deactivateStaff}
+            reactivateStaff={reactivateStaff}
+            deleteStaff={deleteStaff}
+          />
+        ) : null}
       </section>
-
-      <section
-        aria-labelledby="add-staff-title"
-        aria-modal="true"
-        className="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-slate-950/60 p-4 target:flex"
-        id="add-staff"
-        role="dialog"
-      >
-        <a
-          aria-label="Close add staff form"
-          className="absolute inset-0 cursor-default"
-          href="#staff-directory-heading"
-        />
-        <form
-          onSubmit={createStaff}
-          className="relative z-10 my-auto w-full max-w-3xl rounded-2xl border border-background-secondary bg-card-bg-primary p-6 text-txt-primary shadow-2xl"
-        >
-          <a
-            aria-label="Close add staff form"
-            className="absolute right-4 top-4 flex size-8 items-center justify-center rounded-full bg-background-secondary text-txt-secondary hover:text-txt-primary"
-            href="#staff-directory-heading"
-          >
-            X
-          </a>
-          <h2 className="text-xl font-bold" id="add-staff-title">
-            Add new staff member
-          </h2>
-          <p className="mt-1 text-sm text-txt-secondary">
-            The new staff member must verify their email before login.
-          </p>
-
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <FormInput
-              label="Display name"
-              name="display_name"
-              autoComplete="name"
-              maxLength={120}
-              disabled={isCreating}
-              required
-            />
-            <label className="grid gap-1.5 text-xs font-bold">
-              Portal role
-              <select
-                className={inputClass}
-                defaultValue="trainer"
-                disabled={isCreating}
-                name="portal_role"
-              >
-                <option value="trainer">Trainer</option>
-                <option value="staff">Staff</option>
-              </select>
-            </label>
-            <FormInput
-              label="Email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              maxLength={254}
-              disabled={isCreating}
-              required
-            />
-            <FormInput
-              label="Phone"
-              name="phone"
-              type="tel"
-              autoComplete="tel"
-              placeholder="+96550000000"
-              maxLength={32}
-              disabled={isCreating}
-            />
-            <FormInput
-              label="Password"
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              minLength={8}
-              maxLength={128}
-              disabled={isCreating}
-              required
-            />
-            <FormInput
-              label="Confirm password"
-              name="confirm_password"
-              type="password"
-              autoComplete="new-password"
-              minLength={8}
-              maxLength={128}
-              disabled={isCreating}
-              required
-            />
-            <FormInput
-              label="Post title"
-              name="post_title"
-              placeholder="Pilates Trainer"
-              maxLength={100}
-              disabled={isCreating}
-              required
-            />
-            <label className="grid gap-1.5 text-xs font-bold">
-              Status
-              <select
-                className={inputClass}
-                defaultValue="available"
-                disabled={isCreating}
-                name="status"
-              >
-                <option value="available">Available</option>
-                <option value="unavailable">Unavailable</option>
-                <option value="on_leave">On leave</option>
-              </select>
-            </label>
-            <FormInput
-              label="Address"
-              name="address"
-              autoComplete="street-address"
-              maxLength={500}
-              disabled={isCreating}
-              className="sm:col-span-2"
-            />
-            <fieldset className="grid gap-2 sm:col-span-2">
-              <legend className="text-xs font-bold">Working days</legend>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {days.map((day) => (
-                  <label
-                    className="flex items-center gap-2 rounded-lg border border-background-secondary px-3 py-2 text-xs font-semibold"
-                    key={day.value}
-                  >
-                    <input
-                      type="checkbox"
-                      name="working_days"
-                      value={day.value}
-                      disabled={isCreating}
-                      className="accent-primary"
-                    />
-                    {day.label}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <FormInput
-              label="Start time"
-              name="start_time"
-              type="time"
-              disabled={isCreating}
-              required
-            />
-            <FormInput
-              label="End time"
-              name="end_time"
-              type="time"
-              disabled={isCreating}
-              required
-            />
-            <FormInput
-              label="Specialties"
-              name="specialties"
-              placeholder="Reformer Pilates, Mat Pilates"
-              disabled={isCreating}
-              className="sm:col-span-2"
-            />
-            <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">
-              Bio
-              <textarea
-                className={`${inputClass} min-h-24 resize-y`}
-                disabled={isCreating}
-                maxLength={1000}
-                name="bio"
-              />
-            </label>
-          </div>
-
-          <footer className="mt-6 flex justify-end gap-2 border-t border-background-secondary pt-4">
-            <a
-              className="rounded-lg border border-background-secondary px-4 py-2 text-xs font-bold hover:bg-background-secondary"
-              href="#staff-directory-heading"
-            >
-              Cancel
-            </a>
-            <button
-              className="rounded-lg bg-button-primary px-4 py-2 text-xs font-bold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isCreating}
-              type="submit"
-            >
-              {isCreating ? "Creating..." : "Create staff member"}
-            </button>
-          </footer>
-        </form>
-      </section>
-
-      {selectedStaff ? (
-        <StaffProfile
-          member={selectedStaff}
-          onClose={() => setSelectedStaff(null)}
-          onDeleted={() => setSelectedStaff(null)}
-          onUpdated={setSelectedStaff}
-          showToast={setToast}
-          getStaff={getStaff}
-          updateStaff={updateStaff}
-          updateAvailability={updateAvailability}
-          deactivateStaff={deactivateStaff}
-          reactivateStaff={reactivateStaff}
-          deleteStaff={deleteStaff}
-        />
-      ) : null}
       {toast ? (
         <div className="fixed right-4 top-4 z-[70]">
           <Toast
@@ -643,6 +488,193 @@ function TableHeading({ heading }: { heading: string }) {
         <span>{heading}</span>
       </span>
     </th>
+  );
+}
+
+function AddStaffCard({
+  isCreating,
+  onCancel,
+  onSubmit,
+}: {
+  isCreating: boolean;
+  onCancel: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form
+      className="overflow-hidden rounded-md border border-background-secondary bg-card-bg-primary text-txt-primary shadow-sm"
+      id="add-staff"
+      onSubmit={onSubmit}
+    >
+      <header className="border-b border-background-secondary bg-card-bg-primary px-5 py-5">
+        <h2 className="text-2xl font-medium" id="add-staff-title">
+          Add New User
+        </h2>
+      </header>
+
+      <div className="px-5 py-5">
+        <p className="mb-5 text-sm text-txt-secondary">
+          The new staff member must verify their email before login.
+        </p>
+        <div className="grid gap-5 md:grid-cols-2">
+          <FormInput
+            label="Display name"
+            name="display_name"
+            autoComplete="name"
+            maxLength={120}
+            disabled={isCreating}
+            required
+          />
+          <label className="grid gap-1.5 text-xs font-bold">
+            Portal role
+            <select
+              className={inputClass}
+              defaultValue="trainer"
+              disabled={isCreating}
+              name="portal_role"
+            >
+              <option value="trainer">Trainer</option>
+              <option value="staff">Staff</option>
+            </select>
+          </label>
+          <FormInput
+            label="Email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            maxLength={254}
+            disabled={isCreating}
+            required
+          />
+          <FormInput
+            label="Phone"
+            name="phone"
+            type="tel"
+            autoComplete="tel"
+            placeholder="+96550000000"
+            maxLength={32}
+            disabled={isCreating}
+          />
+          <FormInput
+            label="Password"
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            minLength={8}
+            maxLength={128}
+            disabled={isCreating}
+            required
+          />
+          <FormInput
+            label="Confirm password"
+            name="confirm_password"
+            type="password"
+            autoComplete="new-password"
+            minLength={8}
+            maxLength={128}
+            disabled={isCreating}
+            required
+          />
+          <FormInput
+            label="Post title"
+            name="post_title"
+            placeholder="Pilates Trainer"
+            maxLength={100}
+            disabled={isCreating}
+            required
+          />
+          <label className="grid gap-1.5 text-xs font-bold">
+            Status
+            <select
+              className={inputClass}
+              defaultValue="available"
+              disabled={isCreating}
+              name="status"
+            >
+              <option value="available">Available</option>
+              <option value="unavailable">Unavailable</option>
+              <option value="on_leave">On leave</option>
+            </select>
+          </label>
+          <FormInput
+            label="Address"
+            name="address"
+            autoComplete="street-address"
+            maxLength={500}
+            disabled={isCreating}
+            className="md:col-span-2"
+          />
+          <fieldset className="grid gap-2 md:col-span-2">
+            <legend className="text-xs font-bold">Working days</legend>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {days.map((day) => (
+                <label
+                  className="flex items-center gap-2 rounded-sm border border-background-secondary px-3 py-2 text-xs font-semibold"
+                  key={day.value}
+                >
+                  <input
+                    type="checkbox"
+                    name="working_days"
+                    value={day.value}
+                    disabled={isCreating}
+                    className="accent-primary"
+                  />
+                  {day.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <FormInput
+            label="Start time"
+            name="start_time"
+            type="time"
+            disabled={isCreating}
+            required
+          />
+          <FormInput
+            label="End time"
+            name="end_time"
+            type="time"
+            disabled={isCreating}
+            required
+          />
+          <FormInput
+            label="Specialties"
+            name="specialties"
+            placeholder="Reformer Pilates, Mat Pilates"
+            disabled={isCreating}
+            className="md:col-span-2"
+          />
+          <label className="grid gap-1.5 text-xs font-bold md:col-span-2">
+            Bio
+            <textarea
+              className={`${inputClass} min-h-24 resize-y`}
+              disabled={isCreating}
+              maxLength={1000}
+              name="bio"
+            />
+          </label>
+        </div>
+      </div>
+
+      <footer className="flex justify-start gap-2 border-t border-background-secondary px-5 py-5">
+        <button
+          className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-xs font-bold text-txt-primary hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isCreating}
+          type="submit"
+        >
+          {isCreating ? "Creating..." : "Create staff member"}
+        </button>
+        <button
+          className="min-h-11 rounded-sm border border-background-secondary px-4 py-3 text-xs font-bold text-txt-secondary transition hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isCreating}
+          onClick={onCancel}
+          type="button"
+        >
+          Back to staff
+        </button>
+      </footer>
+    </form>
   );
 }
 
@@ -854,27 +886,19 @@ function StaffProfile({
   return (
     <section
       aria-labelledby="profile-title"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"
-      role="dialog"
+      className="overflow-hidden rounded-md border border-background-secondary bg-card-bg-primary text-txt-primary shadow-sm"
     >
-      <button
-        aria-label="Close profile"
-        className="absolute inset-0 cursor-default"
-        onClick={onClose}
-        type="button"
-      />
-      <article className="relative z-10 max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-background-secondary bg-card-bg-primary p-6 text-txt-primary shadow-2xl">
+      <article className="relative">
         <button
           aria-label="Close profile"
-          className="absolute right-4 top-4 flex size-8 items-center justify-center rounded-full bg-background-secondary text-txt-secondary"
+          className="absolute right-4 top-4 flex size-8 items-center justify-center rounded-sm bg-background-secondary text-txt-secondary"
           onClick={onClose}
           type="button"
         >
           X
         </button>
         {isLoading ? (
-          <LoadingState label="Loading complete staff details" />
+          <LoadingState className="p-6" label="Loading complete staff details" />
         ) : isEditing ? (
           <StaffEditForm
             member={staff}
@@ -883,7 +907,7 @@ function StaffProfile({
             onSubmit={saveProfile}
           />
         ) : (
-          <>
+          <div className="p-6">
             <header className="flex items-start gap-4 pr-10">
               <Avatar
                 alt={`${staff.display_name} avatar`}
@@ -978,7 +1002,7 @@ function StaffProfile({
                 Delete
               </button>
             </footer>
-          </>
+          </div>
         )}
       </article>
     </section>
@@ -1023,11 +1047,14 @@ function StaffEditForm({
 
   return (
     <form onSubmit={onSubmit}>
-      <h3 className="text-xl font-bold">Edit {member.display_name}</h3>
-      <p className="mt-1 text-sm text-txt-secondary">
-        Email and portal role cannot be changed through this form.
-      </p>
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+      <header className="border-b border-background-secondary bg-card-bg-primary px-5 py-5">
+        <h3 className="text-2xl font-medium">Edit {member.display_name}</h3>
+      </header>
+      <div className="px-5 py-5">
+        <p className="mb-5 text-sm text-txt-secondary">
+          Email and portal role cannot be changed through this form.
+        </p>
+        <div className="grid gap-5 md:grid-cols-2">
         <FormInput
           defaultValue={member.display_name}
           disabled={isSaving}
@@ -1132,10 +1159,11 @@ function StaffEditForm({
           required
           type="time"
         />
+        </div>
       </div>
-      <footer className="mt-6 flex justify-end gap-2 border-t border-background-secondary pt-4">
+      <footer className="flex justify-start gap-2 border-t border-background-secondary px-5 py-5">
         <button
-          className="rounded-lg border border-background-secondary px-4 py-2 text-xs font-bold"
+          className="min-h-11 rounded-sm border border-background-secondary px-4 py-3 text-xs font-bold"
           disabled={isSaving}
           onClick={onCancel}
           type="button"
@@ -1143,7 +1171,7 @@ function StaffEditForm({
           Cancel
         </button>
         <button
-          className="rounded-lg bg-button-primary px-4 py-2 text-xs font-bold text-white disabled:opacity-60"
+          className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-xs font-bold text-white disabled:opacity-60"
           disabled={isSaving}
           type="submit"
         >
