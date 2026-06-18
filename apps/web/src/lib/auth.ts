@@ -140,6 +140,7 @@ export class AuthClientError extends Error {
   }
 }
 
+const EMAIL_NOT_VERIFIED_ERROR_CODE = "EMAIL_NOT_VERIFIED";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 if (!API_BASE_URL) {
@@ -157,7 +158,7 @@ const PENDING_VERIFICATION_EMAIL_KEY = "lafam_pending_verification_email";
 const PASSWORD_RESET_EMAIL_KEY = "lafam_password_reset_email";
 const PASSWORD_RESET_TOKEN_KEY = "lafam_password_reset_token";
 const REFRESH_TOKEN_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
-export const AUTH_REFRESH_INTERVAL_MS = 59 * 60 * 1000;
+export const AUTH_REFRESH_INTERVAL_MS = 50 * 60 * 1000;
 
 let refreshSessionRequest: Promise<boolean> | null = null;
 
@@ -369,6 +370,27 @@ function getApiErrorMessage(payload: unknown): string {
 
   const message = (payload as { message?: unknown } | null)?.message;
   return typeof message === "string" ? message : "Request failed.";
+}
+
+function getApiErrorCode(payload: unknown): string | null {
+  const error = (payload as { error?: unknown } | null)?.error;
+
+  if (error && typeof error === "object") {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === "string" ? code : null;
+  }
+
+  return null;
+}
+
+export function isEmailVerificationRequiredError(error: unknown): boolean {
+  if (!(error instanceof AuthClientError)) return false;
+
+  const code = getApiErrorCode(error.payload);
+
+  if (code === EMAIL_NOT_VERIFIED_ERROR_CODE) return true;
+
+  return error.message.toLowerCase().includes("verify your email");
 }
 
 export function getDashboardPath(role?: string | null): string {
@@ -713,18 +735,30 @@ export const authClient = {
 
   async login(payload: LoginPayload): Promise<LoginResult> {
     const deviceInfo = getBrowserDeviceInfo();
+    const email = normalizeEmail(payload.email);
 
-    const response = await authFetch<ApiResponse<LoginApiData>>(
-      "/auth/login",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          ...deviceInfo,
-          ...payload,
-        }),
-      },
-      false,
-    );
+    let response: ApiResponse<LoginApiData>;
+
+    try {
+      response = await authFetch<ApiResponse<LoginApiData>>(
+        "/auth/login",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            ...deviceInfo,
+            ...payload,
+            email,
+          }),
+        },
+        false,
+      );
+    } catch (error: unknown) {
+      if (isEmailVerificationRequiredError(error)) {
+        cachePendingVerificationEmail(email);
+      }
+
+      throw error;
+    }
 
     setAuthCookies({
       access_token: response.data.access_token,

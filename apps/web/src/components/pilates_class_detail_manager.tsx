@@ -17,15 +17,16 @@ import {
   type PilatesClassStatus,
   type PilatesSchedule,
   type PilatesScheduleStatus,
+  type UpdatePilatesSchedulePayload,
 } from "@/lib/pilates";
 import { Badge } from "./reuseable_ui_components/badge";
 import { LoadingState } from "./reuseable_ui_components/loading_state";
 import { Toast } from "./reuseable_ui_components/toast";
 
 const fieldClass =
-  "min-h-10 w-full rounded-lg border border-background-secondary bg-background px-3 py-2 text-sm text-txt-primary outline-none focus:border-primary disabled:opacity-60";
+  "min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-3 py-2 text-sm text-txt-primary outline-none focus:border-primary disabled:opacity-60";
 const buttonClass =
-  "inline-flex min-h-10 items-center justify-center rounded-lg border border-background-secondary px-4 py-2 text-xs font-bold transition hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-11 items-center justify-center rounded-sm border border-background-secondary px-4 py-2 text-xs font-bold transition hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-50";
 const detailCacheKey = (classId: string) => `lafam:admin:pilates:class:${classId}`;
 
 function readDetailCache(classId: string): PilatesClassDefinition | null {
@@ -76,6 +77,13 @@ function formatTime(time: string): string {
     : new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit" }).format(value);
 }
 
+function addMinutes(time: string, minutes: number): string {
+  const [hours = "0", mins = "0"] = time.split(":");
+  const value = new Date("2026-01-01T00:00:00");
+  value.setHours(Number(hours), Number(mins) + minutes, 0, 0);
+  return `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
+}
+
 function classPayload(form: HTMLFormElement): CreatePilatesClassPayload {
   const data = new FormData(form);
   const image = data.get("image");
@@ -90,13 +98,80 @@ function classPayload(form: HTMLFormElement): CreatePilatesClassPayload {
   };
 }
 
-function schedulePayload(
+const weekDays = [
+  { label: "Sunday", value: 0 },
+  { label: "Monday", value: 1 },
+  { label: "Tuesday", value: 2 },
+  { label: "Wednesday", value: 3 },
+  { label: "Thursday", value: 4 },
+  { label: "Friday", value: 5 },
+  { label: "Saturday", value: 6 },
+] as const;
+
+function excludedDates(data: FormData): string[] {
+  return String(data.get("excluded_dates") ?? "")
+    .split(/[\n,]/)
+    .map((date) => date.trim())
+    .filter(Boolean);
+}
+
+function createSchedulePayload(
   form: HTMLFormElement,
   classId: string,
 ): CreatePilatesSchedulePayload {
   const data = new FormData(form);
-  return {
+  const mode = String(data.get("mode"));
+  const base = {
     class_id: classId,
+    trainer_staff_profile_id: String(data.get("trainer_staff_profile_id")),
+    studio: String(data.get("studio")).trim(),
+    start_time: String(data.get("start_time")),
+    duration_minutes: Number(data.get("duration_minutes")),
+    capacity: Number(data.get("capacity")),
+  };
+
+  if (mode === "weekly") {
+    return {
+      ...base,
+      mode: "recurring",
+      start_date: String(data.get("start_date")),
+      end_date: String(data.get("end_date")),
+      recurrence: {
+        frequency: "weekly",
+        days_of_week: data
+          .getAll("days_of_week")
+          .map((value) => Number(value))
+          .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6),
+        excluded_dates: excludedDates(data),
+      },
+    };
+  }
+
+  if (mode === "monthly") {
+    return {
+      ...base,
+      mode: "recurring",
+      start_date: String(data.get("start_date")),
+      end_date: String(data.get("end_date")),
+      recurrence: {
+        frequency: "monthly",
+        monthly_rule: "day_of_month",
+        day_of_month: Number(data.get("day_of_month")),
+        excluded_dates: excludedDates(data),
+      },
+    };
+  }
+
+  return {
+    ...base,
+    mode: "single",
+    class_date: String(data.get("class_date")),
+  };
+}
+
+function updateSchedulePayload(form: HTMLFormElement): UpdatePilatesSchedulePayload {
+  const data = new FormData(form);
+  return {
     trainer_staff_profile_id: String(data.get("trainer_staff_profile_id")),
     studio: String(data.get("studio")).trim(),
     class_date: String(data.get("class_date")),
@@ -190,17 +265,27 @@ export function PilatesClassDetailManager({ classId }: { classId: string }) {
 
   const saveSchedule = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const payload = schedulePayload(event.currentTarget, classId);
     const current = editingSchedule;
+
+    if (current) {
+      const payload = updateSchedulePayload(event.currentTarget);
+      void run(
+        () => api.updateSchedule(current.id, payload),
+        "Schedule updated",
+        "The class schedule was updated.",
+        () => {
+          setEditingSchedule(null);
+          setCreatingSchedule(false);
+        },
+      );
+      return;
+    }
+
+    const payload = createSchedulePayload(event.currentTarget, classId);
     void run(
-      () =>
-        current
-          ? api.updateSchedule(current.id, payload)
-          : api.createSchedule(payload),
-      current ? "Schedule updated" : "Schedule created",
-      current
-        ? "The class schedule was updated."
-        : "A new schedule was added to this class.",
+      () => api.createSchedule(payload),
+      "Schedule created",
+      "A new schedule was added to this class.",
       () => {
         setEditingSchedule(null);
         setCreatingSchedule(false);
@@ -270,13 +355,13 @@ export function PilatesClassDetailManager({ classId }: { classId: string }) {
       />
 
       {editingClass ? (
-        <Modal onClose={() => setEditingClass(false)} title={`Edit ${detail.title}`}>
+        <InlineCard onClose={() => setEditingClass(false)} title={`Edit ${detail.title}`}>
           <ClassEditForm detail={detail} isSaving={api.isMutating} onClose={() => setEditingClass(false)} onSubmit={updateClass} />
-        </Modal>
+        </InlineCard>
       ) : null}
 
       {creatingSchedule || editingSchedule ? (
-        <Modal onClose={() => { setCreatingSchedule(false); setEditingSchedule(null); }} title={editingSchedule ? "Edit schedule" : `Schedule ${detail.title}`}>
+        <InlineCard onClose={() => { setCreatingSchedule(false); setEditingSchedule(null); }} title={editingSchedule ? "Edit schedule" : `Schedule ${detail.title}`}>
           <ScheduleForm
             detail={detail}
             isSaving={api.isMutating}
@@ -285,7 +370,7 @@ export function PilatesClassDetailManager({ classId }: { classId: string }) {
             onSubmit={saveSchedule}
             trainers={api.trainers}
           />
-        </Modal>
+        </InlineCard>
       ) : null}
 
       {toast ? (
@@ -435,7 +520,7 @@ function ClassEditForm({
 }) {
   return (
     <form onSubmit={onSubmit}>
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-5 px-5 py-5 md:grid-cols-2">
         <FormInput className="sm:col-span-2" defaultValue={detail.title} label="Class title" maxLength={160} name="title" required />
         <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Description<textarea className={`${fieldClass} min-h-24 resize-y`} defaultValue={detail.description ?? ""} maxLength={2000} name="description" /></label>
         <FormInput defaultValue={detail.default_duration_minutes} label="Default duration (minutes)" max={240} min={15} name="default_duration_minutes" required type="number" />
@@ -464,30 +549,380 @@ function ScheduleForm({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   trainers: Array<{ id: string; display_name: string; staff_status: string }>;
 }) {
+  const isEditing = Boolean(item);
+  const [mode, setMode] = useState<"single" | "weekly" | "monthly">("single");
+  const [selectedWeekDays, setSelectedWeekDays] = useState<number[]>([1, 3, 5]);
+  const [activeWeekDay, setActiveWeekDay] = useState(2);
+  const [activeMonthDay, setActiveMonthDay] = useState(22);
+  const [copySource, setCopySource] = useState(1);
+  const [startTime, setStartTime] = useState(item?.start_time?.slice(0, 5) ?? "10:00");
+  const [durationMinutes, setDurationMinutes] = useState(item?.duration_minutes ?? detail.default_duration_minutes);
+  const [capacity, setCapacity] = useState(item?.capacity ?? detail.default_capacity);
+  const scheduleDate = item?.class_date ?? "";
+
+  const selectWeekDay = (day: number) => {
+    setActiveWeekDay(day);
+    setSelectedWeekDays((current) =>
+      current.includes(day) ? current : [...current, day].sort((a, b) => a - b),
+    );
+  };
+
+  const toggleActiveWeekDay = () => {
+    setSelectedWeekDays((current) =>
+      current.includes(activeWeekDay)
+        ? current.length === 1
+          ? current
+          : current.filter((value) => value !== activeWeekDay)
+        : [...current, activeWeekDay].sort((a, b) => a - b),
+    );
+  };
+
+  const copyFormat = () => {
+    if (mode === "weekly") {
+      setSelectedWeekDays((current) =>
+        current.includes(copySource)
+          ? current
+          : [...current, copySource].sort((a, b) => a - b),
+      );
+      setActiveWeekDay(copySource);
+      return;
+    }
+
+    setActiveMonthDay(copySource);
+  };
+
   return (
     <form onSubmit={onSubmit}>
-      <div className="mt-4 rounded-lg bg-primary/10 p-3 text-sm text-primary">
-        This schedule will be created for <strong>{detail.title}</strong>.
+      <input name="mode" type="hidden" value={mode} />
+      {!isEditing && mode === "weekly"
+        ? selectedWeekDays.map((day) => (
+            <input key={day} name="days_of_week" type="hidden" value={day} />
+          ))
+        : null}
+      {!isEditing && mode === "monthly" ? (
+        <input name="day_of_month" type="hidden" value={activeMonthDay} />
+      ) : null}
+
+      <div className="px-5 py-5">
+        <div className="rounded-sm bg-primary/10 p-3 text-sm text-primary">
+          {isEditing ? "Update this occurrence for" : "Create schedules for"}{" "}
+          <strong>{detail.title}</strong>.
+        </div>
+
+        {!isEditing ? (
+          <fieldset className="mt-5">
+            <legend className="text-xs font-bold">Schedule type</legend>
+            <div className="mt-2 grid gap-2 sm:grid-cols-3" role="list">
+              <ScheduleModeButton
+                active={mode === "single"}
+                description="One bookable class"
+                label="One occurrence"
+                onClick={() => setMode("single")}
+              />
+              <ScheduleModeButton
+                active={mode === "weekly"}
+                description="Repeat on selected days"
+                label="Weekly recurring"
+                onClick={() => setMode("weekly")}
+              />
+              <ScheduleModeButton
+                active={mode === "monthly"}
+                description="Repeat every month"
+                label="Monthly recurring"
+                onClick={() => setMode("monthly")}
+              />
+            </div>
+          </fieldset>
+        ) : null}
+
+        <div className="mt-5 grid gap-5 md:grid-cols-2">
+          <label className="grid gap-1.5 text-xs font-bold md:col-span-2">Trainer<select className={fieldClass} defaultValue={item?.trainer_staff_profile_id ?? ""} disabled={isSaving} name="trainer_staff_profile_id" required><option value="">Select a trainer</option>{trainers.map((trainer) => <option key={trainer.id} value={trainer.id}>{trainer.display_name} ({label(trainer.staff_status)})</option>)}</select></label>
+          <FormInput defaultValue={item?.studio ?? "LAFAM Pilates Studio"} label="Studio" maxLength={120} name="studio" required />
+          {isEditing || mode === "single" ? (
+            <FormInput defaultValue={scheduleDate} label="Class date" name="class_date" required type="date" />
+          ) : (
+            <>
+              <FormInput label="Start date" name="start_date" required type="date" />
+              <FormInput label="End date" name="end_date" required type="date" />
+            </>
+          )}
+          <FormInput label="Start time" name="start_time" onChange={(event) => setStartTime(event.target.value)} required type="time" value={startTime} />
+          <FormInput label="Duration (minutes)" max={240} min={15} name="duration_minutes" onChange={(event) => setDurationMinutes(Number(event.target.value))} required type="number" value={durationMinutes} />
+          <FormInput label="Capacity" max={100} min={1} name="capacity" onChange={(event) => setCapacity(Number(event.target.value))} required type="number" value={capacity} />
+        </div>
+
+        {!isEditing && mode !== "single" ? (
+          <RecurringDayPlanner
+            activeMonthDay={activeMonthDay}
+            activeWeekDay={activeWeekDay}
+            capacity={capacity}
+            copyFormat={copyFormat}
+            copySource={copySource}
+            durationMinutes={durationMinutes}
+            mode={mode}
+            onCopySourceChange={setCopySource}
+            onMonthDaySelect={setActiveMonthDay}
+            onToggleActiveWeekDay={toggleActiveWeekDay}
+            onWeekDaySelect={selectWeekDay}
+            selectedWeekDays={selectedWeekDays}
+            startTime={startTime}
+          />
+        ) : null}
+
+        {!isEditing && mode !== "single" ? (
+          <label className="mt-5 grid gap-1.5 text-xs font-bold">
+            Excluded dates
+            <textarea
+              className={`${fieldClass} min-h-20 resize-y`}
+              name="excluded_dates"
+              placeholder="2026-07-01, 2026-08-14"
+            />
+            <span className="font-normal text-txt-secondary">
+              Separate blackout dates with commas or new lines.
+            </span>
+          </label>
+        ) : null}
       </div>
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Trainer<select className={fieldClass} defaultValue={item?.trainer_staff_profile_id ?? ""} disabled={isSaving} name="trainer_staff_profile_id" required><option value="">Select a trainer</option>{trainers.map((trainer) => <option key={trainer.id} value={trainer.id}>{trainer.display_name} ({label(trainer.staff_status)})</option>)}</select></label>
-        <FormInput defaultValue={item?.studio ?? "LAFAM Pilates Studio"} label="Studio" maxLength={120} name="studio" required />
-        <FormInput defaultValue={item?.class_date} label="Date" name="class_date" required type="date" />
-        <FormInput defaultValue={item?.start_time?.slice(0, 5)} label="Start time" name="start_time" required type="time" />
-        <FormInput defaultValue={item?.duration_minutes ?? detail.default_duration_minutes} label="Duration (minutes)" max={240} min={15} name="duration_minutes" required type="number" />
-        <FormInput defaultValue={item?.capacity ?? detail.default_capacity} label="Capacity" max={100} min={1} name="capacity" required type="number" />
-      </div>
-      <ModalFooter isSaving={isSaving} onClose={onClose} submitLabel={item ? "Save schedule" : "Create schedule"} />
+
+      <ModalFooter
+        isSaving={isSaving}
+        onClose={onClose}
+        submitLabel={
+          item
+            ? "Save schedule"
+            : mode === "weekly"
+              ? "Create weekly schedules"
+              : mode === "monthly"
+                ? "Create monthly schedules"
+                : "Create schedule"
+        }
+      />
     </form>
   );
 }
 
-function Modal({ children, onClose, title }: { children: ReactNode; onClose: () => void; title: string }) {
-  return <section aria-modal="true" className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4" role="dialog"><button aria-label="Close dialog" className="absolute inset-0" onClick={onClose} type="button" /><article className="relative z-10 my-auto max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-background-secondary bg-card-bg-primary p-6 text-txt-primary shadow-2xl"><button aria-label="Close dialog" className="absolute right-4 top-4" onClick={onClose} type="button">X</button><h2 className="pr-10 text-xl font-bold">{title}</h2>{children}</article></section>;
+function ScheduleModeButton({
+  active,
+  description,
+  label: buttonLabel,
+  onClick,
+}: {
+  active: boolean;
+  description: string;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`min-h-20 rounded-xl border p-3 text-left transition ${
+        active
+          ? "border-primary bg-primary/10 text-primary shadow-sm"
+          : "border-background-secondary bg-background text-txt-primary hover:bg-card-bg-secondary"
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="block text-sm font-bold">{buttonLabel}</span>
+      <span className="mt-1 block text-xs text-txt-secondary">{description}</span>
+    </button>
+  );
+}
+
+function RecurringDayPlanner({
+  activeMonthDay,
+  activeWeekDay,
+  capacity,
+  copyFormat,
+  copySource,
+  durationMinutes,
+  mode,
+  onCopySourceChange,
+  onMonthDaySelect,
+  onToggleActiveWeekDay,
+  onWeekDaySelect,
+  selectedWeekDays,
+  startTime,
+}: {
+  activeMonthDay: number;
+  activeWeekDay: number;
+  capacity: number;
+  copyFormat: () => void;
+  copySource: number;
+  durationMinutes: number;
+  mode: "weekly" | "monthly";
+  onCopySourceChange: (value: number) => void;
+  onMonthDaySelect: (value: number) => void;
+  onToggleActiveWeekDay: () => void;
+  onWeekDaySelect: (value: number) => void;
+  selectedWeekDays: number[];
+  startTime: string;
+}) {
+  const monthlyDays = Array.from({ length: 31 }, (_, index) => index + 1);
+  const activeLabel =
+    mode === "weekly"
+      ? (weekDays.find((day) => day.value === activeWeekDay)?.label ?? "Selected day")
+      : `Day ${activeMonthDay}`;
+  const isActiveIncluded =
+    mode === "monthly" || selectedWeekDays.includes(activeWeekDay);
+  const endTime = addMinutes(startTime, Number.isFinite(durationMinutes) ? durationMinutes : 0);
+  const copyOptions =
+    mode === "weekly"
+      ? weekDays.map((day) => ({ label: day.label, value: day.value }))
+      : monthlyDays.map((day) => ({ label: `Day ${day}`, value: day }));
+
+  return (
+    <section className="mt-6 overflow-hidden rounded-sm border border-background-secondary bg-card-bg-primary">
+      <div className="overflow-x-auto border-b border-background-secondary bg-background-secondary/40">
+        <div className="flex min-w-max">
+          {mode === "weekly"
+            ? weekDays.map((day) => {
+                const selected = selectedWeekDays.includes(day.value);
+                const active = activeWeekDay === day.value;
+                return (
+                  <button
+                    className={`min-h-12 min-w-32 border-r border-background-secondary px-4 text-sm transition ${
+                      active
+                        ? "border-t-2 border-t-button-primary bg-card-bg-primary text-txt-primary"
+                        : selected
+                          ? "bg-primary/10 text-primary"
+                          : "text-txt-secondary hover:bg-card-bg-primary"
+                    }`}
+                    key={day.value}
+                    onClick={() => onWeekDaySelect(day.value)}
+                    type="button"
+                  >
+                    {day.label}
+                  </button>
+                );
+              })
+            : monthlyDays.map((day) => (
+                <button
+                  className={`min-h-12 min-w-14 border-r border-background-secondary px-3 text-sm transition ${
+                    activeMonthDay === day
+                      ? "border-t-2 border-t-button-primary bg-card-bg-primary text-txt-primary"
+                      : "text-txt-secondary hover:bg-card-bg-primary"
+                  }`}
+                  key={day}
+                  onClick={() => onMonthDaySelect(day)}
+                  type="button"
+                >
+                  {day}
+                </button>
+              ))}
+        </div>
+      </div>
+
+      <div className="m-4 flex flex-col gap-4 rounded-sm bg-[#e9caca] p-4 text-white md:flex-row md:items-center md:justify-between">
+        <p className="text-xl font-medium">
+          Do you want to copy this schedule format from another day?
+        </p>
+        <div className="flex shrink-0">
+          <select
+            aria-label="Copy schedule format from"
+            className="min-h-11 rounded-l-sm border border-background-secondary bg-card-bg-primary px-4 text-sm text-txt-primary outline-none"
+            onChange={(event) => onCopySourceChange(Number(event.target.value))}
+            value={copySource}
+          >
+            {copyOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button
+            className="min-h-11 rounded-r-sm bg-black px-5 text-sm font-bold text-white"
+            onClick={copyFormat}
+            type="button"
+          >
+            Copy
+          </button>
+        </div>
+      </div>
+
+      <div className="mx-4 flex flex-col gap-3 rounded-sm bg-black p-4 text-white md:flex-row md:items-center md:justify-between">
+        <h3 className="text-xl font-medium">{mode === "weekly" ? "Set Weekly Time Slot" : "Set Monthly Time Slot"}</h3>
+        <div className="flex overflow-hidden rounded-sm">
+          <span className="flex min-h-11 items-center bg-background-secondary px-4 text-sm font-semibold text-txt-primary">
+            Capacity
+          </span>
+          <span className="flex min-h-11 min-w-28 items-center bg-card-bg-primary px-4 text-sm font-semibold text-txt-primary">
+            {capacity || 0}
+          </span>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto px-4 pb-4 pt-4">
+        <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b-2 border-txt-primary">
+              <th className="w-16 px-1 py-2">
+                <span className="sr-only">Selected</span>
+              </th>
+              <th className="border-l border-background-secondary px-1 py-2 font-bold">Day</th>
+              <th className="border-l border-background-secondary px-1 py-2 font-bold">Start</th>
+              <th className="border-l border-background-secondary px-1 py-2 font-bold">End</th>
+              <th className="border-l border-background-secondary px-1 py-2 font-bold">Capacity</th>
+              <th className="border-l border-background-secondary px-1 py-2 font-bold">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-background-secondary bg-background-secondary/60">
+              <td className="px-1 py-2">
+                <input
+                  checked={isActiveIncluded}
+                  className="size-5 accent-primary"
+                  onChange={mode === "weekly" ? onToggleActiveWeekDay : undefined}
+                  readOnly={mode === "monthly"}
+                  type="checkbox"
+                />
+              </td>
+              <td className="border-l border-background-secondary px-1 py-3 font-semibold">
+                {activeLabel}
+              </td>
+              <td className="border-l border-background-secondary px-1 py-3">
+                {formatTime(startTime)}
+              </td>
+              <td className="border-l border-background-secondary px-1 py-3">
+                {formatTime(endTime)}
+              </td>
+              <td className="border-l border-background-secondary px-1 py-3">
+                {capacity || 0}
+              </td>
+              <td className="border-l border-background-secondary px-1 py-3">
+                <button
+                  aria-pressed={isActiveIncluded}
+                  className={`relative inline-flex h-7 w-14 rounded-full transition ${
+                    isActiveIncluded ? "bg-[#e9caca]" : "bg-background-secondary"
+                  }`}
+                  onClick={mode === "weekly" ? onToggleActiveWeekDay : undefined}
+                  type="button"
+                >
+                  <span
+                    className={`absolute top-1 size-5 rounded-full bg-card-bg-primary shadow transition ${
+                      isActiveIncluded ? "left-8" : "left-1"
+                    }`}
+                  />
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="mt-3 text-xs text-txt-secondary">
+          {mode === "weekly"
+            ? "Selected weekday tabs will receive this same schedule."
+            : "Choose the monthly day tab that should receive this schedule."}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function InlineCard({ children, onClose, title }: { children: ReactNode; onClose: () => void; title: string }) {
+  return <article className="mt-6 overflow-hidden rounded-md border border-background-secondary bg-card-bg-primary text-txt-primary shadow-sm"><header className="relative border-b border-background-secondary bg-card-bg-primary px-5 py-5"><button aria-label="Close card" className="absolute right-4 top-4 flex size-8 items-center justify-center rounded-sm bg-background-secondary text-txt-secondary" onClick={onClose} type="button">X</button><h2 className="pr-10 text-2xl font-medium">{title}</h2></header>{children}</article>;
 }
 
 function ModalFooter({ isSaving, onClose, submitLabel }: { isSaving: boolean; onClose: () => void; submitLabel: string }) {
-  return <footer className="mt-6 flex justify-end gap-2 border-t border-background-secondary pt-4"><button className={buttonClass} disabled={isSaving} onClick={onClose} type="button">Close</button><button className="rounded-lg bg-button-primary px-4 py-2 text-xs font-bold text-white disabled:opacity-60" disabled={isSaving} type="submit">{isSaving ? "Saving..." : submitLabel}</button></footer>;
+  return <footer className="flex justify-start gap-2 border-t border-background-secondary px-5 py-5"><button className={buttonClass} disabled={isSaving} onClick={onClose} type="button">Close</button><button className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-xs font-bold text-white disabled:opacity-60" disabled={isSaving} type="submit">{isSaving ? "Saving..." : submitLabel}</button></footer>;
 }
 
 function FormInput({ className, label: inputLabel, ...props }: InputHTMLAttributes<HTMLInputElement> & { label: string }) {

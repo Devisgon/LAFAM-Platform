@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BookingExplorer, bookingsData } from "@/app/admin/bookings/page";
+import { BookingExplorer } from "@/app/admin/bookings/page";
 import { AdminUserManager } from "./admin_user_manager";
 import { ProfileSettings } from "./profile_settings";
 
@@ -68,11 +68,7 @@ export function AdminSettings() {
                 Completed and cancelled booking records.
               </p>
             </header>
-            <BookingExplorer
-              bookings={bookingsData}
-              heading="Previous bookings"
-              previousOnly
-            />
+            <BookingExplorer heading="Previous bookings" previousOnly />
           </>
         )}
       </section>

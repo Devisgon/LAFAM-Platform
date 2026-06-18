@@ -6,7 +6,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LockKeyhole, UserRound } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { resolvePostLoginRedirect } from "@/lib/auth";
+import {
+  isEmailVerificationRequiredError,
+  resolvePostLoginRedirect,
+} from "@/lib/auth";
 
 export default function LoginScreen() {
   return (
@@ -43,7 +46,17 @@ function LoginForm() {
       const nextPath = resolvePostLoginRedirect(result.user.role, redirectPath);
 
       router.replace(nextPath);
-    } catch {
+    } catch (error: unknown) {
+      if (isEmailVerificationRequiredError(error)) {
+        const verificationUrl = new URL("/auth/verify-email", window.location.origin);
+        const redirectPath = searchParams.get("redirect");
+
+        if (redirectPath) {
+          verificationUrl.searchParams.set("redirect", redirectPath);
+        }
+
+        router.replace(`${verificationUrl.pathname}${verificationUrl.search}`);
+      }
     }
   };
 
