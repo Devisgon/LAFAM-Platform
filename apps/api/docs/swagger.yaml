@@ -56,6 +56,8 @@ tags:
     description: Protected customer wallet balance, wallet transaction history, and wallet top-up endpoints
   - name: Wallet - Admin
     description: Protected admin wallet listing, wallet detail, wallet ledger, and audited adjustment endpoints
+  - name: Analytics - Admin
+    description: Protected admin dashboard analytics, KPI cards, revenue chart, booking feeds, wallet summary, and calendar overview endpoints
 paths:
   /:
     get:
@@ -4113,6 +4115,88 @@ paths:
           $ref: '#/components/responses/AuthorizationDenied'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /admin/analytics/dashboard:
+    get:
+      summary: Get admin analytics dashboard
+      description: Returns read-only dashboard analytics for admin and super-admin users, including summary KPIs, weekly revenue overview, payment summary, upcoming bookings, recent bookings, top Pilates classes, optional wallet summary, and optional calendar events.
+      operationId: analyticsAdminGetDashboard
+      tags:
+        - Analytics - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: from_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2026-06-01'
+          description: Analytics range start date in YYYY-MM-DD format.
+        - name: to_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2026-06-30'
+          description: Analytics range end date in YYYY-MM-DD format.
+        - name: upcoming_days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 90
+            default: 7
+          description: Number of days from today to include in upcoming bookings and optional calendar events.
+        - name: recent_limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 5
+          description: Maximum number of recent booking feed items to return.
+        - name: top_services_limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 5
+          description: Maximum number of top Pilates classes to return. Frontend may label this section as Top Services.
+        - name: include_wallet_summary
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Whether wallet balance and wallet movement summary should be included.
+        - name: include_calendar_events
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Whether upcoming admin calendar events should be included.
+      responses:
+        '200':
+          description: Analytics dashboard retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsDashboardSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
         '429':
           $ref: '#/components/responses/RateLimited'
 components:
@@ -10320,6 +10404,536 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/AdminWalletAdjustmentData'
+    AnalyticsRevenueGranularity:
+      type: string
+      enum:
+        - weekly
+      example: weekly
+
+    AnalyticsDashboardRange:
+      type: object
+      required:
+        - from_date
+        - to_date
+        - revenue_granularity
+      properties:
+        from_date:
+          type: string
+          format: date
+          example: '2026-06-01'
+        to_date:
+          type: string
+          format: date
+          example: '2026-06-30'
+        revenue_granularity:
+          $ref: '#/components/schemas/AnalyticsRevenueGranularity'
+
+    AnalyticsSummaryMetrics:
+      type: object
+      required:
+        - total_revenue
+        - total_bookings
+        - new_customers
+        - cancelled_bookings
+        - active_users
+        - currency
+      properties:
+        total_revenue:
+          type: number
+          format: double
+          example: 235.5
+        total_bookings:
+          type: integer
+          minimum: 0
+          example: 42
+        new_customers:
+          type: integer
+          minimum: 0
+          example: 12
+        cancelled_bookings:
+          type: integer
+          minimum: 0
+          example: 3
+        active_users:
+          type: integer
+          minimum: 0
+          example: 128
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+
+    AnalyticsRevenueWeekPoint:
+      type: object
+      required:
+        - week_start
+        - week_end
+        - gross_revenue
+        - refund_amount
+        - net_revenue
+        - paid_payment_count
+        - refund_count
+        - currency
+      properties:
+        week_start:
+          type: string
+          format: date
+          example: '2026-06-15'
+        week_end:
+          type: string
+          format: date
+          example: '2026-06-21'
+        gross_revenue:
+          type: number
+          format: double
+          example: 250
+        refund_amount:
+          type: number
+          format: double
+          example: 15
+        net_revenue:
+          type: number
+          format: double
+          example: 235
+        paid_payment_count:
+          type: integer
+          minimum: 0
+          example: 18
+        refund_count:
+          type: integer
+          minimum: 0
+          example: 1
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+
+    AnalyticsPaymentSummary:
+      type: object
+      required:
+        - paid_count
+        - failed_count
+        - refunded_count
+        - refund_amount
+        - currency
+      properties:
+        paid_count:
+          type: integer
+          minimum: 0
+          example: 18
+        failed_count:
+          type: integer
+          minimum: 0
+          example: 2
+        refunded_count:
+          type: integer
+          minimum: 0
+          example: 1
+        refund_amount:
+          type: number
+          format: double
+          example: 15
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+
+    AnalyticsBookingType:
+      type: string
+      enum:
+        - class_booking
+        - private_trainer_booking
+      example: class_booking
+
+    AnalyticsBookingCustomerSnapshot:
+      type: object
+      required:
+        - id
+        - email
+        - phone
+        - full_name
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          nullable: true
+          example: customer@example.com
+        phone:
+          type: string
+          nullable: true
+          example: '+96550000000'
+        full_name:
+          type: string
+          nullable: true
+          example: Fatima Al-Sabah
+
+    AnalyticsBookingTrainerSnapshot:
+      type: object
+      required:
+        - id
+        - app_user_id
+        - display_name
+        - post_title
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+        app_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        display_name:
+          type: string
+          nullable: true
+          example: Sarah Pilates Trainer
+        post_title:
+          type: string
+          nullable: true
+          example: Pilates Trainer
+
+    AnalyticsBookingClassSnapshot:
+      type: object
+      required:
+        - id
+        - title
+        - level
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+        title:
+          type: string
+          nullable: true
+          example: Reformer Pilates
+        level:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/PilatesClassLevel'
+        status:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/PilatesClassStatus'
+
+    AnalyticsBookingScheduleSnapshot:
+      type: object
+      required:
+        - id
+        - class_date
+        - session_date
+        - start_time
+        - end_time
+        - studio
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+        class_date:
+          type: string
+          format: date
+          nullable: true
+          example: '2026-06-20'
+        session_date:
+          type: string
+          format: date
+          nullable: true
+          example: '2026-06-20'
+        start_time:
+          type: string
+          nullable: true
+          example: '11:00'
+        end_time:
+          type: string
+          nullable: true
+          example: '12:00'
+        studio:
+          type: string
+          nullable: true
+          example: Main Studio
+        status:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/PilatesScheduleStatus'
+
+    AnalyticsBookingListItem:
+      type: object
+      required:
+        - id
+        - booking_number
+        - booking_type
+        - user_id
+        - customer
+        - class
+        - schedule
+        - trainer
+        - status
+        - payment_status
+        - created_at
+        - confirmed_at
+        - cancelled_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        booking_number:
+          type: string
+          example: LAFAM-BKG-20260620-ABC12345
+        booking_type:
+          $ref: '#/components/schemas/AnalyticsBookingType'
+        user_id:
+          type: string
+          format: uuid
+        customer:
+          $ref: '#/components/schemas/AnalyticsBookingCustomerSnapshot'
+        class:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AnalyticsBookingClassSnapshot'
+        schedule:
+          $ref: '#/components/schemas/AnalyticsBookingScheduleSnapshot'
+        trainer:
+          $ref: '#/components/schemas/AnalyticsBookingTrainerSnapshot'
+        status:
+          $ref: '#/components/schemas/BookingStatus'
+        payment_status:
+          $ref: '#/components/schemas/BookingPaymentStatus'
+        created_at:
+          type: string
+          format: date-time
+        confirmed_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    AnalyticsTopServiceItem:
+      type: object
+      required:
+        - class_id
+        - title
+        - level
+        - booking_count
+        - gross_revenue
+        - refund_amount
+        - net_revenue
+        - currency
+      properties:
+        class_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: Reformer Pilates
+        level:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/PilatesClassLevel'
+        booking_count:
+          type: integer
+          minimum: 0
+          example: 18
+        gross_revenue:
+          type: number
+          format: double
+          example: 250
+        refund_amount:
+          type: number
+          format: double
+          example: 15
+        net_revenue:
+          type: number
+          format: double
+          example: 235
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+
+    AnalyticsWalletSummary:
+      type: object
+      required:
+        - total_wallet_balance
+        - top_up_amount
+        - booking_debit_amount
+        - private_booking_debit_amount
+        - refund_credit_amount
+        - currency
+      properties:
+        total_wallet_balance:
+          type: number
+          format: double
+          example: 520
+        top_up_amount:
+          type: number
+          format: double
+          example: 100
+        booking_debit_amount:
+          type: number
+          format: double
+          example: 35
+        private_booking_debit_amount:
+          type: number
+          format: double
+          example: 45
+        refund_credit_amount:
+          type: number
+          format: double
+          example: 15
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+
+    AnalyticsCalendarEvent:
+      type: object
+      required:
+        - id
+        - event_type
+        - title
+        - status
+        - start_at
+        - end_at
+        - customer_name
+        - trainer_name
+        - class_title
+        - studio
+      properties:
+        id:
+          type: string
+          example: private_trainer_booking:3fa85f64-5717-4562-b3fc-2c963f66afa6
+        event_type:
+          $ref: '#/components/schemas/BookingCalendarEventType'
+        title:
+          type: string
+          example: Private trainer booking LAFAM-PVT-20260620-ABC12345
+        status:
+          type: string
+          example: confirmed
+        start_at:
+          type: string
+          format: date-time
+        end_at:
+          type: string
+          format: date-time
+        customer_name:
+          type: string
+          nullable: true
+          example: Fatima Al-Sabah
+        trainer_name:
+          type: string
+          nullable: true
+          example: Sarah Pilates Trainer
+        class_title:
+          type: string
+          nullable: true
+          example: Reformer Pilates
+        studio:
+          type: string
+          nullable: true
+          example: Main Studio
+
+    AnalyticsDashboardData:
+      type: object
+      required:
+        - range
+        - summary
+        - revenue_overview
+        - payment_summary
+        - upcoming_bookings
+        - recent_bookings
+        - top_services
+        - wallet_summary
+        - calendar_events
+        - generated_at
+      properties:
+        range:
+          $ref: '#/components/schemas/AnalyticsDashboardRange'
+        summary:
+          $ref: '#/components/schemas/AnalyticsSummaryMetrics'
+        revenue_overview:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsRevenueWeekPoint'
+        payment_summary:
+          $ref: '#/components/schemas/AnalyticsPaymentSummary'
+        upcoming_bookings:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsBookingListItem'
+        recent_bookings:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsBookingListItem'
+        top_services:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsTopServiceItem'
+        wallet_summary:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AnalyticsWalletSummary'
+        calendar_events:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/AnalyticsCalendarEvent'
+        generated_at:
+          type: string
+          format: date-time
+
+    AnalyticsDashboardResponse:
+      type: object
+      required:
+        - dashboard
+      properties:
+        dashboard:
+          $ref: '#/components/schemas/AnalyticsDashboardData'
+
+    AnalyticsDashboardSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AnalyticsDashboardResponse'
+      example:
+        status: 200
+        message: Analytics dashboard retrieved successfully.
+        timestamp_ms: 1780918065292
+        data:
+          dashboard:
+            range:
+              from_date: '2026-06-01'
+              to_date: '2026-06-30'
+              revenue_granularity: weekly
+            summary:
+              total_revenue: 235
+              total_bookings: 42
+              new_customers: 12
+              cancelled_bookings: 3
+              active_users: 128
+              currency: KWD
+            revenue_overview:
+              - week_start: '2026-06-15'
+                week_end: '2026-06-21'
+                gross_revenue: 250
+                refund_amount: 15
+                net_revenue: 235
+                paid_payment_count: 18
+                refund_count: 1
+                currency: KWD
+            payment_summary:
+              paid_count: 18
+              failed_count: 2
+              refunded_count: 1
+              refund_amount: 15
+              currency: KWD
+            upcoming_bookings: []
+            recent_bookings: []
+            top_services: []
+            wallet_summary: null
+            calendar_events: null
+            generated_at: '2026-06-19T10:52:40.000Z'
   securitySchemes:
     BearerAuth:
       type: http
