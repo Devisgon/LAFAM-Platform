@@ -11,6 +11,8 @@
  * - It does not update scheduled occurrences.
  * - Deleted status is not accepted through normal update.
  * - Soft delete must be handled by the dedicated delete endpoint/service method.
+ * - Class-level default price and currency are allowed here because schedules can
+ *   fall back to class defaults when schedule-level pricing is not provided.
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -19,6 +21,7 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Max,
@@ -28,15 +31,19 @@ import {
 } from 'class-validator';
 
 import {
+  PILATES_CLASS_ALLOWED_CURRENCIES,
   PILATES_CLASS_CAPACITY_MAX,
   PILATES_CLASS_CAPACITY_MIN,
   PILATES_CLASS_DESCRIPTION_MAX_LENGTH,
   PILATES_CLASS_DURATION_MAX_MINUTES,
   PILATES_CLASS_DURATION_MIN_MINUTES,
   PILATES_CLASS_LEVELS,
+  PILATES_CLASS_PRICE_AMOUNT_MIN,
+  PILATES_CLASS_PRICE_DECIMAL_PLACES,
   PILATES_CLASS_TITLE_MAX_LENGTH,
   PILATES_CLASS_TITLE_MIN_LENGTH,
   PILATES_CLASS_UPDATE_ALLOWED_STATUSES,
+  type PilatesClassCurrency,
   type PilatesClassLevel,
   type PilatesClassUpdateAllowedStatus,
 } from '../constants/pilates-class.constants';
@@ -71,6 +78,20 @@ function optionalTrimmedStringOrNull({ value }: TransformFnParams): unknown {
   return trimmedValue.length > 0 ? trimmedValue : undefined;
 }
 
+function optionalUppercaseString({ value }: TransformFnParams): unknown {
+  if (typeof value === 'undefined' || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmedValue = value.trim();
+
+  return trimmedValue.length > 0 ? trimmedValue.toUpperCase() : undefined;
+}
+
 function optionalInteger({ value }: TransformFnParams): unknown {
   if (typeof value === 'undefined' || value === null || value === '') {
     return undefined;
@@ -92,6 +113,29 @@ function optionalInteger({ value }: TransformFnParams): unknown {
 
   return Number(trimmedValue);
 }
+
+function optionalNumber({ value }: TransformFnParams): unknown {
+  if (typeof value === 'undefined' || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmedValue = value.trim();
+
+  if (!/^-?\d+(?:\.\d+)?$/u.test(trimmedValue)) {
+    return value;
+  }
+
+  return Number(trimmedValue);
+}
+
 function optionalBoolean({ value }: TransformFnParams): unknown {
   if (typeof value === 'undefined' || value === null || value === '') {
     return undefined;
@@ -117,6 +161,7 @@ function optionalBoolean({ value }: TransformFnParams): unknown {
 
   return value;
 }
+
 export class UpdatePilatesClassDto {
   @ApiPropertyOptional({
     description: 'Reusable Pilates class title.',
@@ -194,6 +239,44 @@ export class UpdatePilatesClassDto {
     message: `default_capacity must not exceed ${PILATES_CLASS_CAPACITY_MAX}.`,
   })
   readonly default_capacity?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Default class price used when schedule-level price is not provided. Existing schedules are not automatically changed.',
+    example: 15,
+    minimum: PILATES_CLASS_PRICE_AMOUNT_MIN,
+  })
+  @Transform(optionalNumber)
+  @IsOptional()
+  @IsNumber(
+    {
+      allowInfinity: false,
+      allowNaN: false,
+      maxDecimalPlaces: PILATES_CLASS_PRICE_DECIMAL_PLACES,
+    },
+    {
+      message: `default_price_amount must be a valid number with no more than ${PILATES_CLASS_PRICE_DECIMAL_PLACES} decimal places.`,
+    },
+  )
+  @Min(PILATES_CLASS_PRICE_AMOUNT_MIN, {
+    message: `default_price_amount must be at least ${PILATES_CLASS_PRICE_AMOUNT_MIN}.`,
+  })
+  readonly default_price_amount?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Default class currency used when schedule-level currency is not provided. Existing schedules are not automatically changed.',
+    enum: PILATES_CLASS_ALLOWED_CURRENCIES,
+    example: 'KWD',
+  })
+  @Transform(optionalUppercaseString)
+  @IsOptional()
+  @IsIn(PILATES_CLASS_ALLOWED_CURRENCIES, {
+    message: `currency must be one of: ${PILATES_CLASS_ALLOWED_CURRENCIES.join(
+      ', ',
+    )}.`,
+  })
+  readonly currency?: PilatesClassCurrency;
 
   @ApiPropertyOptional({
     description: 'Pilates class difficulty level.',

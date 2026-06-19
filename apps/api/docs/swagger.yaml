@@ -6803,23 +6803,33 @@ components:
           maximum: 240
           default: 60
           example: 60
+          description: Default class duration in minutes. Schedules can override this value.
         default_capacity:
           type: integer
           minimum: 1
           maximum: 100
           default: 8
           example: 8
+          description: Default class capacity. Schedules can override this value.
         default_price_amount:
           type: number
           minimum: 0
+          default: 0
           example: 15
-          description: Default KWD class price used when schedule-level price is not provided.
+          description: Default class price used when schedule-level price is not provided.
         currency:
-          $ref: '#/components/schemas/PaymentCurrency'
+          allOf:
+            - $ref: '#/components/schemas/PaymentCurrency'
+          default: KWD
+          description: Default class currency. KWD is currently supported.
         level:
-          $ref: '#/components/schemas/PilatesClassLevel'
+          allOf:
+            - $ref: '#/components/schemas/PilatesClassLevel'
+          default: all_levels
         status:
-          $ref: '#/components/schemas/PilatesClassMutableStatus'
+          allOf:
+            - $ref: '#/components/schemas/PilatesClassMutableStatus'
+          default: draft
 
     CreatePilatesClassMultipartRequest:
       type: object
@@ -6842,23 +6852,33 @@ components:
           maximum: 240
           default: 60
           example: 60
+          description: Default class duration in minutes. Schedules can override this value.
         default_capacity:
           type: integer
           minimum: 1
           maximum: 100
           default: 8
           example: 8
+          description: Default class capacity. Schedules can override this value.
         default_price_amount:
           type: number
           minimum: 0
+          default: 0
           example: 15
-          description: Default KWD class price used when schedule-level price is not provided.
+          description: Default class price used when schedule-level price is not provided.
         currency:
-          $ref: '#/components/schemas/PaymentCurrency'
+          allOf:
+            - $ref: '#/components/schemas/PaymentCurrency'
+          default: KWD
+          description: Default class currency. KWD is currently supported.
         level:
-          $ref: '#/components/schemas/PilatesClassLevel'
+          allOf:
+            - $ref: '#/components/schemas/PilatesClassLevel'
+          default: all_levels
         status:
-          $ref: '#/components/schemas/PilatesClassMutableStatus'
+          allOf:
+            - $ref: '#/components/schemas/PilatesClassMutableStatus'
+          default: draft
         image:
           type: string
           format: binary
@@ -6883,18 +6903,22 @@ components:
           minimum: 15
           maximum: 240
           example: 60
+          description: Updates the default duration for future schedules. Existing schedules are not automatically changed.
         default_capacity:
           type: integer
           minimum: 1
           maximum: 100
           example: 8
+          description: Updates the default capacity for future schedules. Existing schedules are not automatically changed.
         default_price_amount:
           type: number
           minimum: 0
           example: 15
-          description: Default KWD class price used when schedule-level price is not provided.
+          description: Updates the default class price for future schedules. Existing schedules are not automatically changed.
         currency:
-          $ref: '#/components/schemas/PaymentCurrency'
+          allOf:
+            - $ref: '#/components/schemas/PaymentCurrency'
+          description: Updates the default class currency for future schedules. Existing schedules are not automatically changed.
         level:
           $ref: '#/components/schemas/PilatesClassLevel'
         status:
@@ -6924,18 +6948,22 @@ components:
           minimum: 15
           maximum: 240
           example: 60
+          description: Updates the default duration for future schedules. Existing schedules are not automatically changed.
         default_capacity:
           type: integer
           minimum: 1
           maximum: 100
           example: 8
+          description: Updates the default capacity for future schedules. Existing schedules are not automatically changed.
         default_price_amount:
           type: number
           minimum: 0
           example: 15
-          description: Default KWD class price used when schedule-level price is not provided.
+          description: Updates the default class price for future schedules. Existing schedules are not automatically changed.
         currency:
-          $ref: '#/components/schemas/PaymentCurrency'
+          allOf:
+            - $ref: '#/components/schemas/PaymentCurrency'
+          description: Updates the default class currency for future schedules. Existing schedules are not automatically changed.
         level:
           $ref: '#/components/schemas/PilatesClassLevel'
         status:
@@ -6949,6 +6977,7 @@ components:
           type: string
           format: binary
           description: 'Optional Pilates class replacement cover image. Allowed MIME types: image/jpeg, image/png, image/webp. Max size: 5 MB.'
+
     PilatesScheduleTimeSlotInput:
       type: object
       required:
