@@ -1719,7 +1719,7 @@ export class PilatesClassAdminService {
             series_occurrence_index: null,
             series_time_slot_id: null,
             series_date_index: null,
-            series_slot_index: index + 1,
+            series_slot_index: null,
             generation_source: PILATES_SCHEDULE_GENERATION_SOURCE_SINGLE,
           };
         },
