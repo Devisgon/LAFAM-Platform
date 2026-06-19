@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
-import {CalendarDays,ChevronDown,CreditCard,Gauge, LogOut, Menu,  Settings,  Star, UserRound,ListChecks,type LucideIcon,} from "lucide-react";
-type IconName =| "bookings"| "calendar" | "dashboard" | "logout"  | "payments" | "reviews"  | "services"| "settings"| "staff";
+import {CalendarDays,ChevronDown,CreditCard,Gauge, LogOut, Menu,  Settings,  Star, UserRound,ListChecks,WalletCards,type LucideIcon,} from "lucide-react";
+type IconName =| "bookings"| "calendar" | "dashboard" | "logout"  | "payments" | "reviews"  | "services"| "settings"| "staff" | "wallet";
 
 type NavItem = {
   href: string;
@@ -21,6 +21,7 @@ const icons: Record<IconName, LucideIcon> = {
   calendar: CalendarDays,
   services: ListChecks,
   staff: UserRound,
+  wallet: WalletCards,
   payments: CreditCard,
   reviews: Star,
   settings: Settings,
@@ -34,7 +35,7 @@ const primaryItems: NavItem[] = [
 ];
 
 const managementItems: NavItem[] = [
-  { href: "#", icon: "payments", label: "Payments" },
+  { href: "/admin/payments", icon: "payments", label: "Payments" },
   { href: "#", icon: "reviews", label: "Reviews" },
   { href: "/admin/settings", icon: "settings", label: "Settings" },
 ];
@@ -197,6 +198,14 @@ export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
             href="/admin/staff"
             icon="staff"
             label="Staff"
+          />
+
+          <NavigationLink
+            active={activeItem === "Wallet"}
+            collapsed={collapsed}
+            href="/admin/wallet"
+            icon="wallet"
+            label="Wallet"
           />
 
           {managementItems.map((item) => (

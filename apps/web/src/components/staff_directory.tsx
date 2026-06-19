@@ -12,6 +12,7 @@ import { ChevronDown, FileSpreadsheet, Pencil } from "lucide-react";
 import { Avatar } from "./reuseable_ui_components/avatar";
 import { Badge } from "./reuseable_ui_components/badge";
 import { ConfirmationCard } from "./reuseable_ui_components/confirmation_card";
+import { DataTable } from "./reuseable_ui_components/data_table";
 import { LoadingState } from "./reuseable_ui_components/loading_state";
 import { Toast } from "./reuseable_ui_components/toast";
 import { useStaff } from "@/hooks/useStaff";
@@ -308,27 +309,28 @@ export function StaffDirectory() {
               </label>
             </div>
 
-            <div className="overflow-x-auto px-5">
-              <table className="w-full  border text-left text-base">
-                <thead>
-                  <tr className="border-b-2  text-txt-primary">
-                    {[
-                      "Active/Inactive",
-                      "Full Name",
-                      "Mobile Number",
-                      "Email",
-                      "Username",
-                      "Password",
-                      "Role",
-                      "Action",
-                    ].map((heading) => (
-                      <TableHeading heading={heading} key={heading} />
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedStaff.length > 0 ? (
-                    pagedStaff.map((member) => (
+            <DataTable
+              bodyClassName=""
+              className="border"
+              columnHeaderClassName="border-r border-background-secondary px-1 py-2 align-bottom font-bold last:border-r-0"
+              columns={[
+                { key: "active", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Active/Inactive</span></span> },
+                { key: "full-name", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Full Name</span></span> },
+                { key: "mobile", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Mobile Number</span></span> },
+                { key: "email", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Email</span></span> },
+                { key: "username", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Username</span></span> },
+                { key: "password", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Password</span></span> },
+                { key: "role", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Role</span></span> },
+                { key: "action", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Action</span></span> },
+              ]}
+              emptyCellClassName="px-3 py-6 text-center text-txt-secondary"
+              emptyMessage="No staff members found."
+              headerRowClassName="border-b-2 text-txt-primary"
+              isEmpty={pagedStaff.length === 0}
+              minWidthClassName=""
+              wrapperClassName="overflow-x-auto px-5"
+            >
+              {pagedStaff.map((member) => (
                       <tr
                         className="border-b border-background-secondary bg-background-secondary last:border-0"
                         key={member.id}
@@ -372,20 +374,8 @@ export function StaffDirectory() {
                           </button>
                         </td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr className="bg-background-secondary">
-                      <td
-                        className="px-3 py-6 text-center text-txt-secondary"
-                        colSpan={8}
-                      >
-                        No staff members found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+              ))}
+            </DataTable>
 
             <footer className="flex flex-col gap-4 px-5 py-5 text-base text-txt-secondary md:flex-row md:items-center md:justify-between">
               <label className="flex items-center gap-4">
@@ -478,16 +468,6 @@ export function StaffDirectory() {
         </div>
       ) : null}
     </>
-  );
-}
-
-function TableHeading({ heading }: { heading: string }) {
-  return (
-    <th className="border-r border-background-secondary px-1 py-2 align-bottom font-bold last:border-r-0">
-      <span className="flex min-h-12 items-end justify-between gap-2">
-        <span>{heading}</span>
-      </span>
-    </th>
   );
 }
 

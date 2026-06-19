@@ -24,6 +24,7 @@ import {
 } from "@/lib/admin-bookings";
 import { type AdminUserFilters } from "@/lib/admin-users";
 import { Badge } from "@/components/reuseable_ui_components/badge";
+import { DataTable } from "@/components/reuseable_ui_components/data_table";
 import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
 import { Toast } from "@/components/reuseable_ui_components/toast";
 import { PageHeader } from "@/components/page_header";
@@ -555,51 +556,44 @@ function BookingListPanel({ previousOnly }: { previousOnly: boolean }) {
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto px-5 py-5">
-            <table className="w-full min-w-[1040px] border border-background-secondary border-collapse text-left text-base">
-              <thead>
-                <tr className="divide-x divide-background-secondary border-b-2 border-txt-primary bg-card-bg-primary text-txt-primary">
-                  <TableHeading heading="Booking No." />
-                  <TableHeading heading="Customer" />
-                  <TableHeading heading={bookingMode === "class" ? "Class" : "Session"} />
-                  <TableHeading heading="Trainer" />
-                  <TableHeading heading="Date" />
-                  <TableHeading heading="Status" />
-                  <TableHeading heading="Payment" />
-                  <TableHeading heading="Action" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-background-secondary">
-                {bookingMode === "class" && visibleBookings.length > 0 ? (
-                  visibleBookings.map((booking) => (
-                    <BookingRecordRow
-                      booking={booking}
-                      key={booking.id}
-                      onView={() => setSelectedBookingId(booking.id)}
-                    />
-                  ))
-                ) : bookingMode === "private" &&
-                  visiblePrivateBookings.length > 0 ? (
-                  visiblePrivateBookings.map((booking) => (
-                    <PrivateBookingRecordRow
-                      booking={booking}
-                      key={booking.id}
-                      onView={() => setSelectedPrivateBookingId(booking.id)}
-                    />
-                  ))
-                ) : (
-                  <tr>
-                    <td
-                      className="px-4 py-8 text-center text-txt-secondary"
-                      colSpan={8}
-                    >
-                      No booking records found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: "booking-no", heading: "Booking No." },
+              { key: "customer", heading: "Customer" },
+              {
+                key: "booking-target",
+                heading: bookingMode === "class" ? "Class" : "Session",
+              },
+              { key: "trainer", heading: "Trainer" },
+              { key: "date", heading: "Date" },
+              { key: "status", heading: "Status" },
+              { key: "payment", heading: "Payment" },
+              { key: "action", heading: "Action" },
+            ]}
+            emptyMessage="No booking records found."
+            isEmpty={
+              bookingMode === "class"
+                ? visibleBookings.length === 0
+                : visiblePrivateBookings.length === 0
+            }
+            minWidthClassName="min-w-[1040px]"
+          >
+            {bookingMode === "class"
+              ? visibleBookings.map((booking) => (
+                  <BookingRecordRow
+                    booking={booking}
+                    key={booking.id}
+                    onView={() => setSelectedBookingId(booking.id)}
+                  />
+                ))
+              : visiblePrivateBookings.map((booking) => (
+                  <PrivateBookingRecordRow
+                    booking={booking}
+                    key={booking.id}
+                    onView={() => setSelectedPrivateBookingId(booking.id)}
+                  />
+                ))}
+          </DataTable>
 
           <footer className="flex flex-col gap-4 px-5 pb-5 text-base text-txt-secondary md:flex-row md:items-center md:justify-between">
             <label className="flex items-center gap-4">
@@ -1616,14 +1610,6 @@ function OptionSelect({
         />
       </span>
     </label>
-  );
-}
-
-function TableHeading({ heading }: { heading: string }) {
-  return (
-    <th className="bg-card-bg-primary px-4 py-3.5 text-sm font-semibold tracking-wider text-txt-primary">
-      {heading}
-    </th>
   );
 }
 

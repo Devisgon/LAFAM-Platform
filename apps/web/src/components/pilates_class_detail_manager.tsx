@@ -20,6 +20,7 @@ import {
   type UpdatePilatesSchedulePayload,
 } from "@/lib/pilates";
 import { Badge } from "./reuseable_ui_components/badge";
+import { DataTable } from "./reuseable_ui_components/data_table";
 import { LoadingState } from "./reuseable_ui_components/loading_state";
 import { Toast } from "./reuseable_ui_components/toast";
 
@@ -851,62 +852,64 @@ function RecurringDayPlanner({
         </div>
       </div>
 
-      <div className="overflow-x-auto px-4 pb-4 pt-4">
-        <table className="w-full min-w-[760px] border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b-2 border-txt-primary">
-              <th className="w-16 px-1 py-2">
-                <span className="sr-only">Selected</span>
-              </th>
-              <th className="border-l border-background-secondary px-1 py-2 font-bold">Day</th>
-              <th className="border-l border-background-secondary px-1 py-2 font-bold">Start</th>
-              <th className="border-l border-background-secondary px-1 py-2 font-bold">End</th>
-              <th className="border-l border-background-secondary px-1 py-2 font-bold">Capacity</th>
-              <th className="border-l border-background-secondary px-1 py-2 font-bold">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="border-b border-background-secondary bg-background-secondary/60">
-              <td className="px-1 py-2">
-                <input
-                  checked={isActiveIncluded}
-                  className="size-5 accent-primary"
-                  onChange={mode === "weekly" ? onToggleActiveWeekDay : undefined}
-                  readOnly={mode === "monthly"}
-                  type="checkbox"
-                />
-              </td>
-              <td className="border-l border-background-secondary px-1 py-3 font-semibold">
-                {activeLabel}
-              </td>
-              <td className="border-l border-background-secondary px-1 py-3">
-                {formatTime(startTime)}
-              </td>
-              <td className="border-l border-background-secondary px-1 py-3">
-                {formatTime(endTime)}
-              </td>
-              <td className="border-l border-background-secondary px-1 py-3">
-                {capacity || 0}
-              </td>
-              <td className="border-l border-background-secondary px-1 py-3">
-                <button
-                  aria-pressed={isActiveIncluded}
-                  className={`relative inline-flex h-7 w-14 rounded-full transition ${
-                    isActiveIncluded ? "bg-[#e9caca]" : "bg-background-secondary"
+      <div>
+        <DataTable
+          bodyClassName=""
+          className="border-0"
+          columnHeaderClassName="border-l border-background-secondary px-1 py-2 font-bold first:border-l-0"
+          columns={[
+            { className: "w-16", key: "selected", heading: <span className="sr-only">Selected</span> },
+            { key: "day", heading: "Day" },
+            { key: "start", heading: "Start" },
+            { key: "end", heading: "End" },
+            { key: "capacity", heading: "Capacity" },
+            { key: "action", heading: "Action" },
+          ]}
+          headerRowClassName="border-b-2 border-txt-primary"
+          minWidthClassName="min-w-[760px]"
+          textSizeClassName="text-sm"
+          wrapperClassName="overflow-x-auto px-4 pb-4 pt-4"
+        >
+          <tr className="border-b border-background-secondary bg-background-secondary/60">
+            <td className="px-1 py-2">
+              <input
+                checked={isActiveIncluded}
+                className="size-5 accent-primary"
+                onChange={mode === "weekly" ? onToggleActiveWeekDay : undefined}
+                readOnly={mode === "monthly"}
+                type="checkbox"
+              />
+            </td>
+            <td className="border-l border-background-secondary px-1 py-3 font-semibold">
+              {activeLabel}
+            </td>
+            <td className="border-l border-background-secondary px-1 py-3">
+              {formatTime(startTime)}
+            </td>
+            <td className="border-l border-background-secondary px-1 py-3">
+              {formatTime(endTime)}
+            </td>
+            <td className="border-l border-background-secondary px-1 py-3">
+              {capacity || 0}
+            </td>
+            <td className="border-l border-background-secondary px-1 py-3">
+              <button
+                aria-pressed={isActiveIncluded}
+                className={`relative inline-flex h-7 w-14 rounded-full transition ${
+                  isActiveIncluded ? "bg-[#e9caca]" : "bg-background-secondary"
+                }`}
+                onClick={mode === "weekly" ? onToggleActiveWeekDay : undefined}
+                type="button"
+              >
+                <span
+                  className={`absolute top-1 size-5 rounded-full bg-card-bg-primary shadow transition ${
+                    isActiveIncluded ? "left-8" : "left-1"
                   }`}
-                  onClick={mode === "weekly" ? onToggleActiveWeekDay : undefined}
-                  type="button"
-                >
-                  <span
-                    className={`absolute top-1 size-5 rounded-full bg-card-bg-primary shadow transition ${
-                      isActiveIncluded ? "left-8" : "left-1"
-                    }`}
-                  />
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                />
+              </button>
+            </td>
+          </tr>
+        </DataTable>
         <p className="mt-3 text-xs text-txt-secondary">
           {mode === "weekly"
             ? "Selected weekday tabs will receive this same schedule."

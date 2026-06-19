@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page_header";
 import { Avatar } from "@/components/reuseable_ui_components/avatar";
 import { Badge } from "@/components/reuseable_ui_components/badge";
 import { Card } from "@/components/reuseable_ui_components/cards";
+import { DataTable } from "@/components/reuseable_ui_components/data_table";
 import Link from "next/link";
 const upcomingBookings = [
   ["10:00 AM", "Reformer Pilates", "Sara"],
@@ -151,31 +152,37 @@ export default function AdminDashboardPage() {
           <section className="mt-4 grid gap-4 xl:grid-cols-[2.15fr_0.9fr]">
             <Card className="overflow-hidden p-4">
               <SectionHeading action="View All">Recent Bookings</SectionHeading>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[700px] border-collapse text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-background-secondary text-txt-secondary">
-                      {["Customer", "Service", "Date & Time", "Amount", "Status"].map((heading) => <th className="px-2 py-3 font-semibold" key={heading}>{heading}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentBookings.map(([customer, service, date, amount, status, avatarStyle]) => (
-                      <tr className="border-b border-background-secondary last:border-0" key={`${customer}-${date}`}>
-                        <td className="px-2 py-3 font-semibold text-txt-primary">
-                          <span className="flex items-center gap-2">
-                            <Avatar alt={`${customer} avatar`} className={avatarStyle} name={customer} size="sm" />
-                            {customer}
-                          </span>
-                        </td>
-                        <td className="px-2 py-3 text-txt-secondary">{service}</td>
-                        <td className="px-2 py-3 text-txt-secondary">{date}</td>
-                        <td className="px-2 py-3 text-txt-primary">{amount}</td>
-                        <td className="px-2 py-3"><Badge tone={status === "Pending" ? "warning" : "success"}>{status}</Badge></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                bodyClassName=""
+                className="border-0"
+                columnHeaderClassName="px-2 py-3 font-semibold"
+                columns={[
+                  { key: "customer", heading: "Customer" },
+                  { key: "service", heading: "Service" },
+                  { key: "date-time", heading: "Date & Time" },
+                  { key: "amount", heading: "Amount" },
+                  { key: "status", heading: "Status" },
+                ]}
+                headerRowClassName="border-b border-background-secondary text-txt-secondary"
+                minWidthClassName="min-w-[700px]"
+                textSizeClassName="text-xs"
+                wrapperClassName="overflow-x-auto"
+              >
+                {recentBookings.map(([customer, service, date, amount, status, avatarStyle]) => (
+                  <tr className="border-b border-background-secondary last:border-0" key={`${customer}-${date}`}>
+                    <td className="px-2 py-3 font-semibold text-txt-primary">
+                      <span className="flex items-center gap-2">
+                        <Avatar alt={`${customer} avatar`} className={avatarStyle} name={customer} size="sm" />
+                        {customer}
+                      </span>
+                    </td>
+                    <td className="px-2 py-3 text-txt-secondary">{service}</td>
+                    <td className="px-2 py-3 text-txt-secondary">{date}</td>
+                    <td className="px-2 py-3 text-txt-primary">{amount}</td>
+                    <td className="px-2 py-3"><Badge tone={status === "Pending" ? "warning" : "success"}>{status}</Badge></td>
+                  </tr>
+                ))}
+              </DataTable>
             </Card>
 
             <Card className="p-4">

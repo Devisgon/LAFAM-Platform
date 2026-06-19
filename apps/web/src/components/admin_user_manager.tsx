@@ -17,6 +17,7 @@ import {
 } from "@/lib/admin-users";
 import { Badge } from "./reuseable_ui_components/badge";
 import { ConfirmationCard } from "./reuseable_ui_components/confirmation_card";
+import { DataTable } from "./reuseable_ui_components/data_table";
 import { LoadingState } from "./reuseable_ui_components/loading_state";
 import { Toast } from "./reuseable_ui_components/toast";
 
@@ -235,23 +236,25 @@ export function AdminUserManager() {
               </div>
             </div>
 
-            <div className="overflow-x-auto px-5">
-              <table className="w-full min-w-[1100px] border border-background-secondary bg-card-bg-primary text-left text-base border-collapse">
-                <thead>
-                  <tr className="bg-card-bg-secondary text-txt-primary border-b border-background-secondary divide-x divide-background-secondary">
-                    <TableHeading heading="Active/Inactive" className="w-[180px] text-center" />
-                    <TableHeading heading="Full Name" className="text-left" />
-                    <TableHeading heading="Mobile Number" className="text-left" />
-                    <TableHeading heading="Email" className="text-left" />
-                    <TableHeading heading="Username" className="text-left" />
-                    <TableHeading heading="Password" className="w-[120px] text-center" />
-                    <TableHeading heading="Role" className="text-left" />
-                    <TableHeading heading="Action" className="w-[140px] text-center" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-background-secondary">
-                  {pagedUsers.length > 0 ? (
-                    pagedUsers.map((user) => (
+            <DataTable
+              columnHeaderClassName="bg-card-bg-secondary px-4 py-3.5 text-sm font-semibold tracking-wider text-txt-primary"
+              columns={[
+                { className: "w-[180px] text-center", key: "active", heading: "Active/Inactive" },
+                { className: "text-left", key: "full-name", heading: "Full Name" },
+                { className: "text-left", key: "mobile", heading: "Mobile Number" },
+                { className: "text-left", key: "email", heading: "Email" },
+                { className: "text-left", key: "username", heading: "Username" },
+                { className: "w-[120px] text-center", key: "password", heading: "Password" },
+                { className: "text-left", key: "role", heading: "Role" },
+                { className: "w-[140px] text-center", key: "action", heading: "Action" },
+              ]}
+              emptyMessage="No users found."
+              headerRowClassName="bg-card-bg-secondary text-txt-primary border-b border-background-secondary divide-x divide-background-secondary"
+              isEmpty={pagedUsers.length === 0}
+              minWidthClassName="min-w-[1100px]"
+              wrapperClassName="overflow-x-auto px-5"
+            >
+              {pagedUsers.map((user) => (
                       <tr
                         className="bg-card-bg-primary hover:bg-card-bg-secondary/40 odd:bg-background-secondary/20 transition divide-x divide-background-secondary"
                         key={user.id}
@@ -323,20 +326,8 @@ export function AdminUserManager() {
                           </div>
                         </td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr className="bg-card-bg-primary">
-                      <td
-                        className="px-4 py-8 text-center text-txt-secondary"
-                        colSpan={8}
-                      >
-                        No users found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+              ))}
+            </DataTable>
 
             <footer className="flex flex-col gap-4 px-5 py-5 text-base text-txt-secondary md:flex-row md:items-center md:justify-between">
               <label className="flex items-center gap-4">
@@ -464,14 +455,6 @@ function FilterSelect({
         size={16}
       />
     </label>
-  );
-}
-
-function TableHeading({ heading, className = "" }: { heading: string; className?: string }) {
-  return (
-    <th className={`px-4 py-3.5 text-sm font-semibold tracking-wider text-txt-primary bg-card-bg-secondary ${className}`}>
-      {heading}
-    </th>
   );
 }
 
