@@ -9,7 +9,6 @@ import {
   Gauge,
   Menu,
   Settings,
-  Star,
   UserRound,
   ListChecks,
   WalletCards,
@@ -138,7 +137,9 @@ function NavigationGroup({
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
         className={`flex min-h-14 w-full items-center gap-4 px-5 text-[14px] transition ${
-          open ? "bg-black text-white" : "text-black hover:bg-black hover:text-white"
+          open
+            ? "bg-black text-white"
+            : "text-black hover:bg-black hover:text-white"
         }`}
       >
         <Icon name={icon} />
@@ -265,7 +266,6 @@ function SidebarContent({
           />
         ))}
       </nav>
-
     </>
   );
 }

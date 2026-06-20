@@ -81,10 +81,7 @@ function getUserDisplayName(user?: AdminUser): string {
   if (!user) return "Unknown user";
 
   return (
-    user.full_name ??
-    user.email ??
-    user.phone ??
-    `User ${user.id.slice(0, 8)}`
+    user.full_name ?? user.email ?? user.phone ?? `User ${user.id.slice(0, 8)}`
   );
 }
 
@@ -228,7 +225,9 @@ function WalletListPanel({
     setDetailError(null);
 
     try {
-      setDetailWallet(await adminWalletsClient.getByWalletAccountId(walletAccountId));
+      setDetailWallet(
+        await adminWalletsClient.getByWalletAccountId(walletAccountId),
+      );
     } catch (requestError: unknown) {
       setDetailError(getErrorMessage(requestError));
     } finally {
@@ -475,7 +474,9 @@ function WalletRow({
         {formatMoney(wallet.pending_balance)}
       </td>
       <td className="px-4 py-4">
-        <Badge tone={walletStatusTone(wallet.status)}>{label(wallet.status)}</Badge>
+        <Badge tone={walletStatusTone(wallet.status)}>
+          {label(wallet.status)}
+        </Badge>
       </td>
       <td className="px-4 py-4 font-mono text-xs text-txt-secondary">
         {wallet.id}
@@ -571,7 +572,10 @@ function WalletDetailCard({
             label="Available"
             value={formatMoney(wallet.available_balance)}
           />
-          <DetailItem label="Pending" value={formatMoney(wallet.pending_balance)} />
+          <DetailItem
+            label="Pending"
+            value={formatMoney(wallet.pending_balance)}
+          />
           <DetailItem label="Status" value={label(wallet.status)} />
           <button
             className="min-h-16 rounded-sm bg-button-primary px-4 text-sm font-semibold text-txt-primary transition hover:opacity-85"
@@ -606,19 +610,13 @@ function WalletAdjustmentDialog({
 }) {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const defaultIdempotencyKey = `wallet-adjust-${new Date()
-    .toISOString()
-    .slice(0, 10)
-    .replaceAll("-", "")}-${wallet.user_id.slice(0, 8)}`;
 
   const submitAdjustment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
     const source = String(formData.get("source") ?? "").trim();
-    const idempotencyKey = String(
-      formData.get("idempotency_key") ?? "",
-    ).trim();
+    const idempotencyKey = String(formData.get("idempotency_key") ?? "").trim();
 
     setIsSaving(true);
     setError(null);
@@ -719,7 +717,6 @@ function WalletAdjustmentDialog({
                 required
               />
             </label>
-           
           </div>
         </div>
 
@@ -807,22 +804,10 @@ function WalletTransactionsPanel({
       ...(fromDate ? { from_date: fromDate } : {}),
       ...(toDate ? { to_date: toDate } : {}),
     }),
-    [
-      currentPage,
-      fromDate,
-      pageSize,
-      sortBy,
-      toDate,
-      walletAccountId,
-    ],
+    [currentPage, fromDate, pageSize, sortBy, toDate, walletAccountId],
   );
-  const {
-    error,
-    isLoading,
-    loadTransactions,
-    total,
-    transactions,
-  } = useAdminWalletTransactions(userId, filters, Boolean(userId));
+  const { error, isLoading, loadTransactions, total, transactions } =
+    useAdminWalletTransactions(userId, filters, Boolean(userId));
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const safeCurrentPage = Math.min(currentPage, pageCount);
   const visibleStart = total === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1;
@@ -1200,7 +1185,13 @@ function DateField({
   );
 }
 
-function DetailItem({ label: itemLabel, value }: { label: string; value: string }) {
+function DetailItem({
+  label: itemLabel,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
     <div className="rounded-sm border border-background-secondary bg-card-bg-primary p-3">
       <dt className="text-xs font-bold uppercase text-txt-secondary">

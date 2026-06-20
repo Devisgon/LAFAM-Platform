@@ -5,7 +5,6 @@ const REFRESH_TOKEN_COOKIE = "lafam_refresh_token";
 const ROLE_COOKIE = "lafam_role";
 const SESSION_ID_COOKIE = "lafam_session_id";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-const REFRESH_TOKEN_MAX_AGE_SECONDS = 24 * 60 * 60;
 
 const adminRoles = new Set(["admin", "super_admin"]);
 
@@ -295,7 +294,12 @@ function applySessionCookieUpdates(
   currentRole?: string,
 ): void {
   if (session.refreshedSession) {
-    setSessionCookies(response, request, session.refreshedSession, session.role);
+    setSessionCookies(
+      response,
+      request,
+      session.refreshedSession,
+      session.role,
+    );
     return;
   }
 
@@ -350,7 +354,9 @@ export async function proxy(request: NextRequest) {
     const dashboardPath = getDashboardPath(session.role);
 
     if (dashboardPath !== pathname) {
-      const response = NextResponse.redirect(new URL(dashboardPath, request.url));
+      const response = NextResponse.redirect(
+        new URL(dashboardPath, request.url),
+      );
       applySessionCookieUpdates(response, request, session, role);
 
       return response;

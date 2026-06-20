@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { BookingExplorer } from "@/app/admin/bookings/page";
 import { AdminUserManager } from "./admin_user_manager";
 import { ProfileSettings } from "./profile_settings";
 
@@ -26,7 +25,6 @@ export function AdminSettings() {
               id: "users" as const,
               label: "Users",
             },
-        
           ].map((item) => (
             <button
               aria-current={view === item.id ? "page" : undefined}
@@ -52,13 +50,10 @@ export function AdminSettings() {
           <ProfileSettings />
         ) : view === "users" ? (
           <>
-           
             <AdminUserManager />
           </>
         ) : (
-          <>
-           
-          </>
+          <></>
         )}
       </section>
     </div>
