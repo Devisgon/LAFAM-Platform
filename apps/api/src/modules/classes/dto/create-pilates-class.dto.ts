@@ -79,20 +79,6 @@ function optionalTrimmedStringOrNull({ value }: TransformFnParams): unknown {
   return trimmedValue.length > 0 ? trimmedValue : undefined;
 }
 
-function optionalUppercaseString({ value }: TransformFnParams): unknown {
-  if (typeof value === 'undefined' || value === null || value === '') {
-    return undefined;
-  }
-
-  if (typeof value !== 'string') {
-    return value;
-  }
-
-  const trimmedValue = value.trim();
-
-  return trimmedValue.length > 0 ? trimmedValue.toUpperCase() : undefined;
-}
-
 function optionalInteger({ value }: TransformFnParams): unknown {
   if (typeof value === 'undefined' || value === null || value === '') {
     return undefined;

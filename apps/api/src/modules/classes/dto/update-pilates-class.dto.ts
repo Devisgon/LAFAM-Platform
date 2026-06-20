@@ -39,7 +39,6 @@ import {
   PILATES_CLASS_DURATION_MAX_MINUTES,
   PILATES_CLASS_DURATION_MIN_MINUTES,
   PILATES_CLASS_LEVELS,
-  
   PILATES_CLASS_PRICE_DECIMAL_PLACES,
   PILATES_CLASS_PRICE_AMOUNT_MIN,
   PILATES_CLASS_TITLE_MAX_LENGTH,
@@ -78,20 +77,6 @@ function optionalTrimmedStringOrNull({ value }: TransformFnParams): unknown {
   const trimmedValue = value.trim();
 
   return trimmedValue.length > 0 ? trimmedValue : undefined;
-}
-
-function optionalUppercaseString({ value }: TransformFnParams): unknown {
-  if (typeof value === 'undefined' || value === null || value === '') {
-    return undefined;
-  }
-
-  if (typeof value !== 'string') {
-    return value;
-  }
-
-  const trimmedValue = value.trim();
-
-  return trimmedValue.length > 0 ? trimmedValue.toUpperCase() : undefined;
 }
 
 function optionalInteger({ value }: TransformFnParams): unknown {
