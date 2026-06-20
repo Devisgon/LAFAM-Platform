@@ -2230,6 +2230,7 @@ export interface Database {
           p_currency: string;
           p_payment_method: DatabasePaymentMethod;
           p_payment_provider: DatabasePaymentProvider;
+          p_status?: DatabasePaymentStatus | null;
           p_idempotency_key?: string | null;
           p_redirect_url?: string | null;
           p_callback_url?: string | null;
@@ -2259,8 +2260,11 @@ export interface Database {
         Args: {
           p_payment_id: string;
           p_provider_reference?: string | null;
+          p_gateway_payment_id?: string | null;
+          p_gateway_invoice_id?: string | null;
           p_gateway_response?: DatabaseJsonObject;
           p_webhook_verified?: boolean;
+          p_next_status?: DatabasePaymentStatus;
         };
         Returns: {
           payment_id: string;
@@ -2280,6 +2284,7 @@ export interface Database {
           p_failure_code?: string | null;
           p_failure_message?: string | null;
           p_gateway_response?: DatabaseJsonObject;
+          p_next_status?: DatabasePaymentStatus;
         };
         Returns: {
           payment_id: string;
@@ -2295,6 +2300,7 @@ export interface Database {
           p_payment_id: string;
           p_reason?: string | null;
           p_gateway_response?: DatabaseJsonObject;
+          p_next_status?: DatabasePaymentStatus;
         };
         Returns: {
           payment_id: string;
@@ -2353,6 +2359,7 @@ export interface Database {
           p_payment_id: string;
           p_actor_admin_id?: string | null;
           p_reason?: string | null;
+          p_refund_amount?: number | null;
           p_gateway_response?: DatabaseJsonObject;
         };
         Returns: {
