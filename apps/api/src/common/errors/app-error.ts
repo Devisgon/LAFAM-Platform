@@ -58,6 +58,7 @@ export type AppErrorCode =
   | 'USER_NOT_FOUND'
   | 'USER_ALREADY_DEACTIVATED'
   | 'USER_ALREADY_ACTIVE'
+  | 'USER_DELETE_FAILED'
   | 'CANNOT_DELETE_SELF'
   | 'SUPER_ADMIN_REQUIRED'
   | 'ADMIN_ACCESS_REQUIRED'
@@ -582,6 +583,17 @@ export class AppError extends Error {
       publicMessage,
       details,
     );
+  }
+
+  static userDeleteFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'USER_DELETE_FAILED',
+      category: 'external_provider',
+      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+      publicMessage:
+        'User account deletion could not be completed. Please try again later.',
+      cause,
+    });
   }
 
   static cannotDeleteSelf(

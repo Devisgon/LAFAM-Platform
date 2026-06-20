@@ -33,6 +33,7 @@ import {
 import {
   createAuthProviderInvalidResponseError,
   mapAuthProviderErrorToAppError,
+  normalizeAuthProviderError,
   type AuthProviderErrorFlow,
 } from '../utils/auth-provider-error.util';
 
@@ -158,7 +159,25 @@ export interface GetAuthUserByIdInput {
 }
 
 export interface DeleteAuthUserInput {
+  /**
+   * Supabase auth.users id.
+   */
   readonly authUserId: string;
+
+  /**
+   * Supabase Admin Auth deletion mode.
+   *
+   * true:
+   * - Soft-deletes/disables the Supabase Auth identity.
+   * - Does not physically delete auth.users.
+   * - Must be used for admin account deletion because business tables keep
+   *   historical references through public.app_users.
+   *
+   * false:
+   * - Physically deletes auth.users.
+   * - Can cascade into public.app_users.
+   * - Must only be used for rollback flows before business records exist.
+   */
   readonly shouldSoftDelete: boolean;
 }
 
@@ -274,6 +293,25 @@ function mapStaffAuthCreationError(error: unknown): AppError {
   }
 
   return AppError.staffAuthUserCreationFailed(mappedError);
+}
+
+function isMissingAuthUserDuringSoftDelete(error: unknown): boolean {
+  const providerError = normalizeAuthProviderError(error);
+  const searchText = [
+    providerError.name,
+    providerError.code,
+    providerError.message,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(' ')
+    .toLowerCase();
+
+  return (
+    providerError.status === 404 ||
+    providerError.statusCode === 404 ||
+    searchText.includes('user_not_found') ||
+    (searchText.includes('user') && searchText.includes('not found'))
+  );
 }
 
 @Injectable()
@@ -633,12 +671,20 @@ export class SupabaseAuthRepository {
       input.shouldSoftDelete,
     );
 
-    if (error) {
-      throw mapAuthProviderErrorToAppError({
-        error,
-        flow: 'admin_user_operation',
-      });
+    if (!error) {
+      return;
     }
+
+    if (input.shouldSoftDelete && isMissingAuthUserDuringSoftDelete(error)) {
+      return;
+    }
+
+    const mappedError = mapAuthProviderErrorToAppError({
+      error,
+      flow: 'admin_user_operation',
+    });
+
+    return Promise.reject(AppError.userDeleteFailed(mappedError));
   }
 
   async listAuthUsers(

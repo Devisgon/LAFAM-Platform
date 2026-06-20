@@ -774,8 +774,12 @@ paths:
           $ref: '#/components/responses/AuthorizationDenied'
   /auth/admin/users/{userId}/hard-delete:
     delete:
-      summary: Hard delete user
-      description: Permanently deletes a target user through the Supabase admin boundary. Requires super_admin.
+      summary: Delete user account safely
+      description: >
+        Deletes a target user account through the admin boundary using safe account-deletion semantics.
+        The backend revokes app sessions, soft-deletes/disables the Supabase Auth identity, and marks the
+        app user as deleted while preserving historical business records such as bookings, payments,
+        wallet accounts, wallet ledger entries, and audit events. Requires super_admin.
       operationId: authAdminHardDeleteUser
       tags:
         - Auth - Admin
@@ -791,7 +795,7 @@ paths:
           description: Target app user id.
       responses:
         '200':
-          description: User hard deleted successfully.
+          description: User account deletion completed successfully.
           content:
             application/json:
               schema:
@@ -802,6 +806,12 @@ paths:
           $ref: '#/components/responses/AuthenticationRequired'
         '403':
           $ref: '#/components/responses/AuthorizationDenied'
+        '503':
+          description: User account deletion could not be completed because the authentication provider operation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /auth/context:
     get:
       summary: Get auth context
@@ -5294,17 +5304,23 @@ components:
           $ref: '#/components/schemas/AuthAdminUser'
     AuthAdminHardDeleteUserData:
       type: object
+      description: >
+        Result returned after safe admin account deletion. The app user is marked deleted and the
+        Supabase Auth identity is soft-deleted/disabled. Historical bookings, payments, wallet records,
+        wallet ledger entries, and audit events are preserved.
       required:
         - hard_deleted
         - user_id
       properties:
         hard_deleted:
           type: boolean
+          description: Indicates that the account deletion flow completed successfully.
           enum:
             - true
         user_id:
           type: string
           format: uuid
+          description: Deleted app user id.
     AuthGuestSessionData:
       type: object
       required:

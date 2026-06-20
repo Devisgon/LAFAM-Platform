@@ -343,7 +343,7 @@ export class AuthAdminService {
       action: 'hard_delete',
     });
 
-    const deletedAt = new Date().toISOString();
+    const deletedAt = target.deleted_at ?? new Date().toISOString();
 
     await this.authSessionRepository.revokeAllForUser({
       userId: target.id,
@@ -351,28 +351,31 @@ export class AuthAdminService {
       revokedReason: AUTH_SESSION_REVOCATION_REASON_ACCOUNT_DELETED,
     });
 
-    await this.markAppUserDeleted({
-      userId: target.id,
-      deletedAt,
-    });
-
-    await this.authAuditRepository.createEvent({
-      actorUserId: auth.profile.id,
-      targetUserId: target.id,
-      eventType: AUTH_AUDIT_EVENT_USER_HARD_DELETED,
-      ipAddress: request.ipAddress,
-      userAgent: request.userAgent,
-      metadata: {
-        target_user_id: target.id,
-        target_auth_user_id: target.auth_user_id,
-        deleted_at: deletedAt,
-      },
-    });
-
     await this.supabaseAuthRepository.deleteAuthUser({
       authUserId: target.auth_user_id,
-      shouldSoftDelete: false,
+      shouldSoftDelete: true,
     });
+
+    if (target.status !== AUTH_USER_STATUS_DELETED) {
+      await this.markAppUserDeleted({
+        userId: target.id,
+        deletedAt,
+      });
+
+      await this.authAuditRepository.createEvent({
+        actorUserId: auth.profile.id,
+        targetUserId: target.id,
+        eventType: AUTH_AUDIT_EVENT_USER_HARD_DELETED,
+        ipAddress: request.ipAddress,
+        userAgent: request.userAgent,
+        metadata: {
+          target_user_id: target.id,
+          target_auth_user_id: target.auth_user_id,
+          deleted_at: deletedAt,
+          deletion_mode: 'supabase_auth_soft_delete',
+        },
+      });
+    }
 
     return {
       hard_deleted: true,
