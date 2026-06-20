@@ -22,7 +22,6 @@ type IconName =
   | "calendar"
   | "dashboard"
   | "payments"
-  | "reviews"
   | "services"
   | "settings"
   | "staff"
@@ -49,7 +48,6 @@ const icons: Record<IconName, LucideIcon> = {
   staff: UserRound,
   wallet: WalletCards,
   payments: CreditCard,
-  reviews: Star,
   settings: Settings,
 };
 
@@ -61,7 +59,6 @@ const primaryItems: NavItem[] = [
 
 const managementItems: NavItem[] = [
   { href: "/admin/payments", icon: "payments", label: "Payments" },
-  { href: "#", icon: "reviews", label: "Reviews" },
   { href: "/admin/settings", icon: "settings", label: "Settings" },
 ];
 

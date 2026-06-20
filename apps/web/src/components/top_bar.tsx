@@ -3,8 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { LogOut, Menu, UserRound } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown, LogOut, Menu, UserRound } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar } from "./reuseable_ui_components/avatar";
 
@@ -22,8 +22,31 @@ export function TopBar({ actionHref, actionLabel, title }: TopBarProps) {
   const router = useRouter();
   const { avatarUrl, logout, user } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
   const profileHref = isAdmin ? "/admin/settings" : "/user";
+  const accountName = user?.full_name ?? user?.email ?? "Account";
+
+  useEffect(() => {
+    if (!isAccountMenuOpen) return;
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!accountMenuRef.current?.contains(event.target as Node)) {
+        setIsAccountMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsAccountMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isAccountMenuOpen]);
 
   const openMobileSidebar = () => {
     window.dispatchEvent(new Event(MOBILE_SIDEBAR_EVENT));
@@ -78,22 +101,36 @@ export function TopBar({ actionHref, actionLabel, title }: TopBarProps) {
           </Link>
         ) : null}
 
-        <div className="group relative">
+        <div className="relative" ref={accountMenuRef}>
           <button
+            aria-expanded={isAccountMenuOpen}
             aria-haspopup="menu"
             aria-label="Open account menu"
-            className="block rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="flex min-h-12 items-center gap-3 rounded-sm px-2 text-sm font-medium text-txt-primary transition hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            onClick={() => setIsAccountMenuOpen((isOpen) => !isOpen)}
             type="button"
           >
             <Avatar
-              alt={`${user?.full_name ?? "Account"} profile`}
-              name={user?.full_name ?? user?.email ?? "Account"}
+              alt={`${accountName} profile`}
+              name={accountName}
               size="md"
               src={avatarUrl ?? undefined}
             />
+            <span className="hidden max-w-40 truncate sm:block">{accountName}</span>
+            <ChevronDown
+              aria-hidden="true"
+              className={`hidden transition-transform sm:block ${isAccountMenuOpen ? "rotate-180" : ""}`}
+              size={16}
+            />
           </button>
 
-          <div className="invisible absolute right-0 top-full z-50 w-48 pt-2 opacity-0 transition-[opacity,visibility] group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+          <div
+            className={`absolute right-0 top-full z-50 w-48 pt-2 transition-[opacity,visibility] ${
+              isAccountMenuOpen
+                ? "visible opacity-100"
+                : "invisible opacity-0"
+            }`}
+          >
             <div
               aria-label="Account menu"
               className="overflow-hidden rounded-md border border-background-secondary bg-card-bg-primary py-1 text-sm text-txt-primary shadow-lg"
@@ -102,6 +139,7 @@ export function TopBar({ actionHref, actionLabel, title }: TopBarProps) {
               <Link
                 className="flex min-h-11 items-center gap-3 px-4 transition hover:bg-background-secondary focus-visible:bg-background-secondary focus-visible:outline-none"
                 href={profileHref}
+                onClick={() => setIsAccountMenuOpen(false)}
                 role="menuitem"
               >
                 <UserRound aria-hidden="true" size={18} />

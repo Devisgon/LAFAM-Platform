@@ -50,6 +50,7 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import type { AuthInternalContext } from '../../auth/types/auth-context.types';
 import { BookingAdminService } from '../application/booking-admin.service';
 import { BookingCalendarService } from '../application/booking-calendar.service';
+import { PrivateBookingAvailabilityService } from '../application/private-booking-availability.service';
 import {
   BOOKING_ADMIN_CALENDAR_ROUTE_PREFIX,
   BOOKING_ADMIN_PRIVATE_ROUTE_PREFIX,
@@ -57,6 +58,7 @@ import {
   BOOKING_ADMIN_SCHEDULE_WAITLIST_ROUTE_PREFIX,
   BOOKING_ADMIN_WAITLIST_ROUTE_PREFIX,
   PRIVATE_BOOKING_ID_PARAM_NAME,
+  PRIVATE_BOOKING_TRAINER_ID_PARAM_NAME,
 } from '../constants/booking.constants';
 import {
   BookingParamDto,
@@ -70,8 +72,12 @@ import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
 import { CreateAdminPrivateBookingDto } from '../dto/create-admin-private-booking.dto';
 import { ListAdminCalendarQueryDto } from '../dto/list-admin-calendar-query.dto';
 import { ListAdminPrivateBookingsQueryDto } from '../dto/list-private-bookings-query.dto';
-import { PrivateBookingParamDto } from '../dto/private-booking-param.dto';
+import {
+  PrivateBookingParamDto,
+  PrivateBookingTrainerParamDto,
+} from '../dto/private-booking-param.dto';
 import { ReschedulePrivateBookingDto } from '../dto/reschedule-private-booking.dto';
+import { PrivateSlotAvailabilityQueryDto } from '../dto/private-slot-availability-query.dto';
 import type {
   BookingCalendarResult,
   BookingCancelResult,
@@ -85,6 +91,7 @@ import type {
   PrivateBookingDetail,
   PrivateBookingListResult,
   PrivateBookingRescheduleResult,
+  PrivateBookingAvailabilitySlot,
 } from '../types/booking.types';
 
 function resolveAuthContext(
@@ -110,6 +117,7 @@ export class BookingAdminController {
   constructor(
     private readonly bookingAdminService: BookingAdminService,
     private readonly bookingCalendarService: BookingCalendarService,
+    private readonly privateBookingAvailabilityService: PrivateBookingAvailabilityService,
   ) {}
 
   @Get(BOOKING_ADMIN_ROUTE_PREFIX)
@@ -196,6 +204,25 @@ export class BookingAdminController {
     return createApiSuccessResponse({
       status: HttpStatus.OK,
       message: 'Private trainer bookings retrieved successfully.',
+      data,
+    });
+  }
+
+  @Get(
+    `${BOOKING_ADMIN_PRIVATE_ROUTE_PREFIX}/availability/:${PRIVATE_BOOKING_TRAINER_ID_PARAM_NAME}`,
+  )
+  async checkPrivateTrainerAvailability(
+    @Param() params: PrivateBookingTrainerParamDto,
+    @Query() query: PrivateSlotAvailabilityQueryDto,
+  ): Promise<ApiSuccessResponse<PrivateBookingAvailabilitySlot>> {
+    const data = await this.privateBookingAvailabilityService.checkTrainerSlot(
+      params[PRIVATE_BOOKING_TRAINER_ID_PARAM_NAME],
+      query,
+    );
+
+    return createApiSuccessResponse({
+      status: HttpStatus.OK,
+      message: 'Private trainer slot availability checked successfully.',
       data,
     });
   }

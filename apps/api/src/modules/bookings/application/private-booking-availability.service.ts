@@ -22,6 +22,7 @@ import {
   PRIVATE_BOOKING_DEFAULT_DURATION_MINUTES,
 } from '../constants/booking.constants';
 import type { PrivateAvailabilityQueryDto } from '../dto/private-availability-query.dto';
+import type { PrivateSlotAvailabilityQueryDto } from '../dto/private-slot-availability-query.dto';
 import { PrivateBookingLifecyclePolicy } from '../domain/private-booking-lifecycle.policy';
 import { BookingRepository } from '../repositories/booking.repository';
 import type {
@@ -182,6 +183,32 @@ export class PrivateBookingAvailabilityService {
       duration_minutes: durationMinutes,
       slots,
     };
+  }
+
+  async checkTrainerSlot(
+    trainerStaffProfileId: string,
+    dto: PrivateSlotAvailabilityQueryDto,
+  ): Promise<PrivateBookingAvailabilitySlot> {
+    const sessionDate = PrivateBookingLifecyclePolicy.normalizeIsoDate(
+      dto.session_date,
+      'session_date',
+    );
+    const startTime = PrivateBookingLifecyclePolicy.normalizeTimeValue(
+      dto.start_time,
+      'start_time',
+    );
+    const endTime = PrivateBookingLifecyclePolicy.calculateEndTime(
+      startTime,
+      dto.duration_minutes,
+    );
+
+    return this.buildSlotAvailability({
+      trainerStaffProfileId,
+      sessionDate,
+      startTime,
+      endTime,
+      durationMinutes: dto.duration_minutes,
+    });
   }
 
   private async buildSlotsForDate(input: {

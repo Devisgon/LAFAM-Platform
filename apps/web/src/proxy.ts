@@ -5,6 +5,7 @@ const REFRESH_TOKEN_COOKIE = "lafam_refresh_token";
 const ROLE_COOKIE = "lafam_role";
 const SESSION_ID_COOKIE = "lafam_session_id";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+const REFRESH_TOKEN_MAX_AGE_SECONDS = 24 * 60 * 60;
 
 const adminRoles = new Set(["admin", "super_admin"]);
 

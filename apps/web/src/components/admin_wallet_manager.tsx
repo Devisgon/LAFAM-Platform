@@ -719,25 +719,7 @@ function WalletAdjustmentDialog({
                 required
               />
             </label>
-            <label className="grid gap-1.5 text-xs font-bold">
-              Idempotency key
-              <input
-                className={fieldClass}
-                defaultValue={defaultIdempotencyKey}
-                maxLength={120}
-                minLength={8}
-                name="idempotency_key"
-              />
-            </label>
-            <label className="grid gap-1.5 text-xs font-bold">
-              Metadata source
-              <input
-                className={fieldClass}
-                defaultValue="admin_wallet_screen"
-                maxLength={80}
-                name="source"
-              />
-            </label>
+           
           </div>
         </div>
 

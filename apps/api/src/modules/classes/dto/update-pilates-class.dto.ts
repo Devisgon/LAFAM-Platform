@@ -39,7 +39,6 @@ import {
   PILATES_CLASS_DURATION_MAX_MINUTES,
   PILATES_CLASS_DURATION_MIN_MINUTES,
   PILATES_CLASS_LEVELS,
-  
   PILATES_CLASS_PRICE_DECIMAL_PLACES,
   PILATES_CLASS_PRICE_AMOUNT_MIN,
   PILATES_CLASS_TITLE_MAX_LENGTH,
@@ -258,7 +257,7 @@ export class UpdatePilatesClassDto {
     enum: PILATES_CLASS_ALLOWED_CURRENCIES,
     example: PILATES_CLASS_DEFAULT_CURRENCY,
   })
-  @Transform(optionalTrimmedString)
+  @Transform(optionalUppercaseString)
   @IsOptional()
   @IsIn(PILATES_CLASS_ALLOWED_CURRENCIES, {
     message: 'currency must be KWD.',

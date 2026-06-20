@@ -30,10 +30,13 @@ export type AdminPrivateBookingSortField =
   | "session_date"
   | "start_time"
   | "status";
-export type AdminBookingCalendarSortField = "start_at" | "event_type" | "status";
+export type AdminBookingCalendarSortField =
+  | "start_at"
+  | "event_type"
+  | "status";
 export type AdminBookingCalendarEventType =
-  | "class_schedule"
-  | "class_booking"
+  | "pilates_schedule"
+  | "pilates_booking"
   | "waitlist_entry"
   | "private_trainer_booking";
 
@@ -244,6 +247,16 @@ export type CreatePrivateTrainerBookingPayload = {
   studio?: string;
   trainer_staff_profile_id: string;
   user_id: string;
+};
+
+export type PrivateTrainerSlotAvailability = {
+  trainer_staff_profile_id: string;
+  session_date: string;
+  start_time: string;
+  end_time: string;
+  duration_minutes: number;
+  available: boolean;
+  unavailable_reason: string | null;
 };
 
 export type PrivateTrainerBooking = {
@@ -498,13 +511,38 @@ export const adminBookingsClient = {
     return response.data;
   },
 
+  async checkPrivateTrainerAvailability(
+    trainerStaffProfileId: string,
+    input: {
+      session_date: string;
+      start_time: string;
+      duration_minutes: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<PrivateTrainerSlotAvailability> {
+    const query = new URLSearchParams({
+      session_date: input.session_date,
+      start_time: input.start_time,
+      duration_minutes: String(input.duration_minutes),
+    });
+    const response = await authFetch<
+      ApiResponse<PrivateTrainerSlotAvailability>
+    >(
+      `/admin/bookings/private-trainer/availability/${encodeURIComponent(trainerStaffProfileId)}?${query.toString()}`,
+      { method: "GET", signal },
+    );
+
+    return response.data;
+  },
+
   async listPrivateTrainer(
     filters: AdminPrivateBookingFilters,
   ): Promise<AdminPrivateBookingListResult> {
-    const response = await authFetch<ApiResponse<AdminPrivateBookingListResult>>(
-      `/admin/bookings/private-trainer?${buildPrivateListQuery(filters)}`,
-      { method: "GET" },
-    );
+    const response = await authFetch<
+      ApiResponse<AdminPrivateBookingListResult>
+    >(`/admin/bookings/private-trainer?${buildPrivateListQuery(filters)}`, {
+      method: "GET",
+    });
 
     return response.data;
   },

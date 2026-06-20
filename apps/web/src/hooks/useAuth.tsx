@@ -146,35 +146,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, []);
 
-  useEffect(() => {
-    const hydrateAuth = window.setTimeout(() => {
-      setPendingVerificationEmail(getCachedVerificationEmail());
-      setPasswordResetEmail(getCachedPasswordResetEmail());
-      void refreshUser();
-      void refreshAvatar();
-    }, 0);
+ useEffect(() => {
+  if (!isAuthenticated) return;
 
-    return () => window.clearTimeout(hydrateAuth);
-  }, [refreshAvatar, refreshUser]);
+  const rotateTokens = async () => {
+    const refreshed = await refreshAuthSession();
 
-  useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!refreshed) {
+      setUser(null);
+      setAvatarUrl(null);
+    }
+  };
 
-    const rotateTokens = async () => {
-      const refreshed = await refreshAuthSession();
+  const refreshInterval = window.setInterval(() => {
+    void rotateTokens().catch(() => undefined);
+  }, AUTH_REFRESH_INTERVAL_MS);
 
-      if (!refreshed) {
-        setUser(null);
-        setAvatarUrl(null);
-      }
-    };
+  const refreshOnFocus = () => {
+    void rotateTokens().catch(() => undefined);
+  };
 
-    const refreshInterval = window.setInterval(() => {
+  const refreshOnVisibilityChange = () => {
+    if (document.visibilityState === "visible") {
       void rotateTokens().catch(() => undefined);
-    }, AUTH_REFRESH_INTERVAL_MS);
+    }
+  };
 
-    return () => window.clearInterval(refreshInterval);
-  }, [isAuthenticated]);
+  window.addEventListener("focus", refreshOnFocus);
+  document.addEventListener("visibilitychange", refreshOnVisibilityChange);
+
+  return () => {
+    window.clearInterval(refreshInterval);
+    window.removeEventListener("focus", refreshOnFocus);
+    document.removeEventListener("visibilitychange", refreshOnVisibilityChange);
+  };
+}, [isAuthenticated]);
 
   const login = useCallback(
     async (payload: LoginPayload) => {

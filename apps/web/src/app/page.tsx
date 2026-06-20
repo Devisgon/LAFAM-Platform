@@ -64,7 +64,7 @@ function LoginForm() {
   return (
     <main className="relative flex h-screen w-full items-center justify-center overflow-hidden px-4 py-10 font-sans text-black">
       <div
-        className="absolute inset-0 bg-cover bg-center  scale-100"
+        className="absolute inset-0 bg-cover bg-center bg-blur  scale-100"
         style={{
           backgroundImage: "url('/login_bg.jpg')",
         }}
@@ -73,14 +73,14 @@ function LoginForm() {
       <div className="absolute inset-0 bg-black/55" />
 
       <section className="relative z-10 flex w-full flex-col items-center">
-        <div className="mb-10 flex flex-col items-center text-center">
+        <div className="mb-10 flex bg-foreground rounded-lg  flex-col items-center text-center">
           <Image
             src="/login-logo.svg"
             alt="LA FORME"
             width={200}
             height={200}
             priority
-            className="h-auto w-[200px] object-contain"
+            className="h-auto w-[200px] clear object-contain"
           />
         </div>
 

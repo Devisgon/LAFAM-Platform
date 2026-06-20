@@ -26,10 +26,7 @@ export function AdminSettings() {
               id: "users" as const,
               label: "Users",
             },
-            {
-              id: "history" as const,
-              label: "Booking history",
-            },
+        
           ].map((item) => (
             <button
               aria-current={view === item.id ? "page" : undefined}
@@ -60,15 +57,7 @@ export function AdminSettings() {
           </>
         ) : (
           <>
-            <header className="border-b border-background-secondary pb-5">
-              <h2 className="text-xl font-bold text-txt-primary">
-                Booking history
-              </h2>
-              <p className="mt-1 text-sm text-txt-secondary">
-                Completed and cancelled booking records.
-              </p>
-            </header>
-            <BookingExplorer heading="Previous bookings" previousOnly />
+           
           </>
         )}
       </section>

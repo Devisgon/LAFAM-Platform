@@ -236,7 +236,7 @@ export class CreatePilatesClassDto {
     example: PILATES_CLASS_DEFAULT_CURRENCY,
     default: PILATES_CLASS_DEFAULT_CURRENCY,
   })
-  @Transform(optionalTrimmedStringOrNull)
+  @Transform(optionalUppercaseString)
   @IsOptional()
   @IsIn(PILATES_CLASS_ALLOWED_CURRENCIES, {
     message: 'currency must be KWD.',

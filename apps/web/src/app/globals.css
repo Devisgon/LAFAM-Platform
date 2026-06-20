@@ -20,6 +20,15 @@
   --warning: #f59e0b;                      
   --success: #10b981;                      
 
+  --calendar-class-schedule-bg: #f4d5d8;
+  --calendar-class-schedule-text: #701f2a;
+  --calendar-class-booking-bg: #cfe4ff;
+  --calendar-class-booking-text: #163f73;
+  --calendar-private-booking-bg: #d9f2df;
+  --calendar-private-booking-text: #185c2b;
+  --calendar-waitlist-bg: #fef3c7;
+  --calendar-waitlist-text: #78350f;
+
   --foreground: #EDCDCE;
 }
 
@@ -55,6 +64,30 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-Poppins);
+}
+
+.calendar-event-card {
+  border-left: 3px solid currentColor;
+}
+
+.calendar-event--class-schedule {
+  background: var(--calendar-class-schedule-bg);
+  color: var(--calendar-class-schedule-text);
+}
+
+.calendar-event--class-booking {
+  background: var(--calendar-class-booking-bg);
+  color: var(--calendar-class-booking-text);
+}
+
+.calendar-event--private-trainer-booking {
+  background: var(--calendar-private-booking-bg);
+  color: var(--calendar-private-booking-text);
+}
+
+.calendar-event--waitlist-entry {
+  background: var(--calendar-waitlist-bg);
+  color: var(--calendar-waitlist-text);
 }
 
 .calendar-card .fc {
