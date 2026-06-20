@@ -157,6 +157,8 @@ const AUTH_COOKIE_NAMES = {
 const PENDING_VERIFICATION_EMAIL_KEY = "lafam_pending_verification_email";
 const PASSWORD_RESET_EMAIL_KEY = "lafam_password_reset_email";
 const PASSWORD_RESET_TOKEN_KEY = "lafam_password_reset_token";
+const AUTH_DISPLAY_USER_KEY = "lafam_current_user";
+const AUTH_DISPLAY_AVATAR_URL_KEY = "lafam_avatar_url";
 const REFRESH_TOKEN_MAX_AGE_SECONDS = 24 * 60 * 60;
 export const AUTH_REFRESH_INTERVAL_MS = 50 * 60 * 1000;
 
@@ -270,6 +272,107 @@ export function hasCachedAuthSession(): boolean {
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
+}
+
+function isAuthRole(value: unknown): value is AuthRole {
+  return (
+    value === "super_admin" ||
+    value === "admin" ||
+    value === "trainer" ||
+    value === "stylist" ||
+    value === "staff" ||
+    value === "customer" ||
+    value === "user" ||
+    value === "guest"
+  );
+}
+
+function isAuthUser(value: unknown): value is AuthUser {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const user = value as Partial<AuthUser>;
+
+  return (
+    typeof user.id === "string" &&
+    isAuthRole(user.role) &&
+    typeof user.status === "string" &&
+    typeof user.is_guest === "boolean" &&
+    typeof user.created_at === "string" &&
+    typeof user.updated_at === "string" &&
+    (typeof user.email === "string" || user.email === null) &&
+    (typeof user.phone === "string" || user.phone === null) &&
+    (typeof user.full_name === "string" || user.full_name === null) &&
+    (typeof user.avatar_path === "string" || user.avatar_path === null) &&
+    (typeof user.timezone === "string" || user.timezone === null)
+  );
+}
+
+export function getCachedAuthUser(): AuthUser | null {
+  if (!isBrowser()) return null;
+
+  try {
+    const cached = window.sessionStorage.getItem(AUTH_DISPLAY_USER_KEY);
+
+    if (!cached) {
+      return null;
+    }
+
+    const parsed: unknown = JSON.parse(cached);
+
+    if (!isAuthUser(parsed)) {
+      window.sessionStorage.removeItem(AUTH_DISPLAY_USER_KEY);
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    window.sessionStorage.removeItem(AUTH_DISPLAY_USER_KEY);
+    return null;
+  }
+}
+
+export function cacheAuthUser(user: AuthUser): void {
+  if (!isBrowser()) return;
+
+  window.sessionStorage.setItem(AUTH_DISPLAY_USER_KEY, JSON.stringify(user));
+}
+
+export function clearCachedAuthUser(): void {
+  if (!isBrowser()) return;
+
+  window.sessionStorage.removeItem(AUTH_DISPLAY_USER_KEY);
+}
+
+export function getCachedAvatarUrl(): string | null {
+  if (!isBrowser()) return null;
+
+  const cached = window.sessionStorage.getItem(AUTH_DISPLAY_AVATAR_URL_KEY);
+
+  return cached?.trim() ? cached : null;
+}
+
+export function cacheAvatarUrl(url: string | null): void {
+  if (!isBrowser()) return;
+
+  if (!url?.trim()) {
+    window.sessionStorage.removeItem(AUTH_DISPLAY_AVATAR_URL_KEY);
+    return;
+  }
+
+  window.sessionStorage.setItem(AUTH_DISPLAY_AVATAR_URL_KEY, url);
+}
+
+export function clearCachedAvatarUrl(): void {
+  if (!isBrowser()) return;
+
+  window.sessionStorage.removeItem(AUTH_DISPLAY_AVATAR_URL_KEY);
+}
+
+export function clearCachedAuthProfile(): void {
+  clearCachedAuthUser();
+  clearCachedAvatarUrl();
 }
 
 export function cachePendingVerificationEmail(email: string): void {

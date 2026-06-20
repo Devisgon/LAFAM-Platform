@@ -58,6 +58,7 @@ Thumbs.db
 
 # misc
 PLAN.md
+AGENT.md
 docs/
 _analysis/
 .pnpm-store

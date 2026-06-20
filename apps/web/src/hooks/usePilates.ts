@@ -24,11 +24,32 @@ type PilatesCache = {
 
 const cacheKey = "lafam:admin:pilates";
 
+function isPilatesCache(value: unknown): value is PilatesCache {
+  if (!value || typeof value !== "object") return false;
+
+  const cache = value as Partial<PilatesCache>;
+
+  return (
+    Array.isArray(cache.classes) &&
+    Array.isArray(cache.schedules) &&
+    Array.isArray(cache.trainers)
+  );
+}
+
 function readCache(): PilatesCache | null {
   if (typeof window === "undefined") return null;
 
   try {
-    return JSON.parse(window.sessionStorage.getItem(cacheKey) ?? "null") as PilatesCache | null;
+    const cached: unknown = JSON.parse(
+      window.sessionStorage.getItem(cacheKey) ?? "null",
+    );
+
+    if (!isPilatesCache(cached)) {
+      window.sessionStorage.removeItem(cacheKey);
+      return null;
+    }
+
+    return cached;
   } catch {
     window.sessionStorage.removeItem(cacheKey);
     return null;
@@ -44,14 +65,13 @@ function writeCache(cache: PilatesCache): void {
 }
 
 export function usePilates() {
-  const [cached] = useState(readCache);
-  const [classes, setClasses] = useState<PilatesClassDefinition[]>(cached?.classes ?? []);
-  const [schedules, setSchedules] = useState<PilatesSchedule[]>(cached?.schedules ?? []);
-  const [trainers, setTrainers] = useState<StaffMember[]>(cached?.trainers ?? []);
-  const [isLoading, setIsLoading] = useState(!cached);
+  const [classes, setClasses] = useState<PilatesClassDefinition[]>([]);
+  const [schedules, setSchedules] = useState<PilatesSchedule[]>([]);
+  const [trainers, setTrainers] = useState<StaffMember[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const hasData = useRef(Boolean(cached));
+  const hasData = useRef(false);
 
   const load = useCallback(async () => {
     if (!hasData.current) setIsLoading(true);
@@ -87,6 +107,16 @@ export function usePilates() {
 
   useEffect(() => {
     const request = window.setTimeout(() => {
+      const cached = readCache();
+
+      if (cached) {
+        setClasses(cached.classes);
+        setSchedules(cached.schedules);
+        setTrainers(cached.trainers);
+        setIsLoading(false);
+        hasData.current = true;
+      }
+
       void load().catch(() => undefined);
     }, 0);
 
