@@ -10,12 +10,18 @@ import {
 } from "react";
 import { usePathname } from "next/navigation";
 import {
-  AUTH_REFRESH_INTERVAL_MS,
+  AuthClientError,
   authClient,
   type AvatarResult,
+  cacheAuthUser,
+  cacheAvatarUrl,
+  clearCachedAuthProfile,
+  getCachedAuthUser,
+  getCachedAvatarUrl,
   getCachedPasswordResetEmail,
   getDashboardPath,
   getCachedVerificationEmail,
+  hasCachedAuthSession,
   isEmailVerificationRequiredError,
   type AuthUser,
   type ForgotPasswordResult,
@@ -23,7 +29,6 @@ import {
   type LoginResult,
   type ResetPasswordPayload,
   type ResetPasswordResult,
-  refreshAuthSession,
   type ResendVerificationResult,
   type SignUpPayload,
   type SignUpResult,
@@ -70,17 +75,24 @@ type AuthProviderProps = {
   children: React.ReactNode;
 };
 
+function isInvalidSessionError(error: unknown): boolean {
+  return (
+    error instanceof AuthClientError &&
+    (error.status === 401 || error.status === 403)
+  );
+}
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const pathname = usePathname();
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [user, setUserState] = useState<AuthUser | null>(null);
+  const [avatarUrl, setAvatarUrlState] = useState<string | null>(null);
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState<
     string | null
   >(null);
   const [passwordResetEmail, setPasswordResetEmail] = useState<string | null>(
     null,
   );
-  const [isChecking, setIsChecking] = useState(true);
+  const [isChecking, setIsChecking] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
@@ -93,8 +105,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     message: string;
     pathname: string;
   } | null>(null);
+
   const isAuthenticated = Boolean(user);
   const error = storedError?.pathname === pathname ? storedError.message : null;
+
   const setError = useCallback(
     (message: string | null) => {
       setStoredError(message === null ? null : { message, pathname });
@@ -102,85 +116,167 @@ export function AuthProvider({ children }: AuthProviderProps) {
     [pathname],
   );
 
+  const setCurrentUser = useCallback((nextUser: AuthUser | null) => {
+    setUserState(nextUser);
+
+    if (nextUser) {
+      cacheAuthUser(nextUser);
+      return;
+    }
+
+    setAvatarUrlState(null);
+    clearCachedAuthProfile();
+  }, []);
+
+  const setCurrentAvatarUrl = useCallback((nextAvatarUrl: string | null) => {
+    setAvatarUrlState(nextAvatarUrl);
+    cacheAvatarUrl(nextAvatarUrl);
+  }, []);
+
+  const clearAuthState = useCallback(() => {
+    setUserState(null);
+    setAvatarUrlState(null);
+    clearCachedAuthProfile();
+  }, []);
+
   const getErrorMessage = useCallback((err: unknown, fallback: string) => {
     return err instanceof Error ? err.message : fallback;
   }, []);
 
   const refreshUser = useCallback(async () => {
-  setIsChecking(true);
+    setIsChecking(true);
 
-  try {
-    const currentUser = await authClient.getCurrentUser();
+    try {
+      if (!hasCachedAuthSession()) {
+        clearAuthState();
+        return null;
+      }
 
-    if (currentUser) {
-      setUser(currentUser);
+      const currentUser = await authClient.getCurrentUser();
+
+      if (!currentUser) {
+        clearAuthState();
+        return null;
+      }
+
+      setCurrentUser(currentUser);
       return currentUser;
+    } catch (requestError: unknown) {
+      if (isInvalidSessionError(requestError)) {
+        clearAuthState();
+        return null;
+      }
+
+      return getCachedAuthUser();
+    } finally {
+      setIsChecking(false);
     }
-
-    const refreshed = await refreshAuthSession();
-
-    if (!refreshed) {
-      setUser(null);
-      return null;
-    }
-
-    const userAfterRefresh = await authClient.getCurrentUser();
-    setUser(userAfterRefresh);
-    return userAfterRefresh;
-  } catch {
-    setUser(null);
-    return null;
-  } finally {
-    setIsChecking(false);
-  }
-}, []);
+  }, [clearAuthState, setCurrentUser]);
 
   const refreshAvatar = useCallback(async () => {
     try {
+      if (!hasCachedAuthSession()) {
+        setCurrentAvatarUrl(null);
+        return { avatar_path: null, avatar_url: null };
+      }
+
       const avatar = await authClient.getAvatar();
-      setAvatarUrl(avatar.avatar_url);
+      setCurrentAvatarUrl(avatar.avatar_url);
       return avatar;
     } catch {
-      setAvatarUrl(null);
-      return { avatar_path: null, avatar_url: null };
+      const cachedUser = getCachedAuthUser();
+      const cachedAvatarUrl = getCachedAvatarUrl();
+
+      return {
+        avatar_path: cachedUser?.avatar_path ?? null,
+        avatar_url: cachedAvatarUrl,
+      };
     }
-  }, []);
+  }, [setCurrentAvatarUrl]);
 
- useEffect(() => {
-  if (!isAuthenticated) return;
+  useEffect(() => {
+    let isActive = true;
 
-  const rotateTokens = async () => {
-    const refreshed = await refreshAuthSession();
+    const hydrateAuthState = async () => {
+      const cachedUser = getCachedAuthUser();
+      const cachedAvatarUrl = getCachedAvatarUrl();
 
-    if (!refreshed) {
-      setUser(null);
-      setAvatarUrl(null);
-    }
-  };
+      if (!hasCachedAuthSession()) {
+        if (isActive) {
+          clearAuthState();
+          setIsChecking(false);
+        }
 
-  const refreshInterval = window.setInterval(() => {
-    void rotateTokens().catch(() => undefined);
-  }, AUTH_REFRESH_INTERVAL_MS);
+        return;
+      }
 
-  const refreshOnFocus = () => {
-    void rotateTokens().catch(() => undefined);
-  };
+      if (isActive) {
+        if (cachedUser) {
+          setUserState(cachedUser);
+        }
 
-  const refreshOnVisibilityChange = () => {
-    if (document.visibilityState === "visible") {
-      void rotateTokens().catch(() => undefined);
-    }
-  };
+        if (cachedAvatarUrl) {
+          setAvatarUrlState(cachedAvatarUrl);
+        }
 
-  window.addEventListener("focus", refreshOnFocus);
-  document.addEventListener("visibilitychange", refreshOnVisibilityChange);
+        setIsChecking(true);
+      }
 
-  return () => {
-    window.clearInterval(refreshInterval);
-    window.removeEventListener("focus", refreshOnFocus);
-    document.removeEventListener("visibilitychange", refreshOnVisibilityChange);
-  };
-}, [isAuthenticated]);
+      try {
+        const currentUser = await authClient.getCurrentUser();
+
+        if (!isActive) {
+          return;
+        }
+
+        if (!currentUser) {
+          clearAuthState();
+          return;
+        }
+
+        setCurrentUser(currentUser);
+
+        try {
+          const avatar = await authClient.getAvatar();
+
+          if (isActive) {
+            setCurrentAvatarUrl(avatar.avatar_url);
+          }
+        } catch {
+          if (isActive && cachedAvatarUrl) {
+            setAvatarUrlState(cachedAvatarUrl);
+          }
+        }
+      } catch (requestError: unknown) {
+        if (!isActive) {
+          return;
+        }
+
+        if (isInvalidSessionError(requestError)) {
+          clearAuthState();
+          return;
+        }
+
+        if (cachedUser) {
+          setUserState(cachedUser);
+        }
+
+        if (cachedAvatarUrl) {
+          setAvatarUrlState(cachedAvatarUrl);
+        }
+      } finally {
+        if (isActive) {
+          setIsChecking(false);
+        }
+      }
+    };
+
+    void hydrateAuthState();
+
+    return () => {
+      isActive = false;
+    };
+  }, [clearAuthState, setCurrentUser, setCurrentAvatarUrl]);
 
   const login = useCallback(
     async (payload: LoginPayload) => {
@@ -189,7 +285,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       try {
         const result = await authClient.login(payload);
-        setUser(result.user);
+        setCurrentUser(result.user);
         void refreshAvatar();
         return result;
       } catch (err: unknown) {
@@ -199,12 +295,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         } else {
           setError(getErrorMessage(err, "Login failed."));
         }
+
         throw err;
       } finally {
         setIsLoggingIn(false);
       }
     },
-    [getErrorMessage, refreshAvatar, setError],
+    [getErrorMessage, refreshAvatar, setCurrentUser, setError],
   );
 
   const signUp = useCallback(
@@ -304,6 +401,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       try {
         const result = await authClient.resetPassword(payload);
+        clearAuthState();
         setPasswordResetEmail(null);
         return result;
       } catch (err: unknown) {
@@ -313,7 +411,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setIsResettingPassword(false);
       }
     },
-    [getErrorMessage, setError],
+    [clearAuthState, getErrorMessage, setError],
   );
 
   const logout = useCallback(async () => {
@@ -322,10 +420,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       await authClient.logout();
     } finally {
-      setUser(null);
-      setAvatarUrl(null);
+      clearAuthState();
     }
-  }, [setError]);
+  }, [clearAuthState, setError]);
 
   const clearError = useCallback(() => {
     setError(null);
@@ -357,17 +454,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
       logout,
       refreshUser,
       refreshAvatar,
-      setCurrentUser: setUser,
-      setAvatarUrl,
+      setCurrentUser,
+      setAvatarUrl: setCurrentAvatarUrl,
       clearError,
       getDashboardPath,
     }),
     [
       user,
       avatarUrl,
-      isAuthenticated,
       pendingVerificationEmail,
       passwordResetEmail,
+      isAuthenticated,
       isChecking,
       isLoggingIn,
       isSigningUp,
@@ -387,6 +484,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       logout,
       refreshUser,
       refreshAvatar,
+      setCurrentUser,
+      setCurrentAvatarUrl,
       clearError,
     ],
   );

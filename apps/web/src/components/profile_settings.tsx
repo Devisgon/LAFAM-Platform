@@ -22,11 +22,9 @@ type ResultToast = {
   tone: "success" | "error";
 };
 
-type IconName =
-  | "camera"
-  | "chevron"
-  | "edit"
-  | "key";
+const fallbackTimezones = ["Asia/Kuwait", "UTC"];
+
+type IconName = "camera" | "chevron" | "edit" | "key";
 
 function formatDate(value: string | null): string {
   if (!value) return "Not available";
@@ -41,6 +39,24 @@ function label(value: string): string {
   return value
     .replaceAll("_", " ")
     .replace(/^\w/, (letter) => letter.toUpperCase());
+}
+
+function getTimezoneOptions(currentTimezone?: string | null): string[] {
+  let supportedTimezones = fallbackTimezones;
+
+  try {
+    supportedTimezones = Intl.supportedValuesOf("timeZone");
+  } catch {
+    // Keep the stable fallback list when runtime enumeration is unavailable.
+  }
+
+  return Array.from(
+    new Set([
+      ...supportedTimezones,
+      ...fallbackTimezones,
+      ...(currentTimezone ? [currentTimezone] : []),
+    ]),
+  ).sort((left, right) => left.localeCompare(right));
 }
 
 export function ProfileSettings() {
@@ -66,6 +82,7 @@ export function ProfileSettings() {
   const [fullName, setFullName] = useState(user?.full_name ?? "");
   const [phone, setPhone] = useState(user?.phone ?? "");
   const [timezone, setTimezone] = useState(user?.timezone ?? "");
+  const [timezoneOptions, setTimezoneOptions] = useState<string[]>([]);
   const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -79,6 +96,7 @@ export function ProfileSettings() {
       setFullName(user?.full_name ?? "");
       setPhone(user?.phone ?? "");
       setTimezone(user?.timezone ?? "");
+      setTimezoneOptions(getTimezoneOptions(user?.timezone));
     }, 0);
 
     return () => window.clearTimeout(sync);
@@ -271,9 +289,7 @@ export function ProfileSettings() {
                 <h2 className="truncate text-xl font-bold text-txt-primary">
                   {user?.full_name ?? "Your profile"}
                 </h2>
-                <Badge
-                  tone={user?.status === "active" ? "success" : "warning"}
-                >
+                <Badge tone={user?.status === "active" ? "success" : "warning"}>
                   {label(user?.status ?? "unknown")}
                 </Badge>
               </div>
@@ -329,14 +345,29 @@ export function ProfileSettings() {
               onChange={(event) => setPhone(event.target.value)}
               value={phone}
             />
-            <Input
-              className="bg-background-primary"
-              disabled={!isEditing}
-              label="Timezone"
-              name="timezone"
-              onChange={(event) => setTimezone(event.target.value)}
-              value={timezone}
-            />
+            <label className="grid gap-2" htmlFor="timezone">
+              <span className="text-sm font-semibold text-txt-primary">
+                Timezone
+              </span>
+              <select
+                className="min-h-11 w-full rounded-sm border border-background-secondary bg-background-primary px-3 py-2 text-txt-primary outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!isEditing}
+                id="timezone"
+                name="timezone"
+                onChange={(event) => setTimezone(event.target.value)}
+                value={timezone}
+              >
+                <option value="">Select timezone</option>
+                {timezone && !timezoneOptions.includes(timezone) ? (
+                  <option value={timezone}>{timezone}</option>
+                ) : null}
+                {timezoneOptions.map((timezoneOption) => (
+                  <option key={timezoneOption} value={timezoneOption}>
+                    {timezoneOption.replaceAll("_", " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
             <Input
               className="bg-background-primary"
               disabled
@@ -407,7 +438,6 @@ export function ProfileSettings() {
               />
               <Input
                 autoComplete="new-password"
-                hint="Use at least 8 characters."
                 label="New password"
                 minLength={8}
                 name="password"
@@ -504,14 +534,10 @@ export function ProfileSettings() {
                         <Badge tone="success">Current session</Badge>
                       ) : null}
                     </div>
-                    <p className="mt-1 break-words text-xs text-txt-secondary">
-                      {session.user_agent ?? session.type}
+                    <p className="mt-1 break-words text-xs capitalize text-txt-secondary">
+                      {session.type}
                     </p>
                     <dl className="mt-3 grid gap-x-6 gap-y-2 text-xs text-txt-secondary sm:grid-cols-2">
-                      <SessionDetail
-                        label="IP address"
-                        value={session.ip_address}
-                      />
                       <SessionDetail
                         label="Last active"
                         value={formatDate(session.last_seen_at)}

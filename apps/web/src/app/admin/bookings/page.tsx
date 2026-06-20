@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   type FormEvent,
   type ReactNode,
@@ -712,9 +711,6 @@ function BookingRecordRow({
         <strong className="block text-txt-primary">
           {booking.booking_number}
         </strong>
-        <span className="mt-1 block font-mono text-xs text-txt-secondary">
-          {booking.id}
-        </span>
       </td>
       <td className="px-4 py-4 align-top">
         <strong className="block text-txt-primary">{customerName}</strong>
@@ -915,15 +911,16 @@ function BookingDetailPanel({
 
   const cancelBooking = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const reason = String(
-      new FormData(event.currentTarget).get("reason"),
-    ).trim();
+
+    const form = event.currentTarget;
+    const reason = String(new FormData(form).get("reason")).trim();
 
     setIsSaving(true);
     setError(null);
+
     try {
       await adminBookingsClient.cancelBooking(bookingId, { reason });
-      event.currentTarget.reset();
+      form.reset();
       await refreshAfterChange();
     } catch (requestError: unknown) {
       setError(getErrorMessage(requestError));
@@ -1065,8 +1062,7 @@ function BookingDetailPanel({
           label="Price"
           value={formatPrice(booking.price?.amount, booking.price?.currency)}
         />
-        <DetailItem label="Booking ID" value={booking.id} />
-        <DetailItem label="Schedule ID" value={booking.schedule_id} />
+
         <DetailItem
           label="Admin notes"
           value={booking.admin_notes ?? "No admin notes"}
@@ -1288,17 +1284,18 @@ function PrivateBookingDetailPanel({
 
   const cancelBooking = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const reason = String(
-      new FormData(event.currentTarget).get("reason"),
-    ).trim();
+
+    const form = event.currentTarget;
+    const reason = String(new FormData(form).get("reason")).trim();
 
     setIsSaving(true);
     setError(null);
+
     try {
       await adminBookingsClient.cancelPrivateTrainerBooking(bookingId, {
         reason,
       });
-      event.currentTarget.reset();
+      form.reset();
       await refreshAfterChange();
     } catch (requestError: unknown) {
       setError(getErrorMessage(requestError));
@@ -1425,7 +1422,6 @@ function PrivateBookingDetailPanel({
           label="Price"
           value={formatPrice(booking.price?.amount, booking.price?.currency)}
         />
-        <DetailItem label="Booking ID" value={booking.id} />
         <DetailItem
           label="Admin notes"
           value={booking.admin_notes ?? "No admin notes"}
@@ -1713,7 +1709,6 @@ function CreatePrivateBookingCard({
       </header>
 
       <div className="px-5 py-5">
-        
         <p className="mb-5 text-sm text-txt-secondary">
           Create a private trainer booking for a customer and trainer.
         </p>

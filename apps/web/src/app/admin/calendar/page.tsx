@@ -31,7 +31,10 @@ function defaultMonth(): string {
   return isoDate(new Date()).slice(0, 7);
 }
 
-function monthDateRange(monthValue: string): { fromDate: string; toDate: string } {
+function monthDateRange(monthValue: string): {
+  fromDate: string;
+  toDate: string;
+} {
   const [yearText, monthText] = monthValue.split("-");
   const year = Number(yearText);
   const monthIndex = Number(monthText) - 1;
@@ -96,7 +99,9 @@ function statusTone(
   return "neutral";
 }
 
-function eventTypeLabel(eventType: AdminBookingCalendarEvent["event_type"]): string {
+function eventTypeLabel(
+  eventType: AdminBookingCalendarEvent["event_type"],
+): string {
   if (eventType === "pilates_schedule") return "Class schedule";
   if (eventType === "pilates_booking") return "Class booking";
   if (eventType === "private_trainer_booking") return "Private booking";
@@ -130,7 +135,10 @@ function getSourceValue(
   return event.source[key] ?? null;
 }
 
-function buildCalendarDays(fromDate: string, toDate: string): Array<string | null> {
+function buildCalendarDays(
+  fromDate: string,
+  toDate: string,
+): Array<string | null> {
   const start = new Date(`${fromDate}T00:00:00`);
   const end = new Date(`${toDate}T00:00:00`);
 
@@ -281,7 +289,9 @@ export default function CalendarPage() {
                     options={[
                       [
                         "",
-                        isPilatesLoading ? "Loading trainers..." : "All trainers",
+                        isPilatesLoading
+                          ? "Loading trainers..."
+                          : "All trainers",
                       ],
                       ...trainerOptions,
                     ]}
@@ -295,7 +305,10 @@ export default function CalendarPage() {
                       setSelectedEvent(null);
                     }}
                     options={[
-                      ["", isPilatesLoading ? "Loading classes..." : "All classes"],
+                      [
+                        "",
+                        isPilatesLoading ? "Loading classes..." : "All classes",
+                      ],
                       ...classOptions,
                     ]}
                     value={classId}
@@ -329,7 +342,10 @@ export default function CalendarPage() {
                   />
                 </div>
 
-                <div aria-label="Calendar event colors" className="flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-txt-secondary">
+                <div
+                  aria-label="Calendar event colors"
+                  className="flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-txt-secondary"
+                >
                   {(
                     [
                       "pilates_schedule",
@@ -338,7 +354,10 @@ export default function CalendarPage() {
                       "waitlist_entry",
                     ] as const
                   ).map((eventType) => (
-                    <span className="inline-flex items-center gap-2" key={eventType}>
+                    <span
+                      className="inline-flex items-center gap-2"
+                      key={eventType}
+                    >
                       <span
                         aria-hidden="true"
                         className={`size-3 rounded-full ${eventTypeClass(eventType)}`}
@@ -408,10 +427,14 @@ export default function CalendarPage() {
                           const isDayExpanded = expandedDay === day;
                           const visibleEvents = dayEvents.slice(
                             0,
-                            isDayExpanded ? dayEvents.length : collapsedEventCount,
+                            isDayExpanded
+                              ? dayEvents.length
+                              : collapsedEventCount,
                           );
-                          const hiddenEventCount =
-                            Math.max(0, dayEvents.length - collapsedEventCount);
+                          const hiddenEventCount = Math.max(
+                            0,
+                            dayEvents.length - collapsedEventCount,
+                          );
 
                           return (
                             <div
@@ -498,19 +521,23 @@ function EventDetailCard({
   onClose: () => void;
 }) {
   const customerName =
-    getSourceValue(event, "customer_full_name") ?? event.user_id ?? "No customer";
+    getSourceValue(event, "customer_full_name") ??
+    event.user_id ??
+    "No customer";
   const trainerName =
     getSourceValue(event, "trainer_display_name") ??
     event.trainer_staff_profile_id ??
     "No trainer";
   const bookingNumber =
-    getSourceValue(event, "booking_number") ?? event.private_booking_id ?? event.id;
+    getSourceValue(event, "booking_number") ??
+    event.private_booking_id ??
+    event.id;
 
   return (
     <aside className="self-start rounded-md border border-background-secondary bg-card-bg-secondary p-5 shadow-sm">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-xl font-semibold text-txt-primary">
+          <h3 className="text-xl font-semibold capitalize text-txt-primary">
             {bookingNumber}
           </h3>
           <Badge className="mt-2" tone={statusTone(event.status)}>
@@ -532,14 +559,22 @@ function EventDetailCard({
         <Detail label="Customer" value={customerName} />
         <Detail label="Trainer" value={trainerName} />
         <Detail label="Date" value={formatDate(event.date)} />
-        <Detail label="Time" value={`${event.start_time} - ${event.end_time}`} />
-        <Detail label="Event ID" value={event.id} />
+        <Detail
+          label="Time"
+          value={`${event.start_time} - ${event.end_time}`}
+        />
       </dl>
     </aside>
   );
 }
 
-function Detail({ label: detailLabel, value }: { label: string; value: string }) {
+function Detail({
+  label: detailLabel,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
     <div>
       <dt className="text-xs font-semibold uppercase text-txt-secondary">

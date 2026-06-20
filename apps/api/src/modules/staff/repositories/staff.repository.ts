@@ -881,23 +881,16 @@ export class StaffRepository {
 
     const staffProfileUpdatePayload: StaffProfileUpdate = {
       status: STAFF_PROFILE_STATUS_DELETED,
+      deactivated_at: null,
       deleted_at: input.deleted_at,
       updated_by_admin_id: input.updated_by_admin_id,
     };
 
     const appUserUpdatePayload: AppUserUpdate = {
       status: STAFF_PROFILE_STATUS_DELETED,
+      deactivated_at: null,
       deleted_at: input.deleted_at,
     };
-
-    const { error: appUserUpdateError } = await this.adminClient
-      .from('app_users')
-      .update(appUserUpdatePayload)
-      .eq('id', currentStaff.app_user.id);
-
-    if (appUserUpdateError) {
-      throw mapDatabaseError(appUserUpdateError);
-    }
 
     const { error: staffProfileUpdateError } = await this.adminClient
       .from('staff_profiles')
@@ -906,6 +899,15 @@ export class StaffRepository {
 
     if (staffProfileUpdateError) {
       throw mapDatabaseError(staffProfileUpdateError);
+    }
+
+    const { error: appUserUpdateError } = await this.adminClient
+      .from('app_users')
+      .update(appUserUpdatePayload)
+      .eq('id', currentStaff.app_user.id);
+
+    if (appUserUpdateError) {
+      throw mapDatabaseError(appUserUpdateError);
     }
   }
 

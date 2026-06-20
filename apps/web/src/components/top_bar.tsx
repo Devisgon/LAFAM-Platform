@@ -18,14 +18,14 @@ type TopBarProps = {
 
 const MOBILE_SIDEBAR_EVENT = "lafam:open-mobile-sidebar";
 
-export function TopBar({ actionHref, actionLabel, title }: TopBarProps) {
+export function TopBar({ title }: TopBarProps) {
   const router = useRouter();
   const { avatarUrl, logout, user } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
-  const profileHref = isAdmin ? "/admin/settings" : "/user";
+  const profileHref = isAdmin ? "/admin/settings" : "/admin/settings";
   const accountName = user?.full_name ?? user?.email ?? "Account";
 
   useEffect(() => {
@@ -92,7 +92,6 @@ export function TopBar({ actionHref, actionLabel, title }: TopBarProps) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        
         <div className="relative" ref={accountMenuRef}>
           <button
             aria-expanded={isAccountMenuOpen}
@@ -108,7 +107,9 @@ export function TopBar({ actionHref, actionLabel, title }: TopBarProps) {
               size="md"
               src={avatarUrl ?? undefined}
             />
-            <span className="hidden max-w-40 truncate sm:block">{accountName}</span>
+            <span className="hidden max-w-40 truncate sm:block">
+              {accountName}
+            </span>
             <ChevronDown
               aria-hidden="true"
               className={`hidden transition-transform sm:block ${isAccountMenuOpen ? "rotate-180" : ""}`}
@@ -118,9 +119,7 @@ export function TopBar({ actionHref, actionLabel, title }: TopBarProps) {
 
           <div
             className={`absolute right-0 top-full z-50 w-48 pt-2 transition-[opacity,visibility] ${
-              isAccountMenuOpen
-                ? "visible opacity-100"
-                : "invisible opacity-0"
+              isAccountMenuOpen ? "visible opacity-100" : "invisible opacity-0"
             }`}
           >
             <div
