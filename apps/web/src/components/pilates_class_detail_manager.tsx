@@ -20,7 +20,6 @@ import {
   type UpdatePilatesSchedulePayload,
 } from "@/lib/pilates";
 import { Badge } from "./reuseable_ui_components/badge";
-import { DataTable } from "./reuseable_ui_components/data_table";
 import { LoadingState } from "./reuseable_ui_components/loading_state";
 import { Toast } from "./reuseable_ui_components/toast";
 
@@ -78,13 +77,6 @@ function formatTime(time: string): string {
     : new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit" }).format(value);
 }
 
-function addMinutes(time: string, minutes: number): string {
-  const [hours = "0", mins = "0"] = time.split(":");
-  const value = new Date("2026-01-01T00:00:00");
-  value.setHours(Number(hours), Number(mins) + minutes, 0, 0);
-  return `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
-}
-
 function classPayload(form: HTMLFormElement): CreatePilatesClassPayload {
   const data = new FormData(form);
   const image = data.get("image");
@@ -93,6 +85,8 @@ function classPayload(form: HTMLFormElement): CreatePilatesClassPayload {
     description: String(data.get("description")).trim() || null,
     default_duration_minutes: Number(data.get("default_duration_minutes")),
     default_capacity: Number(data.get("default_capacity")),
+    default_price_amount: Number(data.get("default_price_amount")),
+    currency: "KWD" as const,
     level: String(data.get("level")) as PilatesClassLevel,
     status: String(data.get("status")) as Exclude<PilatesClassStatus, "deleted">,
     ...(image instanceof File && image.size > 0 ? { image } : {}),
@@ -116,58 +110,66 @@ function excludedDates(data: FormData): string[] {
     .filter(Boolean);
 }
 
-function createSchedulePayload(
+function createSchedulePayloads(
   form: HTMLFormElement,
   classId: string,
-): CreatePilatesSchedulePayload {
+): CreatePilatesSchedulePayload[] {
   const data = new FormData(form);
   const mode = String(data.get("mode"));
-  const base = {
+  const common = {
     class_id: classId,
     trainer_staff_profile_id: String(data.get("trainer_staff_profile_id")),
     studio: String(data.get("studio")).trim(),
-    start_time: String(data.get("start_time")),
-    duration_minutes: Number(data.get("duration_minutes")),
-    capacity: Number(data.get("capacity")),
+    price_amount: Number(data.get("price_amount")),
+    currency: "KWD" as const,
   };
 
   if (mode === "weekly") {
-    return {
-      ...base,
-      mode: "recurring",
-      start_date: String(data.get("start_date")),
-      end_date: String(data.get("end_date")),
-      recurrence: {
-        frequency: "weekly",
-        days_of_week: data
-          .getAll("days_of_week")
-          .map((value) => Number(value))
-          .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6),
-        excluded_dates: excludedDates(data),
-      },
-    };
+    const selectedDays = data
+      .getAll("days_of_week")
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6);
+
+    return selectedDays.map((day) => {
+      const startTime = String(data.get(`weekly_start_time_${day}`));
+      const durationMinutes = Number(data.get(`weekly_duration_${day}`));
+      const capacity = Number(data.get(`weekly_capacity_${day}`));
+
+      return {
+        ...common,
+        mode: "recurring",
+        start_date: String(data.get("start_date")),
+        end_date: String(data.get("end_date")),
+        start_time: startTime,
+        duration_minutes: durationMinutes,
+        capacity,
+        time_slots: [
+          {
+            start_time: startTime,
+            duration_minutes: durationMinutes,
+            capacity,
+            studio: common.studio,
+          },
+        ],
+        recurrence: {
+          frequency: "weekly",
+          days_of_week: [day],
+          excluded_dates: excludedDates(data),
+        },
+      };
+    });
   }
 
-  if (mode === "monthly") {
-    return {
-      ...base,
-      mode: "recurring",
-      start_date: String(data.get("start_date")),
-      end_date: String(data.get("end_date")),
-      recurrence: {
-        frequency: "monthly",
-        monthly_rule: "day_of_month",
-        day_of_month: Number(data.get("day_of_month")),
-        excluded_dates: excludedDates(data),
-      },
-    };
-  }
-
-  return {
-    ...base,
-    mode: "single",
-    class_date: String(data.get("class_date")),
-  };
+  return [
+    {
+      ...common,
+      mode: "single",
+      class_date: String(data.get("class_date")),
+      start_time: String(data.get("start_time")),
+      duration_minutes: Number(data.get("duration_minutes")),
+      capacity: Number(data.get("capacity")),
+    },
+  ];
 }
 
 function updateSchedulePayload(form: HTMLFormElement): UpdatePilatesSchedulePayload {
@@ -179,6 +181,8 @@ function updateSchedulePayload(form: HTMLFormElement): UpdatePilatesSchedulePayl
     start_time: String(data.get("start_time")),
     duration_minutes: Number(data.get("duration_minutes")),
     capacity: Number(data.get("capacity")),
+    price_amount: Number(data.get("price_amount")),
+    currency: "KWD",
   };
 }
 
@@ -282,11 +286,11 @@ export function PilatesClassDetailManager({ classId }: { classId: string }) {
       return;
     }
 
-    const payload = createSchedulePayload(event.currentTarget, classId);
+    const payloads = createSchedulePayloads(event.currentTarget, classId);
     void run(
-      () => api.createSchedule(payload),
+      () => api.createSchedules(payloads),
       "Schedule created",
-      "A new schedule was added to this class.",
+      `${payloads.length} schedule series added to this class.`,
       () => {
         setEditingSchedule(null);
         setCreatingSchedule(false);
@@ -431,9 +435,10 @@ function ClassDetailCard({
               <button className="rounded-lg bg-button-primary px-5 py-2 text-xs font-bold text-white shadow-sm shadow-primary/20 disabled:opacity-50" disabled={detail.status !== "active"} onClick={onCreateSchedule} type="button">Add schedule</button>
             </div>
           </div>
-          <dl className="mt-8 grid gap-3 sm:grid-cols-3">
+          <dl className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <HeroStat label="Duration" value={`${detail.default_duration_minutes} min`} />
             <HeroStat label="Capacity" value={`${detail.default_capacity} people`} />
+            <HeroStat label="Price per booking" value={`${detail.default_price_amount.toFixed(3)} ${detail.currency}`} />
             <HeroStat label="Total schedules" value={String(schedules.length)} />
           </dl>
         </div>
@@ -494,6 +499,7 @@ function ScheduleRow({
             <span><strong className="text-txt-primary">{item.duration_minutes} min</strong> duration</span>
             <span><strong className="text-txt-primary">{item.availability.booked_count}/{item.capacity}</strong> booked</span>
             <span><strong className="text-txt-primary">{item.availability.available_seats}</strong> seats left</span>
+            <span><strong className="text-txt-primary">{(item.price_amount ?? 0).toFixed(3)} {item.currency ?? "KWD"}</strong> price</span>
           </div>
           {item.cancellation_reason ? <p className="mt-3 text-xs text-error">{item.cancellation_reason}</p> : null}
         </div>
@@ -526,6 +532,8 @@ function ClassEditForm({
         <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Description<textarea className={`${fieldClass} min-h-24 resize-y`} defaultValue={detail.description ?? ""} maxLength={2000} name="description" /></label>
         <FormInput defaultValue={detail.default_duration_minutes} label="Default duration (minutes)" max={240} min={15} name="default_duration_minutes" required type="number" />
         <FormInput defaultValue={detail.default_capacity} label="Default capacity" max={100} min={1} name="default_capacity" required type="number" />
+        <FormInput defaultValue={detail.default_price_amount} label="Price per booking (KWD)" min={0} name="default_price_amount" required step="0.001" type="number" />
+        <FormInput defaultValue={detail.currency} disabled label="Currency" readOnly type="text" />
         <Select defaultValue={detail.level} label="Level" name="level" options={["beginner", "intermediate", "advanced", "all_levels"]} />
         <Select defaultValue={detail.status} label="Status" name="status" options={["draft", "active", "inactive"]} />
         <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Replace cover image<input accept="image/jpeg,image/png,image/webp" className={fieldClass} name="image" type="file" /></label>
@@ -551,59 +559,49 @@ function ScheduleForm({
   trainers: Array<{ id: string; display_name: string; staff_status: string }>;
 }) {
   const isEditing = Boolean(item);
-  const [mode, setMode] = useState<"single" | "weekly" | "monthly">("single");
+  const [mode, setMode] = useState<"single" | "weekly">("single");
   const [selectedWeekDays, setSelectedWeekDays] = useState<number[]>([1, 3, 5]);
-  const [activeWeekDay, setActiveWeekDay] = useState(2);
-  const [activeMonthDay, setActiveMonthDay] = useState(22);
-  const [copySource, setCopySource] = useState(1);
   const [startTime, setStartTime] = useState(item?.start_time?.slice(0, 5) ?? "10:00");
   const [durationMinutes, setDurationMinutes] = useState(item?.duration_minutes ?? detail.default_duration_minutes);
   const [capacity, setCapacity] = useState(item?.capacity ?? detail.default_capacity);
+  const [priceAmount, setPriceAmount] = useState(item?.price_amount ?? detail.default_price_amount);
+  const [weeklySlots, setWeeklySlots] = useState(() =>
+    Object.fromEntries(
+      weekDays.map((day, index) => [
+        day.value,
+        {
+          startTime: `${String(9 + index).padStart(2, "0")}:00`,
+          durationMinutes: detail.default_duration_minutes,
+          capacity: detail.default_capacity,
+        },
+      ]),
+    ) as Record<number, { startTime: string; durationMinutes: number; capacity: number }>,
+  );
   const scheduleDate = item?.class_date ?? "";
 
-  const selectWeekDay = (day: number) => {
-    setActiveWeekDay(day);
+  const toggleWeekDay = (day: number) => {
     setSelectedWeekDays((current) =>
-      current.includes(day) ? current : [...current, day].sort((a, b) => a - b),
-    );
-  };
-
-  const toggleActiveWeekDay = () => {
-    setSelectedWeekDays((current) =>
-      current.includes(activeWeekDay)
+      current.includes(day)
         ? current.length === 1
           ? current
-          : current.filter((value) => value !== activeWeekDay)
-        : [...current, activeWeekDay].sort((a, b) => a - b),
+          : current.filter((value) => value !== day)
+        : [...current, day].sort((a, b) => a - b),
     );
   };
 
-  const copyFormat = () => {
-    if (mode === "weekly") {
-      setSelectedWeekDays((current) =>
-        current.includes(copySource)
-          ? current
-          : [...current, copySource].sort((a, b) => a - b),
-      );
-      setActiveWeekDay(copySource);
-      return;
-    }
-
-    setActiveMonthDay(copySource);
+  const updateWeeklySlot = (
+    day: number,
+    patch: Partial<{ startTime: string; durationMinutes: number; capacity: number }>,
+  ) => {
+    setWeeklySlots((current) => ({
+      ...current,
+      [day]: { ...current[day], ...patch },
+    }));
   };
 
   return (
     <form onSubmit={onSubmit}>
       <input name="mode" type="hidden" value={mode} />
-      {!isEditing && mode === "weekly"
-        ? selectedWeekDays.map((day) => (
-            <input key={day} name="days_of_week" type="hidden" value={day} />
-          ))
-        : null}
-      {!isEditing && mode === "monthly" ? (
-        <input name="day_of_month" type="hidden" value={activeMonthDay} />
-      ) : null}
-
       <div className="px-5 py-5">
         <div className="rounded-sm bg-primary/10 p-3 text-sm text-primary">
           {isEditing ? "Update this occurrence for" : "Create schedules for"}{" "}
@@ -613,7 +611,7 @@ function ScheduleForm({
         {!isEditing ? (
           <fieldset className="mt-5">
             <legend className="text-xs font-bold">Schedule type</legend>
-            <div className="mt-2 grid gap-2 sm:grid-cols-3" role="list">
+            <div className="mt-2 grid gap-2 sm:grid-cols-2" role="list">
               <ScheduleModeButton
                 active={mode === "single"}
                 description="One bookable class"
@@ -625,12 +623,6 @@ function ScheduleForm({
                 description="Repeat on selected days"
                 label="Weekly recurring"
                 onClick={() => setMode("weekly")}
-              />
-              <ScheduleModeButton
-                active={mode === "monthly"}
-                description="Repeat every month"
-                label="Monthly recurring"
-                onClick={() => setMode("monthly")}
               />
             </div>
           </fieldset>
@@ -647,30 +639,27 @@ function ScheduleForm({
               <FormInput label="End date" name="end_date" required type="date" />
             </>
           )}
-          <FormInput label="Start time" name="start_time" onChange={(event) => setStartTime(event.target.value)} required type="time" value={startTime} />
-          <FormInput label="Duration (minutes)" max={240} min={15} name="duration_minutes" onChange={(event) => setDurationMinutes(Number(event.target.value))} required type="number" value={durationMinutes} />
-          <FormInput label="Capacity" max={100} min={1} name="capacity" onChange={(event) => setCapacity(Number(event.target.value))} required type="number" value={capacity} />
+          {isEditing || mode === "single" ? (
+            <>
+              <FormInput label="Start time" name="start_time" onChange={(event) => setStartTime(event.target.value)} required type="time" value={startTime} />
+              <FormInput label="Duration (minutes)" max={240} min={15} name="duration_minutes" onChange={(event) => setDurationMinutes(Number(event.target.value))} required type="number" value={durationMinutes} />
+              <FormInput label="Capacity" max={100} min={1} name="capacity" onChange={(event) => setCapacity(Number(event.target.value))} required type="number" value={capacity} />
+            </>
+          ) : null}
+          <FormInput label="Price (KWD)" min={0} name="price_amount" onChange={(event) => setPriceAmount(Number(event.target.value))} required step="0.001" type="number" value={priceAmount} />
+          <FormInput defaultValue="KWD" disabled label="Currency" readOnly type="text" />
         </div>
 
-        {!isEditing && mode !== "single" ? (
-          <RecurringDayPlanner
-            activeMonthDay={activeMonthDay}
-            activeWeekDay={activeWeekDay}
-            capacity={capacity}
-            copyFormat={copyFormat}
-            copySource={copySource}
-            durationMinutes={durationMinutes}
-            mode={mode}
-            onCopySourceChange={setCopySource}
-            onMonthDaySelect={setActiveMonthDay}
-            onToggleActiveWeekDay={toggleActiveWeekDay}
-            onWeekDaySelect={selectWeekDay}
+        {!isEditing && mode === "weekly" ? (
+          <WeeklyDayPlanner
+            onToggleDay={toggleWeekDay}
+            onUpdateSlot={updateWeeklySlot}
             selectedWeekDays={selectedWeekDays}
-            startTime={startTime}
+            slots={weeklySlots}
           />
         ) : null}
 
-        {!isEditing && mode !== "single" ? (
+        {!isEditing && mode === "weekly" ? (
           <label className="mt-5 grid gap-1.5 text-xs font-bold">
             Excluded dates
             <textarea
@@ -693,9 +682,7 @@ function ScheduleForm({
             ? "Save schedule"
             : mode === "weekly"
               ? "Create weekly schedules"
-              : mode === "monthly"
-                ? "Create monthly schedules"
-                : "Create schedule"
+              : "Create schedule"
         }
       />
     </form>
@@ -729,192 +716,113 @@ function ScheduleModeButton({
   );
 }
 
-function RecurringDayPlanner({
-  activeMonthDay,
-  activeWeekDay,
-  capacity,
-  copyFormat,
-  copySource,
-  durationMinutes,
-  mode,
-  onCopySourceChange,
-  onMonthDaySelect,
-  onToggleActiveWeekDay,
-  onWeekDaySelect,
+function WeeklyDayPlanner({
+  onToggleDay,
+  onUpdateSlot,
   selectedWeekDays,
-  startTime,
+  slots,
 }: {
-  activeMonthDay: number;
-  activeWeekDay: number;
-  capacity: number;
-  copyFormat: () => void;
-  copySource: number;
-  durationMinutes: number;
-  mode: "weekly" | "monthly";
-  onCopySourceChange: (value: number) => void;
-  onMonthDaySelect: (value: number) => void;
-  onToggleActiveWeekDay: () => void;
-  onWeekDaySelect: (value: number) => void;
+  onToggleDay: (day: number) => void;
+  onUpdateSlot: (
+    day: number,
+    patch: Partial<{
+      startTime: string;
+      durationMinutes: number;
+      capacity: number;
+    }>,
+  ) => void;
   selectedWeekDays: number[];
-  startTime: string;
+  slots: Record<
+    number,
+    { startTime: string; durationMinutes: number; capacity: number }
+  >;
 }) {
-  const monthlyDays = Array.from({ length: 31 }, (_, index) => index + 1);
-  const activeLabel =
-    mode === "weekly"
-      ? (weekDays.find((day) => day.value === activeWeekDay)?.label ?? "Selected day")
-      : `Day ${activeMonthDay}`;
-  const isActiveIncluded =
-    mode === "monthly" || selectedWeekDays.includes(activeWeekDay);
-  const endTime = addMinutes(startTime, Number.isFinite(durationMinutes) ? durationMinutes : 0);
-  const copyOptions =
-    mode === "weekly"
-      ? weekDays.map((day) => ({ label: day.label, value: day.value }))
-      : monthlyDays.map((day) => ({ label: `Day ${day}`, value: day }));
-
   return (
     <section className="mt-6 overflow-hidden rounded-sm border border-background-secondary bg-card-bg-primary">
-      <div className="overflow-x-auto border-b border-background-secondary bg-background-secondary/40">
-        <div className="flex min-w-max">
-          {mode === "weekly"
-            ? weekDays.map((day) => {
-                const selected = selectedWeekDays.includes(day.value);
-                const active = activeWeekDay === day.value;
-                return (
-                  <button
-                    className={`min-h-12 min-w-32 border-r border-background-secondary px-4 text-sm transition ${
-                      active
-                        ? "border-t-2 border-t-button-primary bg-card-bg-primary text-txt-primary"
-                        : selected
-                          ? "bg-primary/10 text-primary"
-                          : "text-txt-secondary hover:bg-card-bg-primary"
-                    }`}
-                    key={day.value}
-                    onClick={() => onWeekDaySelect(day.value)}
-                    type="button"
-                  >
-                    {day.label}
-                  </button>
-                );
-              })
-            : monthlyDays.map((day) => (
-                <button
-                  className={`min-h-12 min-w-14 border-r border-background-secondary px-3 text-sm transition ${
-                    activeMonthDay === day
-                      ? "border-t-2 border-t-button-primary bg-card-bg-primary text-txt-primary"
-                      : "text-txt-secondary hover:bg-card-bg-primary"
-                  }`}
-                  key={day}
-                  onClick={() => onMonthDaySelect(day)}
-                  type="button"
-                >
-                  {day}
-                </button>
-              ))}
-        </div>
-      </div>
-
-      <div className="m-4 flex flex-col gap-4 rounded-sm bg-[#e9caca] p-4 text-white md:flex-row md:items-center md:justify-between">
-        <p className="text-xl font-medium">
-          Do you want to copy this schedule format from another day?
+      <header className="border-b border-background-secondary bg-background-secondary/40 px-4 py-4">
+        <h3 className="text-lg font-bold text-txt-primary">
+          Weekly day and time settings
+        </h3>
+        <p className="mt-1 text-xs text-txt-secondary">
+          Select the weekdays and set a different start time, duration, and
+          capacity for each day.
         </p>
-        <div className="flex shrink-0">
-          <select
-            aria-label="Copy schedule format from"
-            className="min-h-11 rounded-l-sm border border-background-secondary bg-card-bg-primary px-4 text-sm text-txt-primary outline-none"
-            onChange={(event) => onCopySourceChange(Number(event.target.value))}
-            value={copySource}
-          >
-            {copyOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <button
-            className="min-h-11 rounded-r-sm bg-black px-5 text-sm font-bold text-white"
-            onClick={copyFormat}
-            type="button"
-          >
-            Copy
-          </button>
-        </div>
-      </div>
+      </header>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-left text-sm">
+          <thead className="border-b border-background-secondary text-xs uppercase text-txt-secondary">
+            <tr>
+              <th className="px-4 py-3">Use</th>
+              <th className="px-4 py-3">Day</th>
+              <th className="px-4 py-3">Start time</th>
+              <th className="px-4 py-3">Duration</th>
+              <th className="px-4 py-3">Capacity</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-background-secondary">
+            {weekDays.map((day) => {
+              const selected = selectedWeekDays.includes(day.value);
+              const slot = slots[day.value];
 
-      <div className="mx-4 flex flex-col gap-3 rounded-sm bg-black p-4 text-white md:flex-row md:items-center md:justify-between">
-        <h3 className="text-xl font-medium">{mode === "weekly" ? "Set Weekly Time Slot" : "Set Monthly Time Slot"}</h3>
-        <div className="flex overflow-hidden rounded-sm">
-          <span className="flex min-h-11 items-center bg-background-secondary px-4 text-sm font-semibold text-txt-primary">
-            Capacity
-          </span>
-          <span className="flex min-h-11 min-w-28 items-center bg-card-bg-primary px-4 text-sm font-semibold text-txt-primary">
-            {capacity || 0}
-          </span>
-        </div>
-      </div>
-
-      <div>
-        <DataTable
-          bodyClassName=""
-          className="border-0"
-          columnHeaderClassName="border-l border-background-secondary px-1 py-2 font-bold first:border-l-0"
-          columns={[
-            { className: "w-16", key: "selected", heading: <span className="sr-only">Selected</span> },
-            { key: "day", heading: "Day" },
-            { key: "start", heading: "Start" },
-            { key: "end", heading: "End" },
-            { key: "capacity", heading: "Capacity" },
-            { key: "action", heading: "Action" },
-          ]}
-          headerRowClassName="border-b-2 border-txt-primary"
-          minWidthClassName="min-w-[760px]"
-          textSizeClassName="text-sm"
-          wrapperClassName="overflow-x-auto px-4 pb-4 pt-4"
-        >
-          <tr className="border-b border-background-secondary bg-background-secondary/60">
-            <td className="px-1 py-2">
-              <input
-                checked={isActiveIncluded}
-                className="size-5 accent-primary"
-                onChange={mode === "weekly" ? onToggleActiveWeekDay : undefined}
-                readOnly={mode === "monthly"}
-                type="checkbox"
-              />
-            </td>
-            <td className="border-l border-background-secondary px-1 py-3 font-semibold">
-              {activeLabel}
-            </td>
-            <td className="border-l border-background-secondary px-1 py-3">
-              {formatTime(startTime)}
-            </td>
-            <td className="border-l border-background-secondary px-1 py-3">
-              {formatTime(endTime)}
-            </td>
-            <td className="border-l border-background-secondary px-1 py-3">
-              {capacity || 0}
-            </td>
-            <td className="border-l border-background-secondary px-1 py-3">
-              <button
-                aria-pressed={isActiveIncluded}
-                className={`relative inline-flex h-7 w-14 rounded-full transition ${
-                  isActiveIncluded ? "bg-[#e9caca]" : "bg-background-secondary"
-                }`}
-                onClick={mode === "weekly" ? onToggleActiveWeekDay : undefined}
-                type="button"
-              >
-                <span
-                  className={`absolute top-1 size-5 rounded-full bg-card-bg-primary shadow transition ${
-                    isActiveIncluded ? "left-8" : "left-1"
-                  }`}
-                />
-              </button>
-            </td>
-          </tr>
-        </DataTable>
-        <p className="mt-3 text-xs text-txt-secondary">
-          {mode === "weekly"
-            ? "Selected weekday tabs will receive this same schedule."
-            : "Choose the monthly day tab that should receive this schedule."}
-        </p>
+              return (
+                <tr className={selected ? "bg-primary/5" : "opacity-60"} key={day.value}>
+                  <td className="px-4 py-3">
+                    <input
+                      aria-label={`Include ${day.label}`}
+                      checked={selected}
+                      className="size-5 accent-primary"
+                      name="days_of_week"
+                      onChange={() => onToggleDay(day.value)}
+                      type="checkbox"
+                      value={day.value}
+                    />
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-txt-primary">{day.label}</td>
+                  <td className="px-4 py-3">
+                    <input
+                      aria-label={`${day.label} start time`}
+                      className={fieldClass}
+                      disabled={!selected}
+                      name={`weekly_start_time_${day.value}`}
+                      onChange={(event) => onUpdateSlot(day.value, { startTime: event.target.value })}
+                      required={selected}
+                      type="time"
+                      value={slot.startTime}
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      aria-label={`${day.label} duration`}
+                      className={fieldClass}
+                      disabled={!selected}
+                      max={240}
+                      min={15}
+                      name={`weekly_duration_${day.value}`}
+                      onChange={(event) => onUpdateSlot(day.value, { durationMinutes: Number(event.target.value) })}
+                      required={selected}
+                      type="number"
+                      value={slot.durationMinutes}
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      aria-label={`${day.label} capacity`}
+                      className={fieldClass}
+                      disabled={!selected}
+                      max={100}
+                      min={1}
+                      name={`weekly_capacity_${day.value}`}
+                      onChange={(event) => onUpdateSlot(day.value, { capacity: Number(event.target.value) })}
+                      required={selected}
+                      type="number"
+                      value={slot.capacity}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </section>
   );

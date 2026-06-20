@@ -41,6 +41,8 @@ function classPayload(form: HTMLFormElement): CreatePilatesClassPayload {
     description: String(data.get("description")).trim() || null,
     default_duration_minutes: Number(data.get("default_duration_minutes")),
     default_capacity: Number(data.get("default_capacity")),
+    default_price_amount: Number(data.get("default_price_amount")),
+    currency: "KWD",
     level: String(data.get("level")) as PilatesClassLevel,
     status: String(data.get("status")) as Exclude<PilatesClassStatus, "deleted">,
     ...(image instanceof File && image.size > 0 ? { image } : {}),
@@ -182,6 +184,8 @@ function CreateClassCard({
           </label>
           <FormInput defaultValue={60} label="Default duration (minutes)" max={240} min={15} name="default_duration_minutes" required type="number" />
           <FormInput defaultValue={8} label="Default capacity" max={100} min={1} name="default_capacity" required type="number" />
+          <FormInput defaultValue={15} label="Price per booking (KWD)" min={0} name="default_price_amount" required step="0.001" type="number" />
+          <FormInput defaultValue="KWD" disabled label="Currency" readOnly type="text" />
           <Select defaultValue="all_levels" label="Level" name="level" options={["beginner", "intermediate", "advanced", "all_levels"]} />
           <Select defaultValue="active" label="Status" name="status" options={["draft", "active", "inactive"]} />
           <label className="grid gap-1.5 text-xs font-bold md:col-span-2">
@@ -232,6 +236,7 @@ function ClassListCard({ item }: { item: PilatesClassDefinition }) {
           <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-txt-primary">
             <span className="rounded-lg bg-primary/10 px-3 py-2">◷ {item.default_duration_minutes} minutes</span>
             <span className="rounded-lg bg-primary/10 px-3 py-2">♙ {item.default_capacity} capacity</span>
+            <span className="rounded-lg bg-primary/10 px-3 py-2">Price per booking: {item.default_price_amount.toFixed(3)} {item.currency}</span>
             <span className="rounded-lg bg-primary/10 px-3 py-2">Level: {label(item.level)}</span>
           </div>
         </div>

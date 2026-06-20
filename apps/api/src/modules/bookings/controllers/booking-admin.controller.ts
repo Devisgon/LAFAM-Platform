@@ -67,7 +67,7 @@ import { AdminCancelBookingDto } from '../dto/admin-cancel-booking.dto';
 import { AdminOverrideBookingDto } from '../dto/admin-override-booking.dto';
 import { ListAdminBookingsQueryDto } from '../dto/list-admin-bookings-query.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
-import { CreatePrivateBookingDto } from '../dto/create-private-booking.dto';
+import { CreateAdminPrivateBookingDto } from '../dto/create-admin-private-booking.dto';
 import { ListAdminCalendarQueryDto } from '../dto/list-admin-calendar-query.dto';
 import { ListAdminPrivateBookingsQueryDto } from '../dto/list-private-bookings-query.dto';
 import { PrivateBookingParamDto } from '../dto/private-booking-param.dto';
@@ -173,7 +173,7 @@ export class BookingAdminController {
   @HttpCode(HttpStatus.CREATED)
   async createPrivateBooking(
     @CurrentAuth() auth: AuthInternalContext | undefined,
-    @Body() body: CreatePrivateBookingDto,
+    @Body() body: CreateAdminPrivateBookingDto,
   ): Promise<ApiSuccessResponse<PrivateBookingCreateResult>> {
     const data = await this.bookingAdminService.createPrivateBooking(
       resolveAuthenticatedAdminId(auth),

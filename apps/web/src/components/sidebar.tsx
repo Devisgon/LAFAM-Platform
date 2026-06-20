@@ -1,8 +1,34 @@
 "use client";
+
 import Link from "next/link";
-import { useState } from "react";
-import {CalendarDays,ChevronDown,CreditCard,Gauge, LogOut, Menu,  Settings,  Star, UserRound,ListChecks,WalletCards,type LucideIcon,} from "lucide-react";
-type IconName =| "bookings"| "calendar" | "dashboard" | "logout"  | "payments" | "reviews"  | "services"| "settings"| "staff" | "wallet";
+import { useEffect, useState } from "react";
+import {
+  CalendarDays,
+  ChevronDown,
+  CreditCard,
+  Gauge,
+  LogOut,
+  Menu,
+  Settings,
+  Star,
+  UserRound,
+  ListChecks,
+  WalletCards,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+
+type IconName =
+  | "bookings"
+  | "calendar"
+  | "dashboard"
+  | "logout"
+  | "payments"
+  | "reviews"
+  | "services"
+  | "settings"
+  | "staff"
+  | "wallet";
 
 type NavItem = {
   href: string;
@@ -14,6 +40,8 @@ type NavigationChild = {
   href: string;
   label: string;
 };
+
+const MOBILE_SIDEBAR_EVENT = "lafam:open-mobile-sidebar";
 
 const icons: Record<IconName, LucideIcon> = {
   dashboard: Gauge,
@@ -52,12 +80,14 @@ function NavigationLink({
   href,
   icon,
   label,
+  onNavigate,
 }: {
   active?: boolean;
   collapsed: boolean;
   href: string;
   icon: IconName;
   label: string;
+  onNavigate?: () => void;
 }) {
   return (
     <Link
@@ -65,9 +95,11 @@ function NavigationLink({
       title={label}
       aria-label={label}
       aria-current={active ? "page" : undefined}
-      className={`flex min-h-14 w-full items-center text-[14px]  transition hover:bg-black hover:text-white ${
-  collapsed ? "justify-center px-0" : "gap-4 px-5"
-} ${active ? "bg-black text-white" : ""}`}>
+      onClick={onNavigate}
+      className={`flex min-h-14 w-full items-center text-[14px] transition hover:bg-black hover:text-white ${
+        collapsed ? "justify-center px-0" : "gap-4 px-5"
+      } ${active ? "bg-black text-white" : ""}`}
+    >
       <Icon name={icon} />
       {!collapsed && <span>{label}</span>}
     </Link>
@@ -80,12 +112,14 @@ function NavigationGroup({
   collapsed,
   icon,
   label,
+  onNavigate,
 }: {
   activeItem?: string;
   children: NavigationChild[];
   collapsed: boolean;
   icon: IconName;
   label: string;
+  onNavigate?: () => void;
 }) {
   const [open, setOpen] = useState(true);
 
@@ -96,6 +130,7 @@ function NavigationGroup({
         href={children[0]?.href || "#"}
         icon={icon}
         label={label}
+        onNavigate={onNavigate}
       />
     );
   }
@@ -108,10 +143,8 @@ function NavigationGroup({
         aria-label={label}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className={`flex min-h-14 w-full items-center gap-4 px-5 text-[14px]  transition ${
-          open
-            ? "bg-black text-white"
-            : "text-black hover:bg-black hover:text-white"
+        className={`flex min-h-14 w-full items-center gap-4 px-5 text-[14px] transition ${
+          open ? "bg-black text-white" : "text-black hover:bg-black hover:text-white"
         }`}
       >
         <Icon name={icon} />
@@ -132,6 +165,7 @@ function NavigationGroup({
               key={child.label}
               href={child.href}
               aria-current={child.label === activeItem ? "page" : undefined}
+              onClick={onNavigate}
               className={`block w-full px-[72px] py-2 text-[16px] font-medium text-black transition hover:bg-black/10 ${
                 child.label === activeItem ? "bg-black/10" : ""
               }`}
@@ -145,89 +179,165 @@ function NavigationGroup({
   );
 }
 
-export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const width = collapsed ? "md:w-[72px]" : "md:w-[300px]";
-
+function SidebarContent({
+  activeItem,
+  collapsed,
+  isMobile = false,
+  onClose,
+  onToggleCollapse,
+}: {
+  activeItem: string;
+  collapsed: boolean;
+  isMobile?: boolean;
+  onClose?: () => void;
+  onToggleCollapse?: () => void;
+}) {
   return (
     <>
-      <aside
-        className={`relative z-20   flex shrink-0 flex-col bg-foreground py-4 text-black transition-[width] duration-300 md:fixed md:bottom-0 md:left-0 md:top-20 md:overflow-y-auto ${width}`}
+      <div
+        className={`flex items-center px-5 ${
+          collapsed ? "justify-center" : "justify-between"
+        }`}
       >
-        <div
-          className={`flex items-center px-5 ${
-            collapsed ? "justify-center" : "justify-between"
-          }`}
-        >
-          {!collapsed && (
-            <h2 className="text-[16px] ">Navigation</h2>
-          )}
+        {!collapsed && <h2 className="text-[16px]">Navigation</h2>}
 
+        {isMobile ? (
+          <button
+            type="button"
+            aria-label="Close sidebar"
+            onClick={onClose}
+            className="rounded-md p-1 transition"
+          >
+            <X size={24} strokeWidth={3} />
+          </button>
+        ) : (
           <button
             type="button"
             aria-label="Toggle sidebar"
-            onClick={() => setCollapsed((value) => !value)}
-            className="rounded-md p-1  transition "
+            onClick={onToggleCollapse}
+            className="rounded-md p-1 transition"
           >
             <Menu size={24} strokeWidth={3} />
           </button>
-        </div>
+        )}
+      </div>
 
-        <nav className="mt-8 grid " aria-label="Main navigation">
-          {primaryItems.map((item) => (
-            <NavigationLink
-              key={item.label}
-              active={item.label === activeItem}
-              collapsed={collapsed}
-              {...item}
-            />
-          ))}
-
-          <NavigationGroup
-            activeItem={activeItem}
-            collapsed={collapsed}
-            icon="services"
-            label="Services"
-          >
-            {[{ href: "/admin/services/pilates", label: "Pilates" }]}
-          </NavigationGroup>
-
+      <nav className="mt-8 grid" aria-label="Main navigation">
+        {primaryItems.map((item) => (
           <NavigationLink
-            active={activeItem === "Staff"}
+            key={item.label}
+            active={item.label === activeItem}
             collapsed={collapsed}
-            href="/admin/staff"
-            icon="staff"
-            label="Staff"
+            onNavigate={onClose}
+            {...item}
           />
+        ))}
 
-          <NavigationLink
-            active={activeItem === "Wallet"}
-            collapsed={collapsed}
-            href="/admin/wallet"
-            icon="wallet"
-            label="Wallet"
-          />
-
-          {managementItems.map((item) => (
-            <NavigationLink
-              key={item.label}
-              active={item.label === activeItem}
-              collapsed={collapsed}
-              {...item}
-            />
-          ))}
-        </nav>
-
-        <a
-          href="#"
-          title="Log Out"
-          className={`mt-8 flex min-h-10 items-center rounded-lg text-[17px] font-medium text-black transition hover:bg-black/10 md:mt-auto ${
-            collapsed ? "justify-center px-2" : "gap-4 px-3"
-          }`}
+        <NavigationGroup
+          activeItem={activeItem}
+          collapsed={collapsed}
+          icon="services"
+          label="Services"
+          onNavigate={onClose}
         >
-          <Icon name="logout" />
-          {!collapsed && <span>Log Out</span>}
-        </a>
+          {[{ href: "/admin/services/pilates", label: "Pilates" }]}
+        </NavigationGroup>
+
+        <NavigationLink
+          active={activeItem === "Staff"}
+          collapsed={collapsed}
+          href="/admin/staff"
+          icon="staff"
+          label="Staff"
+          onNavigate={onClose}
+        />
+
+        <NavigationLink
+          active={activeItem === "Wallet"}
+          collapsed={collapsed}
+          href="/admin/wallet"
+          icon="wallet"
+          label="Wallet"
+          onNavigate={onClose}
+        />
+
+        {managementItems.map((item) => (
+          <NavigationLink
+            key={item.label}
+            active={item.label === activeItem}
+            collapsed={collapsed}
+            onNavigate={onClose}
+            {...item}
+          />
+        ))}
+      </nav>
+
+      <a
+        href="#"
+        title="Log Out"
+        onClick={onClose}
+        className={`mt-8 flex min-h-10 items-center rounded-lg text-[17px] font-medium text-black transition hover:bg-black/10 md:mt-auto ${
+          collapsed ? "justify-center px-2" : "gap-4 px-3"
+        }`}
+      >
+        <Icon name="logout" />
+        {!collapsed && <span>Log Out</span>}
+      </a>
+    </>
+  );
+}
+
+export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const width = collapsed ? "md:w-[72px]" : "md:w-[300px]";
+
+  useEffect(() => {
+    const openMobileSidebar = () => setMobileOpen(true);
+
+    window.addEventListener(MOBILE_SIDEBAR_EVENT, openMobileSidebar);
+
+    return () => {
+      window.removeEventListener(MOBILE_SIDEBAR_EVENT, openMobileSidebar);
+    };
+  }, []);
+
+  return (
+    <>
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <button
+          type="button"
+          aria-label="Close sidebar overlay"
+          onClick={() => setMobileOpen(false)}
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+        />
+      )}
+
+      {/* Mobile sidebar */}
+      <aside
+        className={`fixed bottom-0 left-0 top-0 z-50 flex w-[280px] shrink-0 flex-col bg-foreground py-4 text-black shadow-xl transition-transform duration-300 md:hidden ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <SidebarContent
+          activeItem={activeItem}
+          collapsed={false}
+          isMobile
+          onClose={() => setMobileOpen(false)}
+        />
+      </aside>
+
+      {/* Desktop sidebar */}
+      <aside
+        className={`relative z-20 hidden shrink-0 flex-col bg-foreground py-4 text-black transition-[width] duration-300 md:fixed md:bottom-0 md:left-0 md:top-20 md:flex md:overflow-y-auto ${width}`}
+      >
+        <SidebarContent
+          activeItem={activeItem}
+          collapsed={collapsed}
+          onToggleCollapse={() => setCollapsed((value) => !value)}
+        />
       </aside>
 
       <div

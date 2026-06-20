@@ -116,6 +116,16 @@ export type AdminBookingTrainer = {
   staff_profile_id: string;
 };
 
+export type AdminBookingPrice = {
+  amount: number | null;
+  currency: string | null;
+  source:
+    | "schedule_override"
+    | "class_default"
+    | "private_booking"
+    | "not_configured";
+};
+
 export type AdminBooking = {
   admin_notes: string | null;
   booking_number: string;
@@ -131,6 +141,7 @@ export type AdminBooking = {
   no_show_at: string | null;
   payment_required: boolean;
   payment_status: AdminBookingPaymentStatus;
+  price?: AdminBookingPrice | null;
   realtime_version: number;
   rescheduled_from_booking_id: string | null;
   schedule: AdminBookingSchedule | null;
@@ -223,9 +234,11 @@ export type AdminBookingCalendarResult = {
 };
 
 export type CreatePrivateTrainerBookingPayload = {
+  currency: "KWD";
   duration_minutes?: number;
   idempotency_key?: string;
   payment_required?: boolean;
+  price_amount: number;
   session_date: string;
   start_time: string;
   studio?: string;
@@ -248,6 +261,7 @@ export type PrivateTrainerBooking = {
   no_show_at: string | null;
   payment_required: boolean;
   payment_status: AdminBookingPaymentStatus;
+  price?: AdminBookingPrice | null;
   realtime_version: number;
   rescheduled_at: string | null;
   rescheduled_from_private_booking_id: string | null;

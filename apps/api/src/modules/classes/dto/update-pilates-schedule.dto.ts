@@ -21,6 +21,7 @@ import { Transform, type TransformFnParams } from 'class-transformer';
 import {
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -34,17 +35,24 @@ import {
 import {
   PILATES_CLASS_CAPACITY_MAX,
   PILATES_CLASS_CAPACITY_MIN,
+  PILATES_CLASS_ALLOWED_CURRENCIES,
   PILATES_CLASS_DATE_PATTERN,
+  PILATES_CLASS_DEFAULT_CURRENCY,
   PILATES_CLASS_DEFAULT_STUDIO,
   PILATES_CLASS_DURATION_MAX_MINUTES,
   PILATES_CLASS_DURATION_MIN_MINUTES,
+  PILATES_CLASS_PRICE_AMOUNT_MIN,
+  PILATES_CLASS_PRICE_DECIMAL_PLACES,
   PILATES_CLASS_STUDIO_MAX_LENGTH,
   PILATES_CLASS_STUDIO_MIN_LENGTH,
   PILATES_CLASS_TIME_VALUE_PATTERN,
   PILATES_SCHEDULE_DEFAULT_UPDATE_SCOPE,
   PILATES_SCHEDULE_UPDATE_SCOPES,
 } from '../constants/pilates-class.constants';
-import type { PilatesScheduleUpdateScope } from '../constants/pilates-class.constants';
+import type {
+  PilatesClassCurrency,
+  PilatesScheduleUpdateScope,
+} from '../constants/pilates-class.constants';
 
 function optionalTrimmedString({ value }: TransformFnParams): unknown {
   if (typeof value === 'undefined' || value === null) {
@@ -80,6 +88,23 @@ function optionalInteger({ value }: TransformFnParams): unknown {
   }
 
   return Number(trimmedValue);
+}
+
+function optionalDecimal({ value }: TransformFnParams): unknown {
+  if (typeof value === 'undefined' || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue.length > 0 ? Number(trimmedValue) : undefined;
 }
 
 export class UpdatePilatesScheduleDto {
@@ -204,4 +229,34 @@ export class UpdatePilatesScheduleDto {
     message: `capacity must not exceed ${PILATES_CLASS_CAPACITY_MAX}.`,
   })
   readonly capacity?: number;
+
+  @ApiPropertyOptional({
+    description: 'Schedule price override.',
+    example: 15,
+    minimum: PILATES_CLASS_PRICE_AMOUNT_MIN,
+  })
+  @Transform(optionalDecimal)
+  @IsOptional()
+  @IsNumber(
+    { maxDecimalPlaces: PILATES_CLASS_PRICE_DECIMAL_PLACES },
+    {
+      message: `price_amount must be a number with no more than ${PILATES_CLASS_PRICE_DECIMAL_PLACES} decimal places.`,
+    },
+  )
+  @Min(PILATES_CLASS_PRICE_AMOUNT_MIN, {
+    message: `price_amount must be at least ${PILATES_CLASS_PRICE_AMOUNT_MIN}.`,
+  })
+  readonly price_amount?: number;
+
+  @ApiPropertyOptional({
+    description: 'Schedule currency. Current Payment Module supports KWD only.',
+    enum: PILATES_CLASS_ALLOWED_CURRENCIES,
+    example: PILATES_CLASS_DEFAULT_CURRENCY,
+  })
+  @Transform(optionalTrimmedString)
+  @IsOptional()
+  @IsIn(PILATES_CLASS_ALLOWED_CURRENCIES, {
+    message: 'currency must be KWD.',
+  })
+  readonly currency?: PilatesClassCurrency;
 }

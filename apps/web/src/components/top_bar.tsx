@@ -1,6 +1,8 @@
 "use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { Menu } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar } from "./reuseable_ui_components/avatar";
 
@@ -12,23 +14,40 @@ type TopBarProps = {
   title?: string;
 };
 
+const MOBILE_SIDEBAR_EVENT = "lafam:open-mobile-sidebar";
+
 export function TopBar({ actionHref, actionLabel, title }: TopBarProps) {
   const { avatarUrl, user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+
+  const openMobileSidebar = () => {
+    window.dispatchEvent(new Event(MOBILE_SIDEBAR_EVENT));
+  };
 
   return (
     <header
       aria-label={title ? `${title} page header` : "Page header"}
       className="sticky top-0 z-30 flex h-20 w-full items-center justify-between gap-4 border-b border-white bg-foreground px-5"
     >
-      <Image
-        alt="logo"
-        className="size-12 object-contain"
-        height={36}
-        priority
-        src="/logo.svg"
-        width={28}
-      />
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          aria-label="Open sidebar"
+          onClick={openMobileSidebar}
+          className="rounded-md p-1 text-black transition hover:bg-black/10 md:hidden"
+        >
+          <Menu size={26} strokeWidth={3} />
+        </button>
+
+        <Image
+          alt="logo"
+          className="size-12 object-contain"
+          height={36}
+          priority
+          src="/logo.svg"
+          width={28}
+        />
+      </div>
 
       <div className="flex flex-wrap items-center gap-3">
         {actionHref && actionLabel ? (
@@ -39,6 +58,7 @@ export function TopBar({ actionHref, actionLabel, title }: TopBarProps) {
             {actionLabel}
           </Link>
         ) : null}
+
         <Link
           aria-label="Open profile settings"
           className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"

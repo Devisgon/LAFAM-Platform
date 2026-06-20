@@ -981,8 +981,9 @@ export class PilatesClassAdminService {
           PILATES_CLASS_DEFAULT_DURATION_MINUTES,
         default_capacity:
           dto.default_capacity ?? PILATES_CLASS_DEFAULT_CAPACITY,
-        default_price_amount: PILATES_CLASS_DEFAULT_PRICE_AMOUNT,
-        currency: PILATES_CLASS_DEFAULT_CURRENCY,
+        default_price_amount:
+          dto.default_price_amount ?? PILATES_CLASS_DEFAULT_PRICE_AMOUNT,
+        currency: dto.currency ?? PILATES_CLASS_DEFAULT_CURRENCY,
         level: dto.level ?? PILATES_CLASS_DEFAULT_LEVEL,
         status: dto.status ?? 'draft',
         image_path: uploadedImagePath,
@@ -1077,6 +1078,16 @@ export class PilatesClassAdminService {
     if (dto.default_capacity !== undefined) {
       patch.default_capacity = dto.default_capacity;
       businessPatchFields.default_capacity = dto.default_capacity;
+    }
+
+    if (dto.default_price_amount !== undefined) {
+      patch.default_price_amount = dto.default_price_amount;
+      businessPatchFields.default_price_amount = dto.default_price_amount;
+    }
+
+    if (dto.currency !== undefined) {
+      patch.currency = dto.currency;
+      businessPatchFields.currency = dto.currency;
     }
 
     if (dto.level !== undefined) {

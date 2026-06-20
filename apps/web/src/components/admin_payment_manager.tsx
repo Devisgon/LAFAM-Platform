@@ -11,6 +11,10 @@ import {
   useAdminPayments,
   useAdminPaymentTransactions,
 } from "@/hooks/useAdminPayments";
+import {
+  useAdminBookings,
+  useAdminPrivateBookings,
+} from "@/hooks/useAdminBookings";
 import { useAdminUsers } from "@/hooks/useAdminUsers";
 import {
   adminPaymentsClient,
@@ -18,13 +22,17 @@ import {
   type AdminPaymentTransactionFilters,
   type PaymentDetail,
   type PaymentMethod,
-  type PaymentProvider,
   type PaymentStatus,
   type PaymentSummary,
-  type PaymentTargetType,
   type PaymentTransactionStatus,
   type PaymentTransactionType,
 } from "@/lib/payment";
+import {
+  type AdminBooking,
+  type AdminBookingFilters,
+  type AdminPrivateBookingFilters,
+  type PrivateTrainerBooking,
+} from "@/lib/admin-bookings";
 import { type AdminUser, type AdminUserFilters } from "@/lib/admin-users";
 import { Badge } from "@/components/reuseable_ui_components/badge";
 import { DataTable } from "@/components/reuseable_ui_components/data_table";
@@ -42,34 +50,7 @@ const fieldClass =
 
 const pageSizeOptions = [10, 25, 50];
 
-const targetTypes: PaymentTargetType[] = [
-  "booking",
-  "private_booking",
-  "wallet_top_up",
-];
 const paymentMethods: PaymentMethod[] = ["knet", "card", "wallet"];
-const paymentProviders: PaymentProvider[] = [
-  "mock",
-  "knet",
-  "tap",
-  "myfatoorah",
-  "checkout",
-  "wallet",
-  "manual",
-];
-const paymentStatuses: PaymentStatus[] = [
-  "pending",
-  "requires_redirect",
-  "processing",
-  "paid",
-  "failed",
-  "cancelled",
-  "expired",
-  "refund_requested",
-  "refund_processing",
-  "manual_refund_required",
-  "refunded",
-];
 const transactionTypes: PaymentTransactionType[] = [
   "intent_created",
   "provider_request",
@@ -155,6 +136,23 @@ function getPaymentUserName(
   return user ? getUserDisplayName(user) : `User ${userId.slice(0, 8)}`;
 }
 
+function getBookingCustomerName(
+  booking: AdminBooking | PrivateTrainerBooking,
+): string {
+  return (
+    booking.customer?.full_name ??
+    booking.customer?.email ??
+    booking.customer?.phone ??
+    "Unknown customer"
+  );
+}
+
+function getBookingOptionLabel(
+  booking: AdminBooking | PrivateTrainerBooking,
+): string {
+  return `${getBookingCustomerName(booking)} - ${booking.booking_number}`;
+}
+
 function statusTone(
   status: PaymentStatus | PaymentTransactionStatus,
 ): "neutral" | "info" | "success" | "warning" | "error" {
@@ -190,6 +188,24 @@ function jsonPreview(value: Record<string, unknown>): string {
 
 export function AdminPaymentManager() {
   const userFilters = useMemo<AdminUserFilters>(() => ({}), []);
+  const bookingFilters = useMemo<AdminBookingFilters>(
+    () => ({
+      limit: 100,
+      offset: 0,
+      sort_by: "created_at",
+      sort_direction: "desc",
+    }),
+    [],
+  );
+  const privateBookingFilters = useMemo<AdminPrivateBookingFilters>(
+    () => ({
+      limit: 100,
+      offset: 0,
+      sort_by: "created_at",
+      sort_direction: "desc",
+    }),
+    [],
+  );
   const {
     users,
     error: usersError,
@@ -203,10 +219,40 @@ export function AdminPaymentManager() {
     () => users.map((user) => [user.id, getUserOptionLabel(user)] as const),
     [users],
   );
+  const {
+    bookings,
+    error: bookingsError,
+    isLoading: areBookingsLoading,
+  } = useAdminBookings(bookingFilters);
+  const {
+    bookings: privateBookings,
+    error: privateBookingsError,
+    isLoading: arePrivateBookingsLoading,
+  } = useAdminPrivateBookings(privateBookingFilters);
+  const bookingOptions = useMemo(
+    () =>
+      bookings.map(
+        (booking) => [booking.id, getBookingOptionLabel(booking)] as const,
+      ),
+    [bookings],
+  );
+  const privateBookingOptions = useMemo(
+    () =>
+      privateBookings.map(
+        (booking) => [booking.id, getBookingOptionLabel(booking)] as const,
+      ),
+    [privateBookings],
+  );
 
   return (
     <PaymentListPanel
+      areBookingsLoading={areBookingsLoading}
+      arePrivateBookingsLoading={arePrivateBookingsLoading}
       areUsersLoading={areUsersLoading}
+      bookingOptions={bookingOptions}
+      bookingsError={bookingsError}
+      privateBookingOptions={privateBookingOptions}
+      privateBookingsError={privateBookingsError}
       userOptions={userOptions}
       usersById={usersById}
       usersError={usersError}
@@ -215,12 +261,24 @@ export function AdminPaymentManager() {
 }
 
 function PaymentListPanel({
+  areBookingsLoading,
+  arePrivateBookingsLoading,
   areUsersLoading,
+  bookingOptions,
+  bookingsError,
+  privateBookingOptions,
+  privateBookingsError,
   userOptions,
   usersById,
   usersError,
 }: {
+  areBookingsLoading: boolean;
+  arePrivateBookingsLoading: boolean;
   areUsersLoading: boolean;
+  bookingOptions: ReadonlyArray<readonly [string, string]>;
+  bookingsError: string | null;
+  privateBookingOptions: ReadonlyArray<readonly [string, string]>;
+  privateBookingsError: string | null;
   userOptions: ReadonlyArray<readonly [string, string]>;
   usersById: Map<string, AdminUser>;
   usersError: string | null;
@@ -229,12 +287,7 @@ function PaymentListPanel({
     null,
   );
   const [userId, setUserId] = useState("");
-  const [targetType, setTargetType] = useState<PaymentTargetType | "">("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
-  const [paymentProvider, setPaymentProvider] = useState<PaymentProvider | "">(
-    "",
-  );
-  const [status, setStatus] = useState<PaymentStatus | "">("");
   const [bookingId, setBookingId] = useState("");
   const [privateBookingId, setPrivateBookingId] = useState("");
   const [fromDate, setFromDate] = useState("");
@@ -251,10 +304,7 @@ function PaymentListPanel({
       sort_by: "created_at",
       sort_direction: "desc",
       ...(userId ? { user_id: userId } : {}),
-      ...(targetType ? { target_type: targetType } : {}),
       ...(paymentMethod ? { payment_method: paymentMethod } : {}),
-      ...(paymentProvider ? { payment_provider: paymentProvider } : {}),
-      ...(status ? { status } : {}),
       ...(bookingId.trim() ? { booking_id: bookingId } : {}),
       ...(privateBookingId.trim()
         ? { private_booking_id: privateBookingId }
@@ -268,10 +318,7 @@ function PaymentListPanel({
       fromDate,
       pageSize,
       paymentMethod,
-      paymentProvider,
       privateBookingId,
-      status,
-      targetType,
       toDate,
       userId,
     ],
@@ -356,7 +403,7 @@ function PaymentListPanel({
             <FileSpreadsheet aria-hidden="true" size={22} strokeWidth={2.4} />
           </button>
 
-          <div className="grid flex-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid flex-1 gap-3 md:grid-cols-2">
             <FilterSelect
               disabled={areUsersLoading || userOptions.length === 0}
               label="User"
@@ -371,18 +418,6 @@ function PaymentListPanel({
               value={userId}
             />
             <FilterSelect
-              label="Payment type"
-              onChange={(value) => {
-                setTargetType(value as PaymentTargetType | "");
-                resetToFirstPage();
-              }}
-              options={[
-                ["", "All payment types"],
-                ...targetTypes.map((item) => [item, label(item)] as const),
-              ]}
-              value={targetType}
-            />
-            <FilterSelect
               label="Payment method"
               onChange={(value) => {
                 setPaymentMethod(value as PaymentMethod | "");
@@ -394,50 +429,39 @@ function PaymentListPanel({
               ]}
               value={paymentMethod}
             />
-            <FilterSelect
-              label="Provider"
-              onChange={(value) => {
-                setPaymentProvider(value as PaymentProvider | "");
-                resetToFirstPage();
-              }}
-              options={[
-                ["", "All providers"],
-                ...paymentProviders.map((item) => [item, label(item)] as const),
-              ]}
-              value={paymentProvider}
-            />
-            <FilterSelect
-              label="Status"
-              onChange={(value) => {
-                setStatus(value as PaymentStatus | "");
-                resetToFirstPage();
-              }}
-              options={[
-                ["", "All statuses"],
-                ...paymentStatuses.map((item) => [item, label(item)] as const),
-              ]}
-              value={status}
-            />
           </div>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <TextField
+          <FilterSelect
+            disabled={areBookingsLoading}
             label="Booking ID"
             onChange={(value) => {
               setBookingId(value);
               resetToFirstPage();
             }}
-            placeholder="booking_id"
+            options={[
+              ["", areBookingsLoading ? "Loading bookings..." : "All class bookings"],
+              ...bookingOptions,
+            ]}
             value={bookingId}
           />
-          <TextField
+          <FilterSelect
+            disabled={arePrivateBookingsLoading}
             label="Private booking ID"
             onChange={(value) => {
               setPrivateBookingId(value);
               resetToFirstPage();
             }}
-            placeholder="private_booking_id"
+            options={[
+              [
+                "",
+                arePrivateBookingsLoading
+                  ? "Loading private bookings..."
+                  : "All private bookings",
+              ],
+              ...privateBookingOptions,
+            ]}
             value={privateBookingId}
           />
           <DateField
@@ -458,9 +482,9 @@ function PaymentListPanel({
           />
         </div>
 
-        {usersError ? (
+        {usersError || bookingsError || privateBookingsError ? (
           <p className="text-sm text-error" role="alert">
-            {usersError}
+            {usersError ?? bookingsError ?? privateBookingsError}
           </p>
         ) : null}
       </div>
@@ -1258,32 +1282,6 @@ function FilterSelect({
         aria-hidden="true"
         className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
         size={16}
-      />
-    </label>
-  );
-}
-
-function TextField({
-  label: textLabel,
-  onChange,
-  placeholder,
-  value,
-}: {
-  label: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  value: string;
-}) {
-  return (
-    <label>
-      <span className="sr-only">{textLabel}</span>
-      <input
-        aria-label={textLabel}
-        className={fieldClass}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        type="text"
-        value={value}
       />
     </label>
   );

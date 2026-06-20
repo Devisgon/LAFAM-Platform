@@ -124,6 +124,11 @@ function formatDateTime(value?: string | null): string {
   }).format(date);
 }
 
+function formatPrice(amount?: number | null, currency?: string | null): string {
+  if (amount === null || amount === undefined) return "Not configured";
+  return `${amount.toFixed(3)} ${currency ?? "KWD"}`;
+}
+
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The booking request failed.";
 }
@@ -291,7 +296,13 @@ function BookingListPanel({ previousOnly }: { previousOnly: boolean }) {
     () =>
       classes
         .filter((item) => item.status !== "deleted")
-        .map((item) => [item.id, item.title] as const),
+        .map(
+          (item) =>
+            [
+              item.id,
+              `${item.title} - ${formatPrice(item.default_price_amount, item.currency)}`,
+            ] as const,
+        ),
     [classes],
   );
   const trainerOptions = useMemo(
@@ -568,6 +579,7 @@ function BookingListPanel({ previousOnly }: { previousOnly: boolean }) {
               { key: "date", heading: "Date" },
               { key: "status", heading: "Status" },
               { key: "payment", heading: "Payment" },
+              { key: "price", heading: "Price" },
               { key: "action", heading: "Action" },
             ]}
             emptyMessage="No booking records found."
@@ -702,6 +714,9 @@ function BookingRecordRow({
           {label(booking.payment_status)}
         </Badge>
       </td>
+      <td className="px-4 py-4 align-top font-semibold text-txt-primary">
+        {formatPrice(booking.price?.amount, booking.price?.currency)}
+      </td>
       <td className="px-4 py-4 align-top">
         <button
           className="min-h-10 rounded-sm bg-button-primary px-4 text-sm font-semibold text-txt-primary transition hover:opacity-90"
@@ -763,6 +778,9 @@ function PrivateBookingRecordRow({
         <Badge tone={paymentTone(booking.payment_status)}>
           {label(booking.payment_status)}
         </Badge>
+      </td>
+      <td className="px-4 py-4 align-top font-semibold text-txt-primary">
+        {formatPrice(booking.price?.amount, booking.price?.currency)}
       </td>
       <td className="px-4 py-4 align-top">
         <button
@@ -828,6 +846,7 @@ function BookingDetailPanel({
             `${formatTime(schedule.start_time)} - ${formatTime(schedule.end_time)}`,
             schedule.class?.title ?? schedule.class_id,
             schedule.trainer?.display_name ?? schedule.trainer_staff_profile_id,
+            formatPrice(schedule.price_amount, schedule.currency),
           ].join(" | "),
         ] as const),
     [rescheduleDate, targetSchedules],
@@ -983,6 +1002,7 @@ function BookingDetailPanel({
         <DetailItem label="Trainer" value={trainerName} />
         <DetailItem label="Date" value={formatDate(bookingDate)} />
         <DetailItem label="Time" value={booking.schedule ? `${booking.schedule.start_time} - ${booking.schedule.end_time}` : formatDateTime(booking.created_at)} />
+        <DetailItem label="Price" value={formatPrice(booking.price?.amount, booking.price?.currency)} />
         <DetailItem label="Booking ID" value={booking.id} />
         <DetailItem label="Schedule ID" value={booking.schedule_id} />
         <DetailItem label="Admin notes" value={booking.admin_notes ?? "No admin notes"} />
@@ -1250,6 +1270,7 @@ function PrivateBookingDetailPanel({
         <DetailItem label="Time" value={`${formatTime(booking.start_time)} - ${formatTime(booking.end_time)}`} />
         <DetailItem label="Duration" value={`${booking.duration_minutes} minutes`} />
         <DetailItem label="Studio" value={booking.studio} />
+        <DetailItem label="Price" value={formatPrice(booking.price?.amount, booking.price?.currency)} />
         <DetailItem label="Booking ID" value={booking.id} />
         <DetailItem label="Admin notes" value={booking.admin_notes ?? "No admin notes"} />
       </dl>
@@ -1285,7 +1306,6 @@ function PrivateBookingDetailPanel({
               </span>
             </label>
             <FormField label="Reason" name="reason" />
-            <FormField label="Idempotency key" name="idempotency_key" placeholder="Auto-generated if empty" />
             <button className="mt-auto min-h-11 rounded-sm bg-button-primary px-4 text-sm font-semibold text-txt-primary disabled:opacity-60" disabled={isSaving} type="submit">
               Reschedule
             </button>
@@ -1359,8 +1379,10 @@ function CreatePrivateBookingCard({
     const form = event.currentTarget;
     const formData = new FormData(form);
     const payload: CreatePrivateTrainerBookingPayload = {
+      currency: "KWD",
       duration_minutes: Number(formData.get("duration_minutes") || 60),
       payment_required: formData.get("payment_required") === "true",
+      price_amount: Number(formData.get("price_amount") || 0),
       session_date: String(formData.get("session_date")).trim(),
       start_time: String(formData.get("start_time")).trim(),
       studio: String(formData.get("studio")).trim() || "LAFAM Pilates Studio",
@@ -1432,6 +1454,22 @@ function CreatePrivateBookingCard({
             label="Studio"
             name="studio"
           />
+          <FormField
+            defaultValue="15"
+            label="Booking price (KWD)"
+            min="0"
+            name="price_amount"
+            required
+            step="0.001"
+            type="number"
+          />
+          <FormField
+            defaultValue="KWD"
+            disabled
+            label="Currency"
+            name="currency_display"
+            type="text"
+          />
           <label className="grid gap-1.5 text-xs font-bold">
             Payment required
             <span className="relative">
@@ -1450,11 +1488,7 @@ function CreatePrivateBookingCard({
               />
             </span>
           </label>
-          <FormField
-            label="Idempotency key"
-            name="idempotency_key"
-            placeholder="Auto-generated if empty"
-          />
+
         </div>
       </div>
 
@@ -1542,17 +1576,23 @@ function DateField({
 
 function FormField({
   defaultValue,
+  disabled = false,
   label,
+  min,
   name,
   placeholder,
   required = false,
+  step,
   type = "text",
 }: {
   defaultValue?: string;
+  disabled?: boolean;
   label: string;
+  min?: string;
   name: string;
   placeholder?: string;
   required?: boolean;
+  step?: string;
   type?: "date" | "number" | "text" | "time";
 }) {
   return (
@@ -1561,9 +1601,12 @@ function FormField({
       <input
         className={fieldClass}
         defaultValue={defaultValue}
+        disabled={disabled}
+        min={min}
         name={name}
         placeholder={placeholder}
         required={required}
+        step={step}
         type={type}
       />
     </label>

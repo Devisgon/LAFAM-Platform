@@ -24,7 +24,6 @@ import {
   type WalletAccountSummary,
   type WalletLedgerEntryStatus,
   type WalletLedgerEntrySummary,
-  type WalletLedgerEntryType,
 } from "@/lib/admin-wallets";
 import { type AdminUser, type AdminUserFilters } from "@/lib/admin-users";
 import { Badge } from "@/components/reuseable_ui_components/badge";
@@ -44,24 +43,6 @@ const fieldClass =
   "min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-4 text-base text-txt-primary outline-none transition placeholder:text-txt-secondary focus:border-primary";
 
 const pageSizeOptions = [10, 25, 50];
-
-const walletStatuses: WalletAccountStatus[] = ["active", "frozen", "closed"];
-
-const entryTypes: WalletLedgerEntryType[] = [
-  "wallet_top_up",
-  "booking_payment",
-  "private_booking_payment",
-  "refund_credit",
-  "admin_adjustment_credit",
-  "admin_adjustment_debit",
-];
-
-const entryStatuses: WalletLedgerEntryStatus[] = [
-  "pending",
-  "posted",
-  "reversed",
-  "failed",
-];
 
 function label(value: string): string {
   return value
@@ -206,7 +187,6 @@ function WalletListPanel({
   usersError: string | null;
 }) {
   const [userId, setUserId] = useState("");
-  const [status, setStatus] = useState<WalletAccountStatus | "">("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [pageSize, setPageSize] = useState(pageSizeOptions[0]);
@@ -227,11 +207,10 @@ function WalletListPanel({
       sort_by: "created_at",
       sort_direction: "desc",
       ...(userId ? { user_id: userId } : {}),
-      ...(status ? { status } : {}),
       ...(fromDate ? { from_date: fromDate } : {}),
       ...(toDate ? { to_date: toDate } : {}),
     }),
-    [currentPage, fromDate, pageSize, status, toDate, userId],
+    [currentPage, fromDate, pageSize, toDate, userId],
   );
   const { error, isLoading, loadWallets, total, wallets } =
     useAdminWallets(filters);
@@ -309,7 +288,7 @@ function WalletListPanel({
             <FileSpreadsheet aria-hidden="true" size={22} strokeWidth={2.4} />
           </button>
 
-          <div className="grid flex-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid flex-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <FilterSelect
               disabled={areUsersLoading || userOptions.length === 0}
               label="User"
@@ -323,18 +302,6 @@ function WalletListPanel({
                 ...userOptions,
               ]}
               value={userId}
-            />
-            <FilterSelect
-              label="Status"
-              onChange={(value) => {
-                setStatus(value as WalletAccountStatus | "");
-                resetToFirstPage();
-              }}
-              options={[
-                ["", "All statuses"],
-                ...walletStatuses.map((item) => [item, label(item)] as const),
-              ]}
-              value={status}
             />
             <DateField
               label="From date"
@@ -815,10 +782,6 @@ function WalletTransactionsPanel({
 }) {
   const [userId, setUserId] = useState(initialUserId);
   const [walletAccountId, setWalletAccountId] = useState(initialWalletId);
-  const [entryType, setEntryType] = useState<WalletLedgerEntryType | "">("");
-  const [entryStatus, setEntryStatus] = useState<
-    WalletLedgerEntryStatus | ""
-  >("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [sortBy, setSortBy] =
@@ -859,15 +822,11 @@ function WalletTransactionsPanel({
       sort_by: sortBy,
       sort_direction: "desc",
       ...(walletAccountId ? { wallet_account_id: walletAccountId } : {}),
-      ...(entryType ? { entry_type: entryType } : {}),
-      ...(entryStatus ? { entry_status: entryStatus } : {}),
       ...(fromDate ? { from_date: fromDate } : {}),
       ...(toDate ? { to_date: toDate } : {}),
     }),
     [
       currentPage,
-      entryStatus,
-      entryType,
       fromDate,
       pageSize,
       sortBy,
@@ -905,8 +864,7 @@ function WalletTransactionsPanel({
             Transaction Ledger
           </h2>
           <p className="mt-1 text-sm text-txt-secondary">
-            Full-page wallet transaction search by user, account, type, status,
-            date, and amount sort.
+            Search wallet transactions by user, account, date, and amount sort.
           </p>
         </div>
         <button
@@ -919,7 +877,7 @@ function WalletTransactionsPanel({
       </header>
 
       <div className="grid gap-4 border-b border-background-secondary px-5 py-5">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2">
           <FilterSelect
             disabled={areUsersLoading || userOptions.length === 0}
             label="User"
@@ -955,30 +913,6 @@ function WalletTransactionsPanel({
               ...walletOptions,
             ]}
             value={walletAccountId}
-          />
-          <FilterSelect
-            label="Entry type"
-            onChange={(value) => {
-              setEntryType(value as WalletLedgerEntryType | "");
-              resetToFirstPage();
-            }}
-            options={[
-              ["", "All entry types"],
-              ...entryTypes.map((item) => [item, label(item)] as const),
-            ]}
-            value={entryType}
-          />
-          <FilterSelect
-            label="Entry status"
-            onChange={(value) => {
-              setEntryStatus(value as WalletLedgerEntryStatus | "");
-              resetToFirstPage();
-            }}
-            options={[
-              ["", "All statuses"],
-              ...entryStatuses.map((item) => [item, label(item)] as const),
-            ]}
-            value={entryStatus}
           />
         </div>
 

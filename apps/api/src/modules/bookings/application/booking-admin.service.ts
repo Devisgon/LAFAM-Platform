@@ -47,6 +47,8 @@ import {
   BOOKING_STATUS_CONFIRMED,
   BOOKING_STATUS_PENDING_PAYMENT,
   PRIVATE_BOOKING_DEFAULT_DURATION_MINUTES,
+  PRIVATE_BOOKING_DEFAULT_CURRENCY,
+  PRIVATE_BOOKING_DEFAULT_PRICE_AMOUNT,
   PRIVATE_BOOKING_DEFAULT_PAYMENT_REQUIRED,
   PRIVATE_BOOKING_DEFAULT_STUDIO,
   WAITLIST_STATUS_WAITING,
@@ -64,7 +66,7 @@ import {
 } from '../domain/waitlist-fifo.policy';
 import type { AdminCancelBookingDto } from '../dto/admin-cancel-booking.dto';
 import type { AdminOverrideBookingDto } from '../dto/admin-override-booking.dto';
-import type { CreatePrivateBookingDto } from '../dto/create-private-booking.dto';
+import type { CreateAdminPrivateBookingDto } from '../dto/create-admin-private-booking.dto';
 import type { ListAdminBookingsQueryDto } from '../dto/list-admin-bookings-query.dto';
 import type { ListAdminPrivateBookingsQueryDto } from '../dto/list-private-bookings-query.dto';
 import type { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
@@ -379,7 +381,7 @@ export class BookingAdminService {
 
   async createPrivateBooking(
     adminUserId: string,
-    dto: CreatePrivateBookingDto,
+    dto: CreateAdminPrivateBookingDto,
   ): Promise<PrivateBookingCreateResult> {
     const customerUserId = this.requireCustomerUserId(dto.user_id);
     const sessionDate = PrivateBookingLifecyclePolicy.normalizeIsoDate(
@@ -418,6 +420,13 @@ export class BookingAdminService {
       rpcResult.rpc.private_booking_id,
       'create_private_trainer_booking_atomic did not return private_booking_id.',
     );
+    if (actionResult === 'private_booked') {
+      await this.bookingRepository.updatePrivateBookingPrice(
+        privateBookingId,
+        dto.price_amount ?? PRIVATE_BOOKING_DEFAULT_PRICE_AMOUNT,
+        dto.currency ?? PRIVATE_BOOKING_DEFAULT_CURRENCY,
+      );
+    }
     const privateBooking =
       await this.getRequiredPrivateBookingListItem(privateBookingId);
 

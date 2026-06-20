@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { usePathname } from "next/navigation";
 import {
   AUTH_REFRESH_INTERVAL_MS,
   authClient,
@@ -70,6 +71,7 @@ type AuthProviderProps = {
 };
 
 export function AuthProvider({ children }: AuthProviderProps) {
+  const pathname = usePathname();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState<
@@ -87,8 +89,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     useState(false);
   const [isVerifyingResetOtp, setIsVerifyingResetOtp] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [storedError, setStoredError] = useState<{
+    message: string;
+    pathname: string;
+  } | null>(null);
   const isAuthenticated = Boolean(user);
+  const error = storedError?.pathname === pathname ? storedError.message : null;
+  const setError = useCallback(
+    (message: string | null) => {
+      setStoredError(message === null ? null : { message, pathname });
+    },
+    [pathname],
+  );
 
   const getErrorMessage = useCallback((err: unknown, fallback: string) => {
     return err instanceof Error ? err.message : fallback;
@@ -186,7 +198,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setIsLoggingIn(false);
       }
     },
-    [getErrorMessage, refreshAvatar],
+    [getErrorMessage, refreshAvatar, setError],
   );
 
   const signUp = useCallback(
@@ -205,7 +217,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setIsSigningUp(false);
       }
     },
-    [getErrorMessage],
+    [getErrorMessage, setError],
   );
 
   const verifyEmail = useCallback(
@@ -224,7 +236,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setIsVerifyingEmail(false);
       }
     },
-    [getErrorMessage],
+    [getErrorMessage, setError],
   );
 
   const resendVerificationOtp = useCallback(async () => {
@@ -239,7 +251,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       setIsResendingVerification(false);
     }
-  }, [getErrorMessage]);
+  }, [getErrorMessage, setError]);
 
   const forgotPassword = useCallback(
     async (email: string) => {
@@ -257,7 +269,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setIsRequestingPasswordReset(false);
       }
     },
-    [getErrorMessage],
+    [getErrorMessage, setError],
   );
 
   const verifyResetOtp = useCallback(
@@ -276,7 +288,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setIsVerifyingResetOtp(false);
       }
     },
-    [getErrorMessage],
+    [getErrorMessage, setError],
   );
 
   const resetPassword = useCallback(
@@ -295,7 +307,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setIsResettingPassword(false);
       }
     },
-    [getErrorMessage],
+    [getErrorMessage, setError],
   );
 
   const logout = useCallback(async () => {
@@ -307,11 +319,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(null);
       setAvatarUrl(null);
     }
-  }, []);
+  }, [setError]);
 
   const clearError = useCallback(() => {
     setError(null);
-  }, []);
+  }, [setError]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

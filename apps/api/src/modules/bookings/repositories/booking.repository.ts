@@ -35,6 +35,7 @@ import type {
   LAFAMSupabaseClient,
   PilatesClassRow,
   PilatesClassScheduleRow,
+  PrivateTrainerBookingUpdate,
 } from '../../../database/database.types';
 import {
   BOOKING_ADMIN_DEFAULT_LIMIT,
@@ -1047,6 +1048,25 @@ export class BookingRepository {
         'create_private_trainer_booking_atomic',
       ),
     };
+  }
+
+  async updatePrivateBookingPrice(
+    privateBookingId: string,
+    priceAmount: number,
+    currency: string,
+  ): Promise<void> {
+    const patch: PrivateTrainerBookingUpdate = {
+      price_amount: priceAmount,
+      currency,
+    };
+    const { error } = await this.adminClient
+      .from('private_trainer_bookings')
+      .update(patch)
+      .eq('id', privateBookingId);
+
+    if (error) {
+      throw mapPrivateBookingRpcError(error);
+    }
   }
 
   async cancelPrivateBookingAtomic(
