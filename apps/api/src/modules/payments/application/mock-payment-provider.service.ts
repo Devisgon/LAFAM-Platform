@@ -27,7 +27,6 @@ import type {
   DatabaseJsonObject,
 } from '../../../database/database.types';
 import {
-  MOCK_PAYMENT_REDIRECT_PATH,
   MOCK_PAYMENT_REFERENCE_PREFIX,
   PAYMENT_CHECKOUT_INTENT_TTL_MINUTES,
   PAYMENT_CALLBACK_RESULT_CANCELLED,
@@ -236,7 +235,6 @@ function buildMockRedirectUrl(input: {
   readonly gateway_invoice_id: string;
 }): string {
   return appendQueryParams(input.callback_url, {
-    mock_path: MOCK_PAYMENT_REDIRECT_PATH,
     payment_id: input.payment_id,
     provider_reference: input.provider_reference,
     gateway_payment_id: input.gateway_payment_id,

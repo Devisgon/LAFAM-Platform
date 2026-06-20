@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { BookingExplorer } from "@/app/admin/bookings/page";
 import { AdminUserManager } from "./admin_user_manager";
 import { ProfileSettings } from "./profile_settings";
 
@@ -25,10 +24,6 @@ export function AdminSettings() {
             {
               id: "users" as const,
               label: "Users",
-            },
-            {
-              id: "history" as const,
-              label: "Booking history",
             },
           ].map((item) => (
             <button
@@ -55,21 +50,10 @@ export function AdminSettings() {
           <ProfileSettings />
         ) : view === "users" ? (
           <>
-           
             <AdminUserManager />
           </>
         ) : (
-          <>
-            <header className="border-b border-background-secondary pb-5">
-              <h2 className="text-xl font-bold text-txt-primary">
-                Booking history
-              </h2>
-              <p className="mt-1 text-sm text-txt-secondary">
-                Completed and cancelled booking records.
-              </p>
-            </header>
-            <BookingExplorer heading="Previous bookings" previousOnly />
-          </>
+          <></>
         )}
       </section>
     </div>

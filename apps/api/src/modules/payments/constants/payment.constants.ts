@@ -442,7 +442,6 @@ export const PAYMENT_CHECKOUT_INTENT_TTL_MINUTES = 15;
 export const PAYMENT_WALLET_TOP_UP_INTENT_TTL_MINUTES = 30;
 
 export const MOCK_PAYMENT_REFERENCE_PREFIX = 'mock_payment';
-export const MOCK_PAYMENT_REDIRECT_PATH = '/mock-payments/redirect';
 
 export const PAYMENT_NUMBER_PREFIX = 'PAY';
 export const PAYMENT_RECEIPT_NUMBER_PREFIX = 'RCPT';

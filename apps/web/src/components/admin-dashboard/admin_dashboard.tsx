@@ -228,9 +228,7 @@ function DashboardContent({ dashboard }: { dashboard: AnalyticsDashboard }) {
                 <p className="mt-2 text-2xl font-bold text-txt-primary">
                   {metric.value}
                 </p>
-                <p className="mt-1 text-xs font-semibold text-txt-secondary">
-                  {dashboard.range.from_date} to {dashboard.range.to_date}
-                </p>
+               
               </div>
               <span
                 aria-hidden="true"

@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+
 const ACCESS_TOKEN_COOKIE = "lafam_access_token";
 const REFRESH_TOKEN_COOKIE = "lafam_refresh_token";
 const ROLE_COOKIE = "lafam_role";
@@ -29,6 +30,11 @@ type ProxyRefreshSession = {
   sessionId: string | null;
 };
 
+type VerifiedProxySession = {
+  role: string;
+  refreshedSession: ProxyRefreshSession | null;
+};
+
 const protectedRoutes = [
   "/admin",
   "/staff",
@@ -38,6 +44,13 @@ const protectedRoutes = [
   "/profile",
   "/account",
 ];
+
+const authCookieNames = [
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  ROLE_COOKIE,
+  SESSION_ID_COOKIE,
+] as const;
 
 function isRouteMatch(pathname: string, route: string): boolean {
   return pathname === route || pathname.startsWith(`${route}/`);
@@ -67,6 +80,12 @@ function canAccessPath(pathname: string, role?: string): boolean {
   }
 
   return false;
+}
+
+function getApiUrl(path: string): string | null {
+  if (!API_BASE_URL) return null;
+
+  return `${API_BASE_URL.replace(/\/$/, "")}${path}`;
 }
 
 function extractRefreshSession(payload: unknown): ProxyRefreshSession | null {
@@ -152,16 +171,55 @@ function setSessionCookies(
   }
 }
 
+function setRoleCookie(
+  response: NextResponse,
+  request: NextRequest,
+  role: string,
+): void {
+  response.cookies.set(ROLE_COOKIE, role, {
+    maxAge: 30 * 24 * 60 * 60,
+    path: "/",
+    sameSite: "lax",
+    secure: request.nextUrl.protocol === "https:",
+  });
+}
+
+function clearSessionCookies(
+  response: NextResponse,
+  request: NextRequest,
+): void {
+  const secure = request.nextUrl.protocol === "https:";
+
+  for (const cookieName of authCookieNames) {
+    response.cookies.set(cookieName, "", {
+      maxAge: 0,
+      path: "/",
+      sameSite: "lax",
+      secure,
+    });
+  }
+}
+
+function redirectToLoginWithClearedSession(
+  request: NextRequest,
+  pathname: string,
+): NextResponse {
+  const loginUrl = new URL("/", request.url);
+
+  if (pathname !== "/") {
+    loginUrl.searchParams.set("redirect", pathname);
+  }
+
+  const response = NextResponse.redirect(loginUrl);
+  clearSessionCookies(response, request);
+
+  return response;
+}
+
 function rewriteUnauthorized(request: NextRequest): NextResponse {
   const unauthorizedUrl = new URL("/unauthorized", request.url);
 
   return NextResponse.rewrite(unauthorizedUrl, { status: 404 });
-}
-
-function getApiUrl(path: string): string | null {
-  if (!API_BASE_URL) return null;
-
-  return `${API_BASE_URL.replace(/\/$/, "")}${path}`;
 }
 
 function extractRole(payload: unknown): string | null {
@@ -202,24 +260,10 @@ async function getVerifiedRole(accessToken?: string): Promise<string | null> {
   }
 }
 
-export async function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-  const accessToken = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
-  const refreshToken = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
-  const role = request.cookies.get(ROLE_COOKIE)?.value;
-  const hasPossibleSession = Boolean(accessToken || refreshToken);
-
-  const isProtectedRoute = protectedRoutes.some((route) =>
-    isRouteMatch(pathname, route),
-  );
-  const isAuthRoute = pathname === "/" || pathname.startsWith("/signup");
-
-  if (isProtectedRoute && !hasPossibleSession) {
-    const loginUrl = new URL("/", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-if (isProtectedRoute) {
+async function resolveValidSession(
+  accessToken?: string,
+  refreshToken?: string,
+): Promise<VerifiedProxySession | null> {
   let verifiedRole = await getVerifiedRole(accessToken);
   let refreshedSession: ProxyRefreshSession | null = null;
 
@@ -234,41 +278,88 @@ if (isProtectedRoute) {
   }
 
   if (!verifiedRole) {
-    const loginUrl = new URL("/", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(loginUrl);
+    return null;
   }
 
-  if (!canAccessPath(pathname, verifiedRole)) {
-    return rewriteUnauthorized(request);
-  }
-
-  const response = NextResponse.next();
-
-  if (refreshedSession) {
-    setSessionCookies(response, request, refreshedSession, verifiedRole);
-    return response;
-  }
-
-  if (verifiedRole !== role) {
-    response.cookies.set(ROLE_COOKIE, verifiedRole, {
-      maxAge: 30 * 24 * 60 * 60,
-      path: "/",
-      sameSite: "lax",
-      secure: request.nextUrl.protocol === "https:",
-    });
-    return response;
-  }
-
-  return response;
+  return {
+    role: verifiedRole,
+    refreshedSession,
+  };
 }
 
+function applySessionCookieUpdates(
+  response: NextResponse,
+  request: NextRequest,
+  session: VerifiedProxySession,
+  currentRole?: string,
+): void {
+  if (session.refreshedSession) {
+    setSessionCookies(
+      response,
+      request,
+      session.refreshedSession,
+      session.role,
+    );
+    return;
+  }
+
+  if (session.role !== currentRole) {
+    setRoleCookie(response, request, session.role);
+  }
+}
+
+export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const accessToken = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
+  const refreshToken = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
+  const role = request.cookies.get(ROLE_COOKIE)?.value;
+  const hasPossibleSession = Boolean(accessToken || refreshToken);
+
+  const isProtectedRoute = protectedRoutes.some((route) =>
+    isRouteMatch(pathname, route),
+  );
+  const isAuthRoute = pathname === "/" || pathname.startsWith("/signup");
+
+  if (isProtectedRoute && !hasPossibleSession) {
+    return redirectToLoginWithClearedSession(request, pathname);
+  }
+
+  if (isProtectedRoute) {
+    const session = await resolveValidSession(accessToken, refreshToken);
+
+    if (!session) {
+      return redirectToLoginWithClearedSession(request, pathname);
+    }
+
+    if (!canAccessPath(pathname, session.role)) {
+      return rewriteUnauthorized(request);
+    }
+
+    const response = NextResponse.next();
+    applySessionCookieUpdates(response, request, session, role);
+
+    return response;
+  }
+
   if (isAuthRoute && hasPossibleSession) {
-    const verifiedRole = accessToken ? await getVerifiedRole(accessToken) : null;
-    const dashboardPath = getDashboardPath(verifiedRole ?? role);
+    const session = await resolveValidSession(accessToken, refreshToken);
+
+    if (!session) {
+      const response = NextResponse.next();
+      clearSessionCookies(response, request);
+
+      return response;
+    }
+
+    const dashboardPath = getDashboardPath(session.role);
 
     if (dashboardPath !== pathname) {
-      return NextResponse.redirect(new URL(dashboardPath, request.url));
+      const response = NextResponse.redirect(
+        new URL(dashboardPath, request.url),
+      );
+      applySessionCookieUpdates(response, request, session, role);
+
+      return response;
     }
   }
 

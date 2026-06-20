@@ -125,6 +125,8 @@ export function usePilates() {
     deleteClass: (id: string) => mutate(() => pilatesClient.deleteClass(id)),
     createSchedule: (payload: CreatePilatesSchedulePayload) =>
       mutate(() => pilatesClient.createSchedule(payload)),
+    createSchedules: (payloads: CreatePilatesSchedulePayload[]) =>
+      mutate(() => Promise.all(payloads.map((payload) => pilatesClient.createSchedule(payload)))),
     updateSchedule: (id: string, payload: UpdatePilatesSchedulePayload) =>
       mutate(() => pilatesClient.updateSchedule(id, payload)),
     cancelSchedule: (id: string, reason: string) =>

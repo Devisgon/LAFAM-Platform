@@ -3,7 +3,6 @@
 import { type FormEvent, useMemo, useState } from "react";
 import {
   ChevronDown,
-  FileSpreadsheet,
   ReceiptText,
   RotateCcw,
   Search,
@@ -24,7 +23,6 @@ import {
   type WalletAccountSummary,
   type WalletLedgerEntryStatus,
   type WalletLedgerEntrySummary,
-  type WalletLedgerEntryType,
 } from "@/lib/admin-wallets";
 import { type AdminUser, type AdminUserFilters } from "@/lib/admin-users";
 import { Badge } from "@/components/reuseable_ui_components/badge";
@@ -44,24 +42,6 @@ const fieldClass =
   "min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-4 text-base text-txt-primary outline-none transition placeholder:text-txt-secondary focus:border-primary";
 
 const pageSizeOptions = [10, 25, 50];
-
-const walletStatuses: WalletAccountStatus[] = ["active", "frozen", "closed"];
-
-const entryTypes: WalletLedgerEntryType[] = [
-  "wallet_top_up",
-  "booking_payment",
-  "private_booking_payment",
-  "refund_credit",
-  "admin_adjustment_credit",
-  "admin_adjustment_debit",
-];
-
-const entryStatuses: WalletLedgerEntryStatus[] = [
-  "pending",
-  "posted",
-  "reversed",
-  "failed",
-];
 
 function label(value: string): string {
   return value
@@ -100,10 +80,7 @@ function getUserDisplayName(user?: AdminUser): string {
   if (!user) return "Unknown user";
 
   return (
-    user.full_name ??
-    user.email ??
-    user.phone ??
-    `User ${user.id.slice(0, 8)}`
+    user.full_name ?? user.email ?? user.phone ?? `User ${user.id.slice(0, 8)}`
   );
 }
 
@@ -206,7 +183,6 @@ function WalletListPanel({
   usersError: string | null;
 }) {
   const [userId, setUserId] = useState("");
-  const [status, setStatus] = useState<WalletAccountStatus | "">("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [pageSize, setPageSize] = useState(pageSizeOptions[0]);
@@ -227,11 +203,10 @@ function WalletListPanel({
       sort_by: "created_at",
       sort_direction: "desc",
       ...(userId ? { user_id: userId } : {}),
-      ...(status ? { status } : {}),
       ...(fromDate ? { from_date: fromDate } : {}),
       ...(toDate ? { to_date: toDate } : {}),
     }),
-    [currentPage, fromDate, pageSize, status, toDate, userId],
+    [currentPage, fromDate, pageSize, toDate, userId],
   );
   const { error, isLoading, loadWallets, total, wallets } =
     useAdminWallets(filters);
@@ -249,7 +224,9 @@ function WalletListPanel({
     setDetailError(null);
 
     try {
-      setDetailWallet(await adminWalletsClient.getByWalletAccountId(walletAccountId));
+      setDetailWallet(
+        await adminWalletsClient.getByWalletAccountId(walletAccountId),
+      );
     } catch (requestError: unknown) {
       setDetailError(getErrorMessage(requestError));
     } finally {
@@ -301,15 +278,7 @@ function WalletListPanel({
 
       <div className="grid gap-4 border-b border-background-secondary px-5 py-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <button
-            aria-label="Export wallet records"
-            className="flex size-12 shrink-0 items-center justify-center rounded-md bg-button-secondary text-txt-primary transition hover:opacity-80"
-            type="button"
-          >
-            <FileSpreadsheet aria-hidden="true" size={22} strokeWidth={2.4} />
-          </button>
-
-          <div className="grid flex-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid flex-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <FilterSelect
               disabled={areUsersLoading || userOptions.length === 0}
               label="User"
@@ -323,18 +292,6 @@ function WalletListPanel({
                 ...userOptions,
               ]}
               value={userId}
-            />
-            <FilterSelect
-              label="Status"
-              onChange={(value) => {
-                setStatus(value as WalletAccountStatus | "");
-                resetToFirstPage();
-              }}
-              options={[
-                ["", "All statuses"],
-                ...walletStatuses.map((item) => [item, label(item)] as const),
-              ]}
-              value={status}
             />
             <DateField
               label="From date"
@@ -508,7 +465,9 @@ function WalletRow({
         {formatMoney(wallet.pending_balance)}
       </td>
       <td className="px-4 py-4">
-        <Badge tone={walletStatusTone(wallet.status)}>{label(wallet.status)}</Badge>
+        <Badge tone={walletStatusTone(wallet.status)}>
+          {label(wallet.status)}
+        </Badge>
       </td>
       <td className="px-4 py-4 font-mono text-xs text-txt-secondary">
         {wallet.id}
@@ -604,7 +563,10 @@ function WalletDetailCard({
             label="Available"
             value={formatMoney(wallet.available_balance)}
           />
-          <DetailItem label="Pending" value={formatMoney(wallet.pending_balance)} />
+          <DetailItem
+            label="Pending"
+            value={formatMoney(wallet.pending_balance)}
+          />
           <DetailItem label="Status" value={label(wallet.status)} />
           <button
             className="min-h-16 rounded-sm bg-button-primary px-4 text-sm font-semibold text-txt-primary transition hover:opacity-85"
@@ -639,19 +601,13 @@ function WalletAdjustmentDialog({
 }) {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const defaultIdempotencyKey = `wallet-adjust-${new Date()
-    .toISOString()
-    .slice(0, 10)
-    .replaceAll("-", "")}-${wallet.user_id.slice(0, 8)}`;
 
   const submitAdjustment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
     const source = String(formData.get("source") ?? "").trim();
-    const idempotencyKey = String(
-      formData.get("idempotency_key") ?? "",
-    ).trim();
+    const idempotencyKey = String(formData.get("idempotency_key") ?? "").trim();
 
     setIsSaving(true);
     setError(null);
@@ -752,25 +708,6 @@ function WalletAdjustmentDialog({
                 required
               />
             </label>
-            <label className="grid gap-1.5 text-xs font-bold">
-              Idempotency key
-              <input
-                className={fieldClass}
-                defaultValue={defaultIdempotencyKey}
-                maxLength={120}
-                minLength={8}
-                name="idempotency_key"
-              />
-            </label>
-            <label className="grid gap-1.5 text-xs font-bold">
-              Metadata source
-              <input
-                className={fieldClass}
-                defaultValue="admin_wallet_screen"
-                maxLength={80}
-                name="source"
-              />
-            </label>
           </div>
         </div>
 
@@ -815,10 +752,6 @@ function WalletTransactionsPanel({
 }) {
   const [userId, setUserId] = useState(initialUserId);
   const [walletAccountId, setWalletAccountId] = useState(initialWalletId);
-  const [entryType, setEntryType] = useState<WalletLedgerEntryType | "">("");
-  const [entryStatus, setEntryStatus] = useState<
-    WalletLedgerEntryStatus | ""
-  >("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [sortBy, setSortBy] =
@@ -859,29 +792,13 @@ function WalletTransactionsPanel({
       sort_by: sortBy,
       sort_direction: "desc",
       ...(walletAccountId ? { wallet_account_id: walletAccountId } : {}),
-      ...(entryType ? { entry_type: entryType } : {}),
-      ...(entryStatus ? { entry_status: entryStatus } : {}),
       ...(fromDate ? { from_date: fromDate } : {}),
       ...(toDate ? { to_date: toDate } : {}),
     }),
-    [
-      currentPage,
-      entryStatus,
-      entryType,
-      fromDate,
-      pageSize,
-      sortBy,
-      toDate,
-      walletAccountId,
-    ],
+    [currentPage, fromDate, pageSize, sortBy, toDate, walletAccountId],
   );
-  const {
-    error,
-    isLoading,
-    loadTransactions,
-    total,
-    transactions,
-  } = useAdminWalletTransactions(userId, filters, Boolean(userId));
+  const { error, isLoading, loadTransactions, total, transactions } =
+    useAdminWalletTransactions(userId, filters, Boolean(userId));
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const safeCurrentPage = Math.min(currentPage, pageCount);
   const visibleStart = total === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1;
@@ -905,8 +822,7 @@ function WalletTransactionsPanel({
             Transaction Ledger
           </h2>
           <p className="mt-1 text-sm text-txt-secondary">
-            Full-page wallet transaction search by user, account, type, status,
-            date, and amount sort.
+            Search wallet transactions by user, account, date, and amount sort.
           </p>
         </div>
         <button
@@ -919,7 +835,7 @@ function WalletTransactionsPanel({
       </header>
 
       <div className="grid gap-4 border-b border-background-secondary px-5 py-5">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2">
           <FilterSelect
             disabled={areUsersLoading || userOptions.length === 0}
             label="User"
@@ -955,30 +871,6 @@ function WalletTransactionsPanel({
               ...walletOptions,
             ]}
             value={walletAccountId}
-          />
-          <FilterSelect
-            label="Entry type"
-            onChange={(value) => {
-              setEntryType(value as WalletLedgerEntryType | "");
-              resetToFirstPage();
-            }}
-            options={[
-              ["", "All entry types"],
-              ...entryTypes.map((item) => [item, label(item)] as const),
-            ]}
-            value={entryType}
-          />
-          <FilterSelect
-            label="Entry status"
-            onChange={(value) => {
-              setEntryStatus(value as WalletLedgerEntryStatus | "");
-              resetToFirstPage();
-            }}
-            options={[
-              ["", "All statuses"],
-              ...entryStatuses.map((item) => [item, label(item)] as const),
-            ]}
-            value={entryStatus}
           />
         </div>
 
@@ -1284,7 +1176,13 @@ function DateField({
   );
 }
 
-function DetailItem({ label: itemLabel, value }: { label: string; value: string }) {
+function DetailItem({
+  label: itemLabel,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
     <div className="rounded-sm border border-background-secondary bg-card-bg-primary p-3">
       <dt className="text-xs font-bold uppercase text-txt-secondary">

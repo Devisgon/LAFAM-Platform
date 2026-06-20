@@ -1,7 +1,14 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
-import { ChevronDown, FileSpreadsheet, RotateCcw } from "lucide-react";
+import Link from "next/link";
+import {
+  type FormEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { ChevronDown, RotateCcw } from "lucide-react";
 import {
   useAdminBookings,
   useAdminPrivateBookings,
@@ -124,11 +131,32 @@ function formatDateTime(value?: string | null): string {
   }).format(date);
 }
 
+function formatPrice(amount?: number | null, currency?: string | null): string {
+  if (amount === null || amount === undefined) return "Not configured";
+  return `${amount.toFixed(3)} ${currency ?? "KWD"}`;
+}
+
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The booking request failed.";
 }
 
-function buildIdempotencyKey(payload: CreatePrivateTrainerBookingPayload): string {
+function availabilityReason(reason: string | null): string {
+  if (reason === "past_slot") return "This time has already passed.";
+  if (reason === "trainer_not_available") {
+    return "The trainer is outside their configured working hours.";
+  }
+  if (reason === "pilates_class_schedule_conflict") {
+    return "The trainer already has a Pilates class at this time.";
+  }
+  if (reason === "private_booking_conflict") {
+    return "The trainer already has a private booking at this time.";
+  }
+  return "The trainer is unavailable at this time.";
+}
+
+function buildIdempotencyKey(
+  payload: CreatePrivateTrainerBookingPayload,
+): string {
   return [
     "private-booking",
     payload.session_date,
@@ -148,9 +176,7 @@ function isPreviousPrivateBooking(booking: PrivateTrainerBooking): boolean {
 
 function isPreviousStatus(status: AdminBookingStatus): boolean {
   return (
-    status === "cancelled" ||
-    status === "completed" ||
-    status === "no_show"
+    status === "cancelled" || status === "completed" || status === "no_show"
   );
 }
 
@@ -276,7 +302,9 @@ function BookingListPanel({ previousOnly }: { previousOnly: boolean }) {
   const [toDate, setToDate] = useState("");
   const [pageSize, setPageSize] = useState(pageSizeOptions[0]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(
+    null,
+  );
   const [selectedPrivateBookingId, setSelectedPrivateBookingId] = useState<
     string | null
   >(null);
@@ -291,7 +319,13 @@ function BookingListPanel({ previousOnly }: { previousOnly: boolean }) {
     () =>
       classes
         .filter((item) => item.status !== "deleted")
-        .map((item) => [item.id, item.title] as const),
+        .map(
+          (item) =>
+            [
+              item.id,
+              `${item.title} - ${formatPrice(item.default_price_amount, item.currency)}`,
+            ] as const,
+        ),
     [classes],
   );
   const trainerOptions = useMemo(
@@ -368,9 +402,13 @@ function BookingListPanel({ previousOnly }: { previousOnly: boolean }) {
     ? privateBookingState.bookings.filter(isPreviousPrivateBooking)
     : privateBookingState.bookings;
   const activeTotal =
-    bookingMode === "class" ? classBookingState.total : privateBookingState.total;
+    bookingMode === "class"
+      ? classBookingState.total
+      : privateBookingState.total;
   const activeError =
-    bookingMode === "class" ? classBookingState.error : privateBookingState.error;
+    bookingMode === "class"
+      ? classBookingState.error
+      : privateBookingState.error;
   const activeIsLoading =
     bookingMode === "class"
       ? classBookingState.isLoading
@@ -430,13 +468,6 @@ function BookingListPanel({ previousOnly }: { previousOnly: boolean }) {
       <div className="grid gap-4 border-b border-background-secondary px-5 py-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              aria-label="Export booking records"
-              className="flex size-12 shrink-0 items-center justify-center rounded-md bg-button-secondary text-txt-primary transition hover:opacity-80"
-              type="button"
-            >
-              <FileSpreadsheet aria-hidden="true" size={22} strokeWidth={2.4} />
-            </button>
             <div className="flex min-h-12 overflow-hidden rounded-sm border border-background-secondary bg-card-bg-secondary p-1">
               {(["class", "private"] as const).map((mode) => (
                 <button
@@ -568,6 +599,7 @@ function BookingListPanel({ previousOnly }: { previousOnly: boolean }) {
               { key: "date", heading: "Date" },
               { key: "status", heading: "Status" },
               { key: "payment", heading: "Payment" },
+              { key: "price", heading: "Price" },
               { key: "action", heading: "Action" },
             ]}
             emptyMessage="No booking records found."
@@ -624,7 +656,10 @@ function BookingListPanel({ previousOnly }: { previousOnly: boolean }) {
             <p>
               Showing {visibleStart} to {visibleEnd} of {activeTotal} entries
             </p>
-            <nav aria-label="Booking records pagination" className="flex items-center">
+            <nav
+              aria-label="Booking records pagination"
+              className="flex items-center"
+            >
               <button
                 className="min-h-11 rounded-l-sm border border-background-secondary px-4 text-txt-secondary disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={safeCurrentPage === 1}
@@ -668,12 +703,15 @@ function BookingRecordRow({
   const trainerName =
     booking.trainer?.display_name ?? booking.trainer_staff_profile_id;
   const classTitle = booking.class?.title ?? "No class";
-  const bookingDate = booking.schedule?.class_date ?? booking.created_at.slice(0, 10);
+  const bookingDate =
+    booking.schedule?.class_date ?? booking.created_at.slice(0, 10);
 
   return (
     <tr className="divide-x divide-background-secondary bg-background-secondary/40 transition hover:bg-card-bg-secondary">
       <td className="px-4 py-4 align-top">
-        <strong className="block text-txt-primary">{booking.booking_number}</strong>
+        <strong className="block text-txt-primary">
+          {booking.booking_number}
+        </strong>
         <span className="mt-1 block font-mono text-xs text-txt-secondary">
           {booking.id}
         </span>
@@ -687,7 +725,9 @@ function BookingRecordRow({
       <td className="px-4 py-4 align-top text-txt-primary">{classTitle}</td>
       <td className="px-4 py-4 align-top text-txt-primary">{trainerName}</td>
       <td className="px-4 py-4 align-top">
-        <strong className="block text-txt-primary">{formatDate(bookingDate)}</strong>
+        <strong className="block text-txt-primary">
+          {formatDate(bookingDate)}
+        </strong>
         <span className="mt-1 block text-sm text-txt-secondary">
           {booking.schedule?.start_time && booking.schedule.end_time
             ? `${booking.schedule.start_time} - ${booking.schedule.end_time}`
@@ -701,6 +741,9 @@ function BookingRecordRow({
         <Badge tone={paymentTone(booking.payment_status)}>
           {label(booking.payment_status)}
         </Badge>
+      </td>
+      <td className="px-4 py-4 align-top font-semibold text-txt-primary">
+        {formatPrice(booking.price?.amount, booking.price?.currency)}
       </td>
       <td className="px-4 py-4 align-top">
         <button
@@ -730,7 +773,9 @@ function PrivateBookingRecordRow({
   return (
     <tr className="divide-x divide-background-secondary bg-background-secondary/40 transition hover:bg-card-bg-secondary">
       <td className="px-4 py-4 align-top">
-        <strong className="block text-txt-primary">{booking.booking_number}</strong>
+        <strong className="block text-txt-primary">
+          {booking.booking_number}
+        </strong>
         <span className="mt-1 block font-mono text-xs text-txt-secondary">
           {booking.id}
         </span>
@@ -763,6 +808,9 @@ function PrivateBookingRecordRow({
         <Badge tone={paymentTone(booking.payment_status)}>
           {label(booking.payment_status)}
         </Badge>
+      </td>
+      <td className="px-4 py-4 align-top font-semibold text-txt-primary">
+        {formatPrice(booking.price?.amount, booking.price?.currency)}
       </td>
       <td className="px-4 py-4 align-top">
         <button
@@ -800,9 +848,9 @@ function BookingDetailPanel({
         .filter((schedule) => schedule.status === "scheduled")
         .filter((schedule) => schedule.id !== booking?.schedule_id)
         .toSorted((first, second) =>
-            `${first.class_date}T${first.start_time}`.localeCompare(
-              `${second.class_date}T${second.start_time}`,
-            ),
+          `${first.class_date}T${first.start_time}`.localeCompare(
+            `${second.class_date}T${second.start_time}`,
+          ),
         ),
     [booking?.schedule_id, schedules],
   );
@@ -822,14 +870,19 @@ function BookingDetailPanel({
     () =>
       targetSchedules
         .filter((schedule) => schedule.class_date === rescheduleDate)
-        .map((schedule) => [
-          schedule.id,
-          [
-            `${formatTime(schedule.start_time)} - ${formatTime(schedule.end_time)}`,
-            schedule.class?.title ?? schedule.class_id,
-            schedule.trainer?.display_name ?? schedule.trainer_staff_profile_id,
-          ].join(" | "),
-        ] as const),
+        .map(
+          (schedule) =>
+            [
+              schedule.id,
+              [
+                `${formatTime(schedule.start_time)} - ${formatTime(schedule.end_time)}`,
+                schedule.class?.title ?? schedule.class_id,
+                schedule.trainer?.display_name ??
+                  schedule.trainer_staff_profile_id,
+                formatPrice(schedule.price_amount, schedule.currency),
+              ].join(" | "),
+            ] as const,
+        ),
     [rescheduleDate, targetSchedules],
   );
 
@@ -862,7 +915,9 @@ function BookingDetailPanel({
 
   const cancelBooking = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const reason = String(new FormData(event.currentTarget).get("reason")).trim();
+    const reason = String(
+      new FormData(event.currentTarget).get("reason"),
+    ).trim();
 
     setIsSaving(true);
     setError(null);
@@ -909,7 +964,9 @@ function BookingDetailPanel({
     const adminNotes = String(formData.get("admin_notes")).trim();
     const payload: AdminOverrideBookingPayload = {
       reason: String(formData.get("reason")).trim(),
-      target_status: String(formData.get("target_status")) as AdminBookingStatus,
+      target_status: String(
+        formData.get("target_status"),
+      ) as AdminBookingStatus,
       ...(adminNotes ? { admin_notes: adminNotes } : {}),
     };
 
@@ -936,7 +993,11 @@ function BookingDetailPanel({
         <p className="text-sm text-error" role="alert">
           {error ?? "Booking details could not be loaded."}
         </p>
-        <button className="mt-3 rounded-sm border border-background-secondary px-4 py-2 text-sm font-semibold text-txt-secondary" onClick={onBack} type="button">
+        <button
+          className="mt-3 rounded-sm border border-background-secondary px-4 py-2 text-sm font-semibold text-txt-secondary"
+          onClick={onBack}
+          type="button"
+        >
           Back to bookings
         </button>
       </div>
@@ -947,16 +1008,23 @@ function BookingDetailPanel({
     booking.customer?.full_name ?? booking.customer?.email ?? "No customer";
   const trainerName =
     booking.trainer?.display_name ?? booking.trainer_staff_profile_id;
-  const bookingDate = booking.schedule?.class_date ?? booking.created_at.slice(0, 10);
+  const bookingDate =
+    booking.schedule?.class_date ?? booking.created_at.slice(0, 10);
 
   return (
     <section className="grid gap-6 p-5 text-txt-primary">
       <header className="flex flex-col gap-4 border-b border-background-secondary pb-5 md:flex-row md:items-start md:justify-between">
         <div>
-          <p className="text-sm font-semibold text-txt-secondary">Booking detail</p>
-          <h3 className="mt-1 text-2xl font-medium">{booking.booking_number}</h3>
+          <p className="text-sm font-semibold text-txt-secondary">
+            Booking detail
+          </p>
+          <h3 className="mt-1 text-2xl font-medium">
+            {booking.booking_number}
+          </h3>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Badge tone={statusTone(booking.status)}>{label(booking.status)}</Badge>
+            <Badge tone={statusTone(booking.status)}>
+              {label(booking.status)}
+            </Badge>
             <Badge tone={paymentTone(booking.payment_status)}>
               {label(booking.payment_status)}
             </Badge>
@@ -972,7 +1040,10 @@ function BookingDetailPanel({
       </header>
 
       {error ? (
-        <p className="rounded-sm border border-error/30 bg-error/10 px-4 py-3 text-sm text-error" role="alert">
+        <p
+          className="rounded-sm border border-error/30 bg-error/10 px-4 py-3 text-sm text-error"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}
@@ -982,24 +1053,48 @@ function BookingDetailPanel({
         <DetailItem label="Class" value={booking.class?.title ?? "No class"} />
         <DetailItem label="Trainer" value={trainerName} />
         <DetailItem label="Date" value={formatDate(bookingDate)} />
-        <DetailItem label="Time" value={booking.schedule ? `${booking.schedule.start_time} - ${booking.schedule.end_time}` : formatDateTime(booking.created_at)} />
+        <DetailItem
+          label="Time"
+          value={
+            booking.schedule
+              ? `${booking.schedule.start_time} - ${booking.schedule.end_time}`
+              : formatDateTime(booking.created_at)
+          }
+        />
+        <DetailItem
+          label="Price"
+          value={formatPrice(booking.price?.amount, booking.price?.currency)}
+        />
         <DetailItem label="Booking ID" value={booking.id} />
         <DetailItem label="Schedule ID" value={booking.schedule_id} />
-        <DetailItem label="Admin notes" value={booking.admin_notes ?? "No admin notes"} />
+        <DetailItem
+          label="Admin notes"
+          value={booking.admin_notes ?? "No admin notes"}
+        />
       </dl>
 
       <section className="grid items-stretch gap-5 xl:grid-cols-3">
         <ActionCard title="Cancel booking">
-          <form className="flex h-full flex-col gap-3" onSubmit={(event) => void cancelBooking(event)}>
+          <form
+            className="flex h-full flex-col gap-3"
+            onSubmit={(event) => void cancelBooking(event)}
+          >
             <FormField label="Audit reason" name="reason" required />
-            <button className="mt-auto min-h-11 rounded-sm bg-error px-4 text-sm font-semibold text-white disabled:opacity-60" disabled={isSaving} type="submit">
+            <button
+              className="mt-auto min-h-11 rounded-sm bg-error px-4 text-sm font-semibold text-white disabled:opacity-60"
+              disabled={isSaving}
+              type="submit"
+            >
               Cancel booking
             </button>
           </form>
         </ActionCard>
 
         <ActionCard title="Reschedule booking">
-          <form className="flex h-full flex-col gap-3" onSubmit={(event) => void rescheduleBooking(event)}>
+          <form
+            className="flex h-full flex-col gap-3"
+            onSubmit={(event) => void rescheduleBooking(event)}
+          >
             <label className="grid gap-1.5 text-xs font-bold">
               New date
               <span className="relative">
@@ -1017,7 +1112,11 @@ function BookingDetailPanel({
                     </option>
                   ))}
                 </select>
-                <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary" size={16} />
+                <ChevronDown
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
+                  size={16}
+                />
               </span>
             </label>
             <label className="grid gap-1.5 text-xs font-bold">
@@ -1025,7 +1124,11 @@ function BookingDetailPanel({
               <span className="relative">
                 <select
                   className={`${fieldClass} appearance-none pr-10`}
-                  disabled={isSaving || !rescheduleDate || rescheduleTimeOptions.length === 0}
+                  disabled={
+                    isSaving ||
+                    !rescheduleDate ||
+                    rescheduleTimeOptions.length === 0
+                  }
                   name="target_schedule_id"
                   required
                 >
@@ -1036,41 +1139,75 @@ function BookingDetailPanel({
                     </option>
                   ))}
                 </select>
-                <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary" size={16} />
+                <ChevronDown
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
+                  size={16}
+                />
               </span>
             </label>
             <label className="flex items-center gap-2 text-sm font-semibold text-txt-primary">
-              <input className="size-4 accent-primary" name="join_waitlist_if_full" type="checkbox" />
+              <input
+                className="size-4 accent-primary"
+                name="join_waitlist_if_full"
+                type="checkbox"
+              />
               Join waitlist if full
             </label>
             <FormField label="Reason" name="reason" />
-            <button className="mt-auto min-h-11 rounded-sm bg-button-primary px-4 text-sm font-semibold text-txt-primary disabled:opacity-60" disabled={isSaving || !rescheduleDate || rescheduleTimeOptions.length === 0} type="submit">
+            <button
+              className="mt-auto min-h-11 rounded-sm bg-button-primary px-4 text-sm font-semibold text-txt-primary disabled:opacity-60"
+              disabled={
+                isSaving ||
+                !rescheduleDate ||
+                rescheduleTimeOptions.length === 0
+              }
+              type="submit"
+            >
               Reschedule
             </button>
           </form>
         </ActionCard>
 
         <ActionCard title="Override status">
-          <form className="flex h-full flex-col gap-3" onSubmit={(event) => void overrideBooking(event)}>
+          <form
+            className="flex h-full flex-col gap-3"
+            onSubmit={(event) => void overrideBooking(event)}
+          >
             <label className="grid gap-1.5 text-xs font-bold">
               Target status
               <span className="relative">
-                <select className={`${fieldClass} appearance-none pr-10`} defaultValue={booking.status} name="target_status">
+                <select
+                  className={`${fieldClass} appearance-none pr-10`}
+                  defaultValue={booking.status}
+                  name="target_status"
+                >
                   {bookingStatuses.map((statusOption) => (
                     <option key={statusOption} value={statusOption}>
                       {label(statusOption)}
                     </option>
                   ))}
                 </select>
-                <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary" size={16} />
+                <ChevronDown
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
+                  size={16}
+                />
               </span>
             </label>
             <FormField label="Audit reason" name="reason" required />
             <label className="grid gap-1.5 text-xs font-bold">
               Admin notes
-              <textarea className={`${fieldClass} min-h-24 resize-y`} name="admin_notes" />
+              <textarea
+                className={`${fieldClass} min-h-24 resize-y`}
+                name="admin_notes"
+              />
             </label>
-            <button className="mt-auto min-h-11 rounded-sm bg-button-primary px-4 text-sm font-semibold text-txt-primary disabled:opacity-60" disabled={isSaving} type="submit">
+            <button
+              className="mt-auto min-h-11 rounded-sm bg-button-primary px-4 text-sm font-semibold text-txt-primary disabled:opacity-60"
+              disabled={isSaving}
+              type="submit"
+            >
               Override status
             </button>
           </form>
@@ -1084,10 +1221,15 @@ function BookingDetailPanel({
         <div className="grid gap-3 p-4">
           {booking.history.length > 0 ? (
             booking.history.map((entry) => (
-              <div className="rounded-sm bg-background-secondary/40 p-3 text-sm" key={entry.id}>
+              <div
+                className="rounded-sm bg-background-secondary/40 p-3 text-sm"
+                key={entry.id}
+              >
                 <p className="font-semibold">{label(entry.action)}</p>
                 <p className="mt-1 text-txt-secondary">
-                  {formatDateTime(entry.created_at)} {entry.from_status ? `${label(entry.from_status)} -> ` : ""}{entry.to_status ? label(entry.to_status) : ""}
+                  {formatDateTime(entry.created_at)}{" "}
+                  {entry.from_status ? `${label(entry.from_status)} -> ` : ""}
+                  {entry.to_status ? label(entry.to_status) : ""}
                 </p>
                 {entry.notes ? <p className="mt-1">{entry.notes}</p> : null}
               </div>
@@ -1110,7 +1252,9 @@ function PrivateBookingDetailPanel({
   onBack: () => void;
   onChanged: () => void;
 }) {
-  const [booking, setBooking] = useState<PrivateTrainerBookingDetail | null>(null);
+  const [booking, setBooking] = useState<PrivateTrainerBookingDetail | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -1144,12 +1288,16 @@ function PrivateBookingDetailPanel({
 
   const cancelBooking = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const reason = String(new FormData(event.currentTarget).get("reason")).trim();
+    const reason = String(
+      new FormData(event.currentTarget).get("reason"),
+    ).trim();
 
     setIsSaving(true);
     setError(null);
     try {
-      await adminBookingsClient.cancelPrivateTrainerBooking(bookingId, { reason });
+      await adminBookingsClient.cancelPrivateTrainerBooking(bookingId, {
+        reason,
+      });
       event.currentTarget.reset();
       await refreshAfterChange();
     } catch (requestError: unknown) {
@@ -1166,7 +1314,9 @@ function PrivateBookingDetailPanel({
     const reason = String(formData.get("reason")).trim();
     const idempotencyKey = String(formData.get("idempotency_key")).trim();
     const studio = String(formData.get("studio")).trim();
-    const targetSessionDate = String(formData.get("target_session_date")).trim();
+    const targetSessionDate = String(
+      formData.get("target_session_date"),
+    ).trim();
     const targetStartTime = String(formData.get("target_start_time")).trim();
 
     setIsSaving(true);
@@ -1174,7 +1324,9 @@ function PrivateBookingDetailPanel({
     try {
       await adminBookingsClient.reschedulePrivateTrainerBooking(bookingId, {
         payment_required: formData.get("payment_required") === "true",
-        target_duration_minutes: Number(formData.get("target_duration_minutes") || 60),
+        target_duration_minutes: Number(
+          formData.get("target_duration_minutes") || 60,
+        ),
         target_session_date: targetSessionDate,
         target_start_time: targetStartTime,
         ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
@@ -1191,7 +1343,9 @@ function PrivateBookingDetailPanel({
   };
 
   if (isLoading) {
-    return <LoadingState className="p-6" label="Loading private booking details" />;
+    return (
+      <LoadingState className="p-6" label="Loading private booking details" />
+    );
   }
 
   if (!booking) {
@@ -1200,7 +1354,11 @@ function PrivateBookingDetailPanel({
         <p className="text-sm text-error" role="alert">
           {error ?? "Private booking details could not be loaded."}
         </p>
-        <button className="mt-3 rounded-sm border border-background-secondary px-4 py-2 text-sm font-semibold text-txt-secondary" onClick={onBack} type="button">
+        <button
+          className="mt-3 rounded-sm border border-background-secondary px-4 py-2 text-sm font-semibold text-txt-secondary"
+          onClick={onBack}
+          type="button"
+        >
           Back to bookings
         </button>
       </div>
@@ -1219,9 +1377,13 @@ function PrivateBookingDetailPanel({
           <p className="text-sm font-semibold text-txt-secondary">
             Private booking detail
           </p>
-          <h3 className="mt-1 text-2xl font-medium">{booking.booking_number}</h3>
+          <h3 className="mt-1 text-2xl font-medium">
+            {booking.booking_number}
+          </h3>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Badge tone={statusTone(booking.status)}>{label(booking.status)}</Badge>
+            <Badge tone={statusTone(booking.status)}>
+              {label(booking.status)}
+            </Badge>
             <Badge tone={paymentTone(booking.payment_status)}>
               {label(booking.payment_status)}
             </Badge>
@@ -1237,7 +1399,10 @@ function PrivateBookingDetailPanel({
       </header>
 
       {error ? (
-        <p className="rounded-sm border border-error/30 bg-error/10 px-4 py-3 text-sm text-error" role="alert">
+        <p
+          className="rounded-sm border border-error/30 bg-error/10 px-4 py-3 text-sm text-error"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}
@@ -1247,46 +1412,102 @@ function PrivateBookingDetailPanel({
         <DetailItem label="Session" value="Private trainer" />
         <DetailItem label="Trainer" value={trainerName} />
         <DetailItem label="Date" value={formatDate(booking.session_date)} />
-        <DetailItem label="Time" value={`${formatTime(booking.start_time)} - ${formatTime(booking.end_time)}`} />
-        <DetailItem label="Duration" value={`${booking.duration_minutes} minutes`} />
+        <DetailItem
+          label="Time"
+          value={`${formatTime(booking.start_time)} - ${formatTime(booking.end_time)}`}
+        />
+        <DetailItem
+          label="Duration"
+          value={`${booking.duration_minutes} minutes`}
+        />
         <DetailItem label="Studio" value={booking.studio} />
+        <DetailItem
+          label="Price"
+          value={formatPrice(booking.price?.amount, booking.price?.currency)}
+        />
         <DetailItem label="Booking ID" value={booking.id} />
-        <DetailItem label="Admin notes" value={booking.admin_notes ?? "No admin notes"} />
+        <DetailItem
+          label="Admin notes"
+          value={booking.admin_notes ?? "No admin notes"}
+        />
       </dl>
 
       <section className="grid items-stretch gap-5 xl:grid-cols-2">
         <ActionCard title="Cancel private booking">
-          <form className="flex h-full flex-col gap-3" onSubmit={(event) => void cancelBooking(event)}>
+          <form
+            className="flex h-full flex-col gap-3"
+            onSubmit={(event) => void cancelBooking(event)}
+          >
             <FormField label="Audit reason" name="reason" required />
-            <button className="mt-auto min-h-11 rounded-sm bg-error px-4 text-sm font-semibold text-white disabled:opacity-60" disabled={isSaving} type="submit">
+            <button
+              className="mt-auto min-h-11 rounded-sm bg-error px-4 text-sm font-semibold text-white disabled:opacity-60"
+              disabled={isSaving}
+              type="submit"
+            >
               Cancel booking
             </button>
           </form>
         </ActionCard>
 
         <ActionCard title="Reschedule private booking">
-          <form className="flex h-full flex-col gap-3" onSubmit={(event) => void rescheduleBooking(event)}>
+          <form
+            className="flex h-full flex-col gap-3"
+            onSubmit={(event) => void rescheduleBooking(event)}
+          >
             <div className="grid gap-3 md:grid-cols-2">
-              <FormField defaultValue={booking.session_date} label="New date" name="target_session_date" required type="date" />
-              <FormField defaultValue={booking.start_time.slice(0, 5)} label="Start time" name="target_start_time" required type="time" />
+              <FormField
+                defaultValue={booking.session_date}
+                label="New date"
+                name="target_session_date"
+                required
+                type="date"
+              />
+              <FormField
+                defaultValue={booking.start_time.slice(0, 5)}
+                label="Start time"
+                name="target_start_time"
+                required
+                type="time"
+              />
             </div>
             <div className="grid gap-3 md:grid-cols-2">
-              <FormField defaultValue={String(booking.duration_minutes)} label="Duration minutes" name="target_duration_minutes" required type="number" />
-              <FormField defaultValue={booking.studio} label="Studio" name="studio" />
+              <FormField
+                defaultValue={String(booking.duration_minutes)}
+                label="Duration minutes"
+                name="target_duration_minutes"
+                required
+                type="number"
+              />
+              <FormField
+                defaultValue={booking.studio}
+                label="Studio"
+                name="studio"
+              />
             </div>
             <label className="grid gap-1.5 text-xs font-bold">
               Payment required
               <span className="relative">
-                <select className={`${fieldClass} appearance-none pr-10`} defaultValue={String(booking.payment_required)} name="payment_required">
+                <select
+                  className={`${fieldClass} appearance-none pr-10`}
+                  defaultValue={String(booking.payment_required)}
+                  name="payment_required"
+                >
                   <option value="false">No</option>
                   <option value="true">Yes</option>
                 </select>
-                <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary" size={16} />
+                <ChevronDown
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
+                  size={16}
+                />
               </span>
             </label>
             <FormField label="Reason" name="reason" />
-            <FormField label="Idempotency key" name="idempotency_key" placeholder="Auto-generated if empty" />
-            <button className="mt-auto min-h-11 rounded-sm bg-button-primary px-4 text-sm font-semibold text-txt-primary disabled:opacity-60" disabled={isSaving} type="submit">
+            <button
+              className="mt-auto min-h-11 rounded-sm bg-button-primary px-4 text-sm font-semibold text-txt-primary disabled:opacity-60"
+              disabled={isSaving}
+              type="submit"
+            >
               Reschedule
             </button>
           </form>
@@ -1300,10 +1521,15 @@ function PrivateBookingDetailPanel({
         <div className="grid gap-3 p-4">
           {booking.history.length > 0 ? (
             booking.history.map((entry) => (
-              <div className="rounded-sm bg-background-secondary/40 p-3 text-sm" key={entry.id}>
+              <div
+                className="rounded-sm bg-background-secondary/40 p-3 text-sm"
+                key={entry.id}
+              >
                 <p className="font-semibold">{label(entry.action)}</p>
                 <p className="mt-1 text-txt-secondary">
-                  {formatDateTime(entry.created_at)} {entry.from_status ? `${label(entry.from_status)} -> ` : ""}{entry.to_status ? label(entry.to_status) : ""}
+                  {formatDateTime(entry.created_at)}{" "}
+                  {entry.from_status ? `${label(entry.from_status)} -> ` : ""}
+                  {entry.to_status ? label(entry.to_status) : ""}
                 </p>
                 {entry.notes ? <p className="mt-1">{entry.notes}</p> : null}
               </div>
@@ -1317,16 +1543,30 @@ function PrivateBookingDetailPanel({
   );
 }
 
-function DetailItem({ label: itemLabel, value }: { label: string; value: string }) {
+function DetailItem({
+  label: itemLabel,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
     <div className="rounded-sm border border-background-secondary p-3">
-      <dt className="text-xs font-bold uppercase text-txt-secondary">{itemLabel}</dt>
+      <dt className="text-xs font-bold uppercase text-txt-secondary">
+        {itemLabel}
+      </dt>
       <dd className="mt-1 break-words text-sm font-semibold">{value}</dd>
     </div>
   );
 }
 
-function ActionCard({ children, title }: { children: ReactNode; title: string }) {
+function ActionCard({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title: string;
+}) {
   return (
     <section className="flex min-h-[330px] flex-col rounded-md border border-background-secondary bg-card-bg-secondary p-4">
       <h4 className="mb-4 font-semibold">{title}</h4>
@@ -1353,14 +1593,86 @@ function CreatePrivateBookingCard({
   staffOptions: Array<[string, string]>;
 }) {
   const [isCreating, setIsCreating] = useState(false);
+  const [trainerId, setTrainerId] = useState("");
+  const [sessionDate, setSessionDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState("60");
+  const [availability, setAvailability] = useState<{
+    message: string;
+    status: "checking" | "available" | "unavailable" | "error";
+  } | null>(null);
+
+  useEffect(() => {
+    const duration = Number(durationMinutes);
+    if (
+      !trainerId ||
+      !sessionDate ||
+      !startTime ||
+      !Number.isInteger(duration) ||
+      duration < 15 ||
+      duration > 240
+    ) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const request = window.setTimeout(() => {
+      setAvailability({
+        status: "checking",
+        message: "Checking trainer availability…",
+      });
+      void adminBookingsClient
+        .checkPrivateTrainerAvailability(
+          trainerId,
+          {
+            session_date: sessionDate,
+            start_time: startTime,
+            duration_minutes: duration,
+          },
+          controller.signal,
+        )
+        .then((result) => {
+          setAvailability(
+            result.available
+              ? {
+                  status: "available",
+                  message: `Trainer is available from ${result.start_time} to ${result.end_time}.`,
+                }
+              : {
+                  status: "unavailable",
+                  message: availabilityReason(result.unavailable_reason),
+                },
+          );
+        })
+        .catch((requestError: unknown) => {
+          if (
+            requestError instanceof DOMException &&
+            requestError.name === "AbortError"
+          ) {
+            return;
+          }
+          setAvailability({
+            status: "error",
+            message: getErrorMessage(requestError),
+          });
+        });
+    }, 300);
+
+    return () => {
+      window.clearTimeout(request);
+      controller.abort();
+    };
+  }, [durationMinutes, sessionDate, startTime, trainerId]);
 
   const createPrivateBooking = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
     const payload: CreatePrivateTrainerBookingPayload = {
+      currency: "KWD",
       duration_minutes: Number(formData.get("duration_minutes") || 60),
       payment_required: formData.get("payment_required") === "true",
+      price_amount: Number(formData.get("price_amount") || 0),
       session_date: String(formData.get("session_date")).trim(),
       start_time: String(formData.get("start_time")).trim(),
       studio: String(formData.get("studio")).trim() || "LAFAM Pilates Studio",
@@ -1385,6 +1697,10 @@ function CreatePrivateBookingCard({
     }
   };
 
+  const hasCompleteSlotSelection = Boolean(
+    trainerId && sessionDate && startTime && durationMinutes,
+  );
+
   return (
     <form
       className="overflow-hidden rounded-md border border-background-secondary bg-card-bg-primary text-txt-primary shadow-sm"
@@ -1397,6 +1713,7 @@ function CreatePrivateBookingCard({
       </header>
 
       <div className="px-5 py-5">
+        
         <p className="mb-5 text-sm text-txt-secondary">
           Create a private trainer booking for a customer and trainer.
         </p>
@@ -1415,22 +1732,64 @@ function CreatePrivateBookingCard({
             disabled={isStaffLoading || staffOptions.length === 0}
             label="Staff trainer"
             name="trainer_staff_profile_id"
+            onChange={(value) => {
+              setTrainerId(value);
+              setAvailability(null);
+            }}
             options={staffOptions}
             placeholder={isStaffLoading ? "Loading staff..." : "Select staff"}
             required
           />
-          <FormField label="Session date" name="session_date" required type="date" />
-          <FormField label="Start time" name="start_time" required type="time" />
+          <FormField
+            label="Session date"
+            name="session_date"
+            onChange={(value) => {
+              setSessionDate(value);
+              setAvailability(null);
+            }}
+            required
+            type="date"
+          />
+          <FormField
+            label="Start time"
+            name="start_time"
+            onChange={(value) => {
+              setStartTime(value);
+              setAvailability(null);
+            }}
+            required
+            type="time"
+          />
           <FormField
             defaultValue="60"
             label="Duration minutes"
             name="duration_minutes"
+            onChange={(value) => {
+              setDurationMinutes(value);
+              setAvailability(null);
+            }}
             type="number"
           />
           <FormField
             defaultValue="LAFAM Pilates Studio"
             label="Studio"
             name="studio"
+          />
+          <FormField
+            defaultValue="15"
+            label="Booking price (KWD)"
+            min="0"
+            name="price_amount"
+            required
+            step="0.001"
+            type="number"
+          />
+          <FormField
+            defaultValue="KWD"
+            disabled
+            label="Currency"
+            name="currency_display"
+            type="text"
           />
           <label className="grid gap-1.5 text-xs font-bold">
             Payment required
@@ -1450,18 +1809,32 @@ function CreatePrivateBookingCard({
               />
             </span>
           </label>
-          <FormField
-            label="Idempotency key"
-            name="idempotency_key"
-            placeholder="Auto-generated if empty"
-          />
+
+          {availability ? (
+            <p
+              aria-live="polite"
+              className={`rounded-sm border px-4 py-3 text-sm font-semibold md:col-span-2 ${
+                availability.status === "available"
+                  ? "border-success/30 bg-success/10 text-success"
+                  : availability.status === "checking"
+                    ? "border-background-secondary bg-card-bg-secondary text-txt-secondary"
+                    : "border-error/30 bg-error/10 text-error"
+              }`}
+              role={availability.status === "unavailable" ? "alert" : "status"}
+            >
+              {availability.message}
+            </p>
+          ) : null}
         </div>
       </div>
 
       <footer className="flex justify-start gap-2 border-t border-background-secondary px-5 py-5">
         <button
           className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-xs font-bold text-txt-primary disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={isCreating}
+          disabled={
+            isCreating ||
+            (hasCompleteSlotSelection && availability?.status !== "available")
+          }
           type="submit"
         >
           {isCreating ? "Creating..." : "Create booking"}
@@ -1542,17 +1915,25 @@ function DateField({
 
 function FormField({
   defaultValue,
+  disabled = false,
   label,
+  min,
   name,
+  onChange,
   placeholder,
   required = false,
+  step,
   type = "text",
 }: {
   defaultValue?: string;
+  disabled?: boolean;
   label: string;
+  min?: string;
   name: string;
+  onChange?: (value: string) => void;
   placeholder?: string;
   required?: boolean;
+  step?: string;
   type?: "date" | "number" | "text" | "time";
 }) {
   return (
@@ -1561,9 +1942,15 @@ function FormField({
       <input
         className={fieldClass}
         defaultValue={defaultValue}
+        disabled={disabled}
+        min={min}
         name={name}
+        onChange={
+          onChange ? (event) => onChange(event.target.value) : undefined
+        }
         placeholder={placeholder}
         required={required}
+        step={step}
         type={type}
       />
     </label>
@@ -1574,6 +1961,7 @@ function OptionSelect({
   disabled = false,
   label,
   name,
+  onChange,
   options,
   placeholder,
   required = false,
@@ -1581,6 +1969,7 @@ function OptionSelect({
   disabled?: boolean;
   label: string;
   name: string;
+  onChange?: (value: string) => void;
   options: Array<[string, string]>;
   placeholder: string;
   required?: boolean;
@@ -1594,6 +1983,9 @@ function OptionSelect({
           defaultValue=""
           disabled={disabled}
           name={name}
+          onChange={
+            onChange ? (event) => onChange(event.target.value) : undefined
+          }
           required={required}
         >
           <option value="">{placeholder}</option>

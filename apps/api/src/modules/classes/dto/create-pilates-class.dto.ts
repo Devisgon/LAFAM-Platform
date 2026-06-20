@@ -79,20 +79,6 @@ function optionalTrimmedStringOrNull({ value }: TransformFnParams): unknown {
   return trimmedValue.length > 0 ? trimmedValue : undefined;
 }
 
-function optionalUppercaseString({ value }: TransformFnParams): unknown {
-  if (typeof value === 'undefined' || value === null || value === '') {
-    return undefined;
-  }
-
-  if (typeof value !== 'string') {
-    return value;
-  }
-
-  const trimmedValue = value.trim();
-
-  return trimmedValue.length > 0 ? trimmedValue.toUpperCase() : undefined;
-}
-
 function optionalInteger({ value }: TransformFnParams): unknown {
   if (typeof value === 'undefined' || value === null || value === '') {
     return undefined;
@@ -114,8 +100,21 @@ function optionalInteger({ value }: TransformFnParams): unknown {
 
   return Number(trimmedValue);
 }
+function optionalUppercaseString({ value }: TransformFnParams): unknown {
+  if (typeof value === 'undefined' || value === null || value === '') {
+    return undefined;
+  }
 
-function optionalNumber({ value }: TransformFnParams): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmedValue = value.trim();
+
+  return trimmedValue.length > 0 ? trimmedValue.toUpperCase() : undefined;
+}
+
+function optionalDecimal({ value }: TransformFnParams): unknown {
   if (typeof value === 'undefined' || value === null || value === '') {
     return undefined;
   }
@@ -129,12 +128,7 @@ function optionalNumber({ value }: TransformFnParams): unknown {
   }
 
   const trimmedValue = value.trim();
-
-  if (!/^-?\d+(?:\.\d+)?$/u.test(trimmedValue)) {
-    return value;
-  }
-
-  return Number(trimmedValue);
+  return trimmedValue.length > 0 ? Number(trimmedValue) : undefined;
 }
 
 export class CreatePilatesClassDto {
@@ -217,22 +211,17 @@ export class CreatePilatesClassDto {
   readonly default_capacity?: number = PILATES_CLASS_DEFAULT_CAPACITY;
 
   @ApiPropertyOptional({
-    description:
-      'Default class price used when schedule-level price is not provided.',
+    description: 'Default price for new schedules.',
     example: 15,
     default: PILATES_CLASS_DEFAULT_PRICE_AMOUNT,
     minimum: PILATES_CLASS_PRICE_AMOUNT_MIN,
   })
-  @Transform(optionalNumber)
+  @Transform(optionalDecimal)
   @IsOptional()
   @IsNumber(
+    { maxDecimalPlaces: PILATES_CLASS_PRICE_DECIMAL_PLACES },
     {
-      allowInfinity: false,
-      allowNaN: false,
-      maxDecimalPlaces: PILATES_CLASS_PRICE_DECIMAL_PLACES,
-    },
-    {
-      message: `default_price_amount must be a valid number with no more than ${PILATES_CLASS_PRICE_DECIMAL_PLACES} decimal places.`,
+      message: `default_price_amount must be a number with no more than ${PILATES_CLASS_PRICE_DECIMAL_PLACES} decimal places.`,
     },
   )
   @Min(PILATES_CLASS_PRICE_AMOUNT_MIN, {
@@ -241,7 +230,7 @@ export class CreatePilatesClassDto {
   readonly default_price_amount?: number = PILATES_CLASS_DEFAULT_PRICE_AMOUNT;
 
   @ApiPropertyOptional({
-    description: 'Default class currency. KWD is currently supported.',
+    description: 'Class currency. Current Payment Module supports KWD only.',
     enum: PILATES_CLASS_ALLOWED_CURRENCIES,
     example: PILATES_CLASS_DEFAULT_CURRENCY,
     default: PILATES_CLASS_DEFAULT_CURRENCY,
@@ -249,9 +238,7 @@ export class CreatePilatesClassDto {
   @Transform(optionalUppercaseString)
   @IsOptional()
   @IsIn(PILATES_CLASS_ALLOWED_CURRENCIES, {
-    message: `currency must be one of: ${PILATES_CLASS_ALLOWED_CURRENCIES.join(
-      ', ',
-    )}.`,
+    message: 'currency must be KWD.',
   })
   readonly currency?: PilatesClassCurrency = PILATES_CLASS_DEFAULT_CURRENCY;
 

@@ -31,15 +31,16 @@ import {
 } from 'class-validator';
 
 import {
-  PILATES_CLASS_ALLOWED_CURRENCIES,
   PILATES_CLASS_CAPACITY_MAX,
   PILATES_CLASS_CAPACITY_MIN,
+  PILATES_CLASS_ALLOWED_CURRENCIES,
+  PILATES_CLASS_DEFAULT_CURRENCY,
   PILATES_CLASS_DESCRIPTION_MAX_LENGTH,
   PILATES_CLASS_DURATION_MAX_MINUTES,
   PILATES_CLASS_DURATION_MIN_MINUTES,
   PILATES_CLASS_LEVELS,
-  PILATES_CLASS_PRICE_AMOUNT_MIN,
   PILATES_CLASS_PRICE_DECIMAL_PLACES,
+  PILATES_CLASS_PRICE_AMOUNT_MIN,
   PILATES_CLASS_TITLE_MAX_LENGTH,
   PILATES_CLASS_TITLE_MIN_LENGTH,
   PILATES_CLASS_UPDATE_ALLOWED_STATUSES,
@@ -78,20 +79,6 @@ function optionalTrimmedStringOrNull({ value }: TransformFnParams): unknown {
   return trimmedValue.length > 0 ? trimmedValue : undefined;
 }
 
-function optionalUppercaseString({ value }: TransformFnParams): unknown {
-  if (typeof value === 'undefined' || value === null || value === '') {
-    return undefined;
-  }
-
-  if (typeof value !== 'string') {
-    return value;
-  }
-
-  const trimmedValue = value.trim();
-
-  return trimmedValue.length > 0 ? trimmedValue.toUpperCase() : undefined;
-}
-
 function optionalInteger({ value }: TransformFnParams): unknown {
   if (typeof value === 'undefined' || value === null || value === '') {
     return undefined;
@@ -113,8 +100,21 @@ function optionalInteger({ value }: TransformFnParams): unknown {
 
   return Number(trimmedValue);
 }
+function optionalUppercaseString({ value }: TransformFnParams): unknown {
+  if (typeof value === 'undefined' || value === null || value === '') {
+    return undefined;
+  }
 
-function optionalNumber({ value }: TransformFnParams): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmedValue = value.trim();
+
+  return trimmedValue.length > 0 ? trimmedValue.toUpperCase() : undefined;
+}
+
+function optionalDecimal({ value }: TransformFnParams): unknown {
   if (typeof value === 'undefined' || value === null || value === '') {
     return undefined;
   }
@@ -128,14 +128,8 @@ function optionalNumber({ value }: TransformFnParams): unknown {
   }
 
   const trimmedValue = value.trim();
-
-  if (!/^-?\d+(?:\.\d+)?$/u.test(trimmedValue)) {
-    return value;
-  }
-
-  return Number(trimmedValue);
+  return trimmedValue.length > 0 ? Number(trimmedValue) : undefined;
 }
-
 function optionalBoolean({ value }: TransformFnParams): unknown {
   if (typeof value === 'undefined' || value === null || value === '') {
     return undefined;
@@ -241,21 +235,16 @@ export class UpdatePilatesClassDto {
   readonly default_capacity?: number;
 
   @ApiPropertyOptional({
-    description:
-      'Default class price used when schedule-level price is not provided. Existing schedules are not automatically changed.',
+    description: 'Default price for new schedules.',
     example: 15,
     minimum: PILATES_CLASS_PRICE_AMOUNT_MIN,
   })
-  @Transform(optionalNumber)
+  @Transform(optionalDecimal)
   @IsOptional()
   @IsNumber(
+    { maxDecimalPlaces: PILATES_CLASS_PRICE_DECIMAL_PLACES },
     {
-      allowInfinity: false,
-      allowNaN: false,
-      maxDecimalPlaces: PILATES_CLASS_PRICE_DECIMAL_PLACES,
-    },
-    {
-      message: `default_price_amount must be a valid number with no more than ${PILATES_CLASS_PRICE_DECIMAL_PLACES} decimal places.`,
+      message: `default_price_amount must be a number with no more than ${PILATES_CLASS_PRICE_DECIMAL_PLACES} decimal places.`,
     },
   )
   @Min(PILATES_CLASS_PRICE_AMOUNT_MIN, {
@@ -264,17 +253,14 @@ export class UpdatePilatesClassDto {
   readonly default_price_amount?: number;
 
   @ApiPropertyOptional({
-    description:
-      'Default class currency used when schedule-level currency is not provided. Existing schedules are not automatically changed.',
+    description: 'Class currency. Current Payment Module supports KWD only.',
     enum: PILATES_CLASS_ALLOWED_CURRENCIES,
-    example: 'KWD',
+    example: PILATES_CLASS_DEFAULT_CURRENCY,
   })
   @Transform(optionalUppercaseString)
   @IsOptional()
   @IsIn(PILATES_CLASS_ALLOWED_CURRENCIES, {
-    message: `currency must be one of: ${PILATES_CLASS_ALLOWED_CURRENCIES.join(
-      ', ',
-    )}.`,
+    message: 'currency must be KWD.',
   })
   readonly currency?: PilatesClassCurrency;
 

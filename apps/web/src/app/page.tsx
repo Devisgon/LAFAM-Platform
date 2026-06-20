@@ -4,7 +4,7 @@ import { Suspense, type FormEvent, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LockKeyhole, UserRound } from "lucide-react";
+import { Eye, EyeOff, UserRound } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   isEmailVerificationRequiredError,
@@ -30,6 +30,7 @@ function LoginForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -48,7 +49,10 @@ function LoginForm() {
       router.replace(nextPath);
     } catch (error: unknown) {
       if (isEmailVerificationRequiredError(error)) {
-        const verificationUrl = new URL("/auth/verify-email", window.location.origin);
+        const verificationUrl = new URL(
+          "/auth/verify-email",
+          window.location.origin,
+        );
         const redirectPath = searchParams.get("redirect");
 
         if (redirectPath) {
@@ -63,7 +67,7 @@ function LoginForm() {
   return (
     <main className="relative flex h-screen w-full items-center justify-center overflow-hidden px-4 py-10 font-sans text-black">
       <div
-        className="absolute inset-0 bg-cover bg-center  scale-100"
+        className="absolute inset-0 bg-cover bg-center bg-blur blur-sm scale-100"
         style={{
           backgroundImage: "url('/login_bg.jpg')",
         }}
@@ -72,14 +76,14 @@ function LoginForm() {
       <div className="absolute inset-0 bg-black/55" />
 
       <section className="relative z-10 flex w-full flex-col items-center">
-        <div className="mb-10 flex flex-col items-center text-center">
+        <div className="mb-10 flex bg-foreground rounded-lg  flex-col items-center text-center">
           <Image
             src="/login-logo.svg"
             alt="LA FORME"
             width={200}
             height={200}
             priority
-            className="h-auto w-[200px] object-contain"
+            className="h-auto w-[200px] clear object-contain"
           />
         </div>
 
@@ -150,7 +154,7 @@ function LoginForm() {
               <div className="flex h-[48px] overflow-hidden rounded border border-gray-300 bg-white">
                 <input
                   id="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -159,9 +163,20 @@ function LoginForm() {
                   className="h-full flex-1 px-4 text-base text-black outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 />
 
-                <span className="flex h-full w-14 items-center justify-center border-l border-gray-300 bg-gray-100 text-black">
-                  <LockKeyhole size={22} strokeWidth={2} />
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  disabled={isLoggingIn}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  className="flex h-full w-14 items-center justify-center border-l border-gray-300 bg-gray-100 text-black transition hover:bg-black hover:text-white focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {showPassword ? (
+                    <EyeOff size={22} strokeWidth={2} />
+                  ) : (
+                    <Eye size={22} strokeWidth={2} />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -186,11 +201,21 @@ function LoginForm() {
               <button
                 type="submit"
                 disabled={isLoggingIn}
-                className="min-w-[86px] rounded bg-[#e9caca] px-5 py-3 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                className="min-w-[86px] rounded bg-[#e9caca] px-5 py-3 text-[16px] font-semibold text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isLoggingIn ? "Signing..." : "Sign In"}
               </button>
             </div>
+
+            <p className="pt-2 text-center text-[15px] text-gray-500">
+              Don&apos;t have an account?{" "}
+              <Link
+                href="/signup"
+                className="font-semibold text-[#d8abab] transition hover:text-black"
+              >
+                Sign Up
+              </Link>
+            </p>
           </form>
         </div>
 

@@ -157,7 +157,7 @@ const AUTH_COOKIE_NAMES = {
 const PENDING_VERIFICATION_EMAIL_KEY = "lafam_pending_verification_email";
 const PASSWORD_RESET_EMAIL_KEY = "lafam_password_reset_email";
 const PASSWORD_RESET_TOKEN_KEY = "lafam_password_reset_token";
-const REFRESH_TOKEN_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+const REFRESH_TOKEN_MAX_AGE_SECONDS = 24 * 60 * 60;
 export const AUTH_REFRESH_INTERVAL_MS = 50 * 60 * 1000;
 
 let refreshSessionRequest: Promise<boolean> | null = null;

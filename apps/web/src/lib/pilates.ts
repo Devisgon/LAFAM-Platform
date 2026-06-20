@@ -6,6 +6,7 @@ export type PilatesClassLevel =
   | "advanced"
   | "all_levels";
 export type PilatesClassStatus = "draft" | "active" | "inactive" | "deleted";
+export type PilatesCurrency = "KWD";
 export type PilatesScheduleStatus =
   | "scheduled"
   | "cancelled"
@@ -18,6 +19,8 @@ export type PilatesClassDefinition = {
   description: string | null;
   default_duration_minutes: number;
   default_capacity: number;
+  default_price_amount: number;
+  currency: PilatesCurrency;
   level: PilatesClassLevel;
   status: PilatesClassStatus;
   image_path: string | null;
@@ -59,6 +62,8 @@ export type PilatesSchedule = {
   end_time: string;
   duration_minutes: number;
   capacity: number;
+  price_amount: number | null;
+  currency: PilatesCurrency | null;
   status: PilatesScheduleStatus;
   cancellation_reason: string | null;
   created_by_admin_id: string | null;
@@ -88,6 +93,8 @@ export type CreatePilatesClassPayload = {
   description?: string | null;
   default_duration_minutes: number;
   default_capacity: number;
+  default_price_amount: number;
+  currency: PilatesCurrency;
   level: PilatesClassLevel;
   status: Exclude<PilatesClassStatus, "deleted">;
   image?: File | null;
@@ -109,6 +116,8 @@ export type CreateSinglePilatesSchedulePayload = {
   start_time: string;
   duration_minutes: number;
   capacity: number;
+  price_amount: number;
+  currency: PilatesCurrency;
 };
 
 export type WeeklyPilatesRecurrence = {
@@ -117,11 +126,11 @@ export type WeeklyPilatesRecurrence = {
   excluded_dates?: string[];
 };
 
-export type MonthlyPilatesRecurrence = {
-  frequency: "monthly";
-  monthly_rule: "day_of_month";
-  day_of_month: number;
-  excluded_dates?: string[];
+export type PilatesScheduleTimeSlot = {
+  start_time: string;
+  duration_minutes: number;
+  capacity: number;
+  studio: string;
 };
 
 export type CreateRecurringPilatesSchedulePayload = {
@@ -134,7 +143,10 @@ export type CreateRecurringPilatesSchedulePayload = {
   start_time: string;
   duration_minutes: number;
   capacity: number;
-  recurrence: WeeklyPilatesRecurrence | MonthlyPilatesRecurrence;
+  price_amount: number;
+  currency: PilatesCurrency;
+  time_slots: PilatesScheduleTimeSlot[];
+  recurrence: WeeklyPilatesRecurrence;
 };
 
 export type CreatePilatesSchedulePayload =

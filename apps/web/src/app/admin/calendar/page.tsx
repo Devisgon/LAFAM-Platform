@@ -96,6 +96,21 @@ function statusTone(
   return "neutral";
 }
 
+function eventTypeLabel(eventType: AdminBookingCalendarEvent["event_type"]): string {
+  if (eventType === "pilates_schedule") return "Class schedule";
+  if (eventType === "pilates_booking") return "Class booking";
+  if (eventType === "private_trainer_booking") return "Private booking";
+  return "Waitlist";
+}
+
+function eventTypeClass(
+  eventType: AdminBookingCalendarEvent["event_type"],
+): string {
+  if (eventType === "pilates_schedule") return "calendar-event--class-schedule";
+  if (eventType === "pilates_booking") return "calendar-event--class-booking";
+  return `calendar-event--${eventType.replaceAll("_", "-")}`;
+}
+
 function formatDate(value: string): string {
   const date = new Date(`${value}T00:00:00`);
 
@@ -149,10 +164,11 @@ export default function CalendarPage() {
   const [trainerStaffProfileId, setTrainerStaffProfileId] = useState("");
   const [classId, setClassId] = useState("");
   const [includeClassSchedules, setIncludeClassSchedules] = useState(true);
-  const [includeClassBookings, setIncludeClassBookings] = useState(false);
+  const [includeClassBookings, setIncludeClassBookings] = useState(true);
   const [includePrivateBookings, setIncludePrivateBookings] = useState(true);
   const [selectedEvent, setSelectedEvent] =
     useState<AdminBookingCalendarEvent | null>(null);
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const {
     classes,
     error: pilatesError,
@@ -313,6 +329,25 @@ export default function CalendarPage() {
                   />
                 </div>
 
+                <div aria-label="Calendar event colors" className="flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-txt-secondary">
+                  {(
+                    [
+                      "pilates_schedule",
+                      "pilates_booking",
+                      "private_trainer_booking",
+                      "waitlist_entry",
+                    ] as const
+                  ).map((eventType) => (
+                    <span className="inline-flex items-center gap-2" key={eventType}>
+                      <span
+                        aria-hidden="true"
+                        className={`size-3 rounded-full ${eventTypeClass(eventType)}`}
+                      />
+                      {eventTypeLabel(eventType)}
+                    </span>
+                  ))}
+                </div>
+
                 {pilatesError ? (
                   <p className="text-sm text-error" role="alert">
                     {pilatesError}
@@ -369,12 +404,14 @@ export default function CalendarPage() {
                           }
 
                           const dayEvents = eventsByDate.get(day) ?? [];
+                          const collapsedEventCount = selectedEvent ? 2 : 3;
+                          const isDayExpanded = expandedDay === day;
                           const visibleEvents = dayEvents.slice(
                             0,
-                            selectedEvent ? 2 : 3,
+                            isDayExpanded ? dayEvents.length : collapsedEventCount,
                           );
                           const hiddenEventCount =
-                            dayEvents.length - visibleEvents.length;
+                            Math.max(0, dayEvents.length - collapsedEventCount);
 
                           return (
                             <div
@@ -390,7 +427,7 @@ export default function CalendarPage() {
                               <div className="grid min-w-0 gap-1.5">
                                 {visibleEvents.map((event) => (
                                   <button
-                                    className="min-w-0 overflow-hidden rounded-sm bg-button-primary px-2 py-1.5 text-left text-[11px] font-semibold leading-tight text-txt-primary transition hover:opacity-85 sm:text-xs"
+                                    className={`calendar-event-card min-w-0 overflow-hidden rounded-sm px-2 py-1.5 text-left text-[11px] font-semibold leading-tight transition hover:brightness-95 sm:text-xs ${eventTypeClass(event.event_type)}`}
                                     key={event.id}
                                     onClick={() => setSelectedEvent(event)}
                                     type="button"
@@ -398,15 +435,33 @@ export default function CalendarPage() {
                                     <span className="block truncate">
                                       {event.title}
                                     </span>
-                                    <span className="mt-1 block truncate text-[10px] text-txt-secondary sm:text-[11px]">
+                                    <span className="mt-1 block truncate text-[10px] opacity-75 sm:text-[11px]">
                                       {event.start_time} - {event.end_time}
                                     </span>
                                   </button>
                                 ))}
                                 {hiddenEventCount > 0 ? (
-                                  <p className="truncate text-[10px] text-txt-secondary sm:text-xs">
-                                    +{hiddenEventCount} more
-                                  </p>
+                                  <button
+                                    aria-expanded={isDayExpanded}
+                                    className="flex min-h-7 items-center gap-1 rounded-sm px-1 text-left text-[10px] font-semibold text-txt-secondary transition hover:bg-background-secondary hover:text-txt-primary sm:text-xs"
+                                    onClick={() =>
+                                      setExpandedDay((currentDay) =>
+                                        currentDay === day ? null : day,
+                                      )
+                                    }
+                                    type="button"
+                                  >
+                                    <ChevronDown
+                                      aria-hidden="true"
+                                      className={`shrink-0 transition-transform ${isDayExpanded ? "rotate-180" : ""}`}
+                                      size={13}
+                                    />
+                                    <span className="truncate">
+                                      {isDayExpanded
+                                        ? "Show less"
+                                        : `+${hiddenEventCount} more`}
+                                    </span>
+                                  </button>
                                 ) : null}
                               </div>
                             </div>
