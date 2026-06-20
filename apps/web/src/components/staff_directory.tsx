@@ -8,7 +8,13 @@ import {
   useMemo,
   useState,
 } from "react";
-import { ChevronDown, FileSpreadsheet, Pencil } from "lucide-react";
+import {
+  ChevronDown,
+  Pencil,
+  Trash2,
+  UserCheck,
+  UserX,
+} from "lucide-react";
 import { Avatar } from "./reuseable_ui_components/avatar";
 import { Badge } from "./reuseable_ui_components/badge";
 import { ConfirmationCard } from "./reuseable_ui_components/confirmation_card";
@@ -32,6 +38,8 @@ type ResultToast = {
   title: string;
   tone: "success" | "error";
 };
+
+type StaffTableAction = "deactivate" | "reactivate" | "delete";
 
 const inputClass =
   "min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-4 py-2 text-base text-txt-primary outline-none transition placeholder:text-txt-secondary focus:border-primary disabled:cursor-not-allowed disabled:opacity-60";
@@ -158,6 +166,12 @@ export function StaffDirectory() {
     deleteStaff,
   } = useStaff();
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
+  const [openStaffInEditMode, setOpenStaffInEditMode] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{
+    action: StaffTableAction;
+    member: StaffMember;
+  } | null>(null);
+  const [isActionSaving, setIsActionSaving] = useState(false);
   const [toast, setToast] = useState<ResultToast | null>(null);
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(pageSizeOptions[0]);
@@ -174,6 +188,42 @@ export function StaffDirectory() {
     window.addEventListener("hashchange", syncCreateMode);
     return () => window.removeEventListener("hashchange", syncCreateMode);
   }, []);
+
+  const runStaffTableAction = async () => {
+    if (!pendingAction) return;
+
+    const { action, member } = pendingAction;
+    setIsActionSaving(true);
+    try {
+      if (action === "delete") {
+        await deleteStaff(member.id);
+        setToast({
+          message: `${member.display_name} was deleted.`,
+          title: "Staff member deleted",
+          tone: "success",
+        });
+      } else {
+        const updated =
+          action === "deactivate"
+            ? await deactivateStaff(member.id)
+            : await reactivateStaff(member.id);
+        setToast({
+          message: `${updated.display_name} was ${action === "deactivate" ? "deactivated" : "reactivated"}.`,
+          title: "Staff status updated",
+          tone: "success",
+        });
+      }
+      setPendingAction(null);
+    } catch (error: unknown) {
+      setToast({
+        message: getErrorMessage(error),
+        title: "Staff action failed",
+        tone: "error",
+      });
+    } finally {
+      setIsActionSaving(false);
+    }
+  };
 
   const filteredStaff = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -285,15 +335,7 @@ export function StaffDirectory() {
           </div>
         ) : (
           <>
-            <div className="flex flex-col gap-4 px-5 py-5 md:flex-row md:items-center md:justify-between">
-              <button
-                aria-label="Export staff list"
-                className="flex size-12 items-center justify-center rounded-md bg-black text-white transition hover:opacity-80"
-                type="button"
-              >
-                <FileSpreadsheet aria-hidden="true" size={22} strokeWidth={2.4} />
-              </button>
-
+            <div className="flex flex-col gap-4 px-5 py-5 md:flex-row md:items-center md:justify-end">
               <label className="md:w-[340px]">
                 <span className="sr-only">Search staff members</span>
                 <input
@@ -363,15 +405,50 @@ export function StaffDirectory() {
                           {member.portal_role}
                         </td>
                         <td className="px-1 py-3">
-                          <button
-                            aria-label={`Edit ${member.display_name}`}
-                            className="mx-auto flex size-10 items-center justify-center rounded-full bg-button-primary text-white transition hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                            onClick={() => setSelectedStaff(member)}
-                            title="Edit"
-                            type="button"
-                          >
-                            <Pencil aria-hidden="true" size={21} strokeWidth={2.5} />
-                          </button>
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              aria-label={`Edit ${member.display_name}`}
+                              className="flex size-9 items-center justify-center rounded-full bg-button-primary text-txt-primary transition hover:opacity-85"
+                              onClick={() => {
+                                setOpenStaffInEditMode(true);
+                                setSelectedStaff(member);
+                              }}
+                              title="Edit"
+                              type="button"
+                            >
+                              <Pencil aria-hidden="true" size={17} strokeWidth={2.4} />
+                            </button>
+                            {member.staff_status === "deactivated" ? (
+                              <button
+                                aria-label={`Activate ${member.display_name}`}
+                                className="flex size-9 items-center justify-center rounded-full bg-success text-white transition hover:opacity-85"
+                                onClick={() => setPendingAction({ action: "reactivate", member })}
+                                title="Activate"
+                                type="button"
+                              >
+                                <UserCheck aria-hidden="true" size={18} strokeWidth={2.4} />
+                              </button>
+                            ) : (
+                              <button
+                                aria-label={`Deactivate ${member.display_name}`}
+                                className="flex size-9 items-center justify-center rounded-full bg-warning text-white transition hover:opacity-85"
+                                onClick={() => setPendingAction({ action: "deactivate", member })}
+                                title="Deactivate"
+                                type="button"
+                              >
+                                <UserX aria-hidden="true" size={18} strokeWidth={2.4} />
+                              </button>
+                            )}
+                            <button
+                              aria-label={`Delete ${member.display_name}`}
+                              className="flex size-9 items-center justify-center rounded-full bg-error text-white transition hover:opacity-85"
+                              onClick={() => setPendingAction({ action: "delete", member })}
+                              title="Delete"
+                              type="button"
+                            >
+                              <Trash2 aria-hidden="true" size={18} strokeWidth={2.4} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
               ))}
@@ -442,18 +519,32 @@ export function StaffDirectory() {
 
         {selectedStaff ? (
           <StaffProfile
+            initiallyEditing={openStaffInEditMode}
             member={selectedStaff}
-            onClose={() => setSelectedStaff(null)}
-            onDeleted={() => setSelectedStaff(null)}
+            onClose={() => {
+              setOpenStaffInEditMode(false);
+              setSelectedStaff(null);
+            }}
             onUpdated={setSelectedStaff}
             showToast={setToast}
             getStaff={getStaff}
             updateStaff={updateStaff}
             updateAvailability={updateAvailability}
-            deactivateStaff={deactivateStaff}
-            reactivateStaff={reactivateStaff}
-            deleteStaff={deleteStaff}
           />
+        ) : null}
+        {pendingAction ? (
+          <ConfirmationOverlay>
+            <ConfirmationCard
+              cancelLabel="Cancel"
+              confirmLabel={`Yes, ${pendingAction.action === "reactivate" ? "activate" : pendingAction.action}`}
+              description={`Are you sure you want to ${pendingAction.action === "reactivate" ? "activate" : pendingAction.action} ${pendingAction.member.display_name}?${pendingAction.action === "delete" ? " This soft-deletes the staff record." : ""}`}
+              loading={isActionSaving}
+              onCancel={() => setPendingAction(null)}
+              onConfirm={() => void runStaffTableAction()}
+              title={`${statusLabel(pendingAction.action === "reactivate" ? "activate" : pendingAction.action)} staff member?`}
+              tone={pendingAction.action === "reactivate" ? "default" : "danger"}
+            />
+          </ConfirmationOverlay>
         ) : null}
       </section>
       {toast ? (
@@ -672,21 +763,18 @@ function FormInput({ className, label, ...props }: FormInputProps) {
 }
 
 function StaffProfile({
+  initiallyEditing,
   member,
   onClose,
-  onDeleted,
   onUpdated,
   showToast,
   getStaff,
   updateStaff,
   updateAvailability,
-  deactivateStaff,
-  reactivateStaff,
-  deleteStaff,
 }: {
+  initiallyEditing: boolean;
   member: StaffMember;
   onClose: () => void;
-  onDeleted: (staffId: string) => void;
   onUpdated: (member: StaffMember) => void;
   showToast: (toast: ResultToast) => void;
   getStaff: (staffId: string) => Promise<StaffMember>;
@@ -698,17 +786,11 @@ function StaffProfile({
     staffId: string,
     payload: UpdateStaffAvailabilityPayload,
   ) => Promise<StaffMember>;
-  deactivateStaff: (staffId: string) => Promise<StaffMember>;
-  reactivateStaff: (staffId: string) => Promise<StaffMember>;
-  deleteStaff: (staffId: string) => Promise<unknown>;
 }) {
   const [staff, setStaff] = useState(member);
   const [isLoading, setIsLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(initiallyEditing);
   const [isSaving, setIsSaving] = useState(false);
-  const [confirmation, setConfirmation] = useState<
-    "deactivate" | "reactivate" | "delete" | null
-  >(null);
 
   useEffect(() => {
     const load = window.setTimeout(async () => {
@@ -797,72 +879,6 @@ function StaffProfile({
     }
   };
 
-  const runConfirmedAction = async () => {
-    if (!confirmation) return;
-
-    setIsSaving(true);
-
-    try {
-      if (confirmation === "delete") {
-        await deleteStaff(staff.id);
-        onDeleted(staff.id);
-        showToast({
-          message: `${staff.display_name} was deleted.`,
-          title: "Staff member deleted",
-          tone: "success",
-        });
-        return;
-      }
-
-      const updated =
-        confirmation === "deactivate"
-          ? await deactivateStaff(staff.id)
-          : await reactivateStaff(staff.id);
-
-      setStaff(updated);
-      onUpdated(updated);
-      setConfirmation(null);
-      showToast({
-        message: `${updated.display_name} was ${confirmation === "deactivate" ? "deactivated" : "reactivated"}.`,
-        title: "Staff status updated",
-        tone: "success",
-      });
-    } catch (error: unknown) {
-      setConfirmation(null);
-      showToast({
-        message: getErrorMessage(error),
-        title: "Staff action failed",
-        tone: "error",
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  if (confirmation) {
-    const actionLabel =
-      confirmation === "delete"
-        ? "delete"
-        : confirmation === "deactivate"
-          ? "deactivate"
-          : "reactivate";
-
-    return (
-      <ConfirmationOverlay>
-        <ConfirmationCard
-          cancelLabel="Cancel"
-          confirmLabel={`Yes, ${actionLabel}`}
-          description={`Are you sure you want to ${actionLabel} ${staff.display_name}?${confirmation === "delete" ? " This soft-deletes the staff record." : ""}`}
-          loading={isSaving}
-          onCancel={() => setConfirmation(null)}
-          onConfirm={() => void runConfirmedAction()}
-          title={`${statusLabel(actionLabel)} staff member?`}
-          tone={confirmation === "reactivate" ? "default" : "danger"}
-        />
-      </ConfirmationOverlay>
-    );
-  }
-
   return (
     <section
       aria-labelledby="profile-title"
@@ -949,39 +965,6 @@ function StaffProfile({
                 </dd>
               </div>
             </dl>
-            <footer className="mt-6 flex flex-wrap justify-end gap-2 border-t border-background-secondary pt-4">
-              <button
-                className="rounded-lg border border-background-secondary px-4 py-2 text-xs font-bold"
-                onClick={() => setIsEditing(true)}
-                type="button"
-              >
-                Edit profile
-              </button>
-              {staff.staff_status === "deactivated" ? (
-                <button
-                  className="rounded-lg bg-success px-4 py-2 text-xs font-bold text-white"
-                  onClick={() => setConfirmation("reactivate")}
-                  type="button"
-                >
-                  Reactivate
-                </button>
-              ) : (
-                <button
-                  className="rounded-lg bg-warning px-4 py-2 text-xs font-bold text-white"
-                  onClick={() => setConfirmation("deactivate")}
-                  type="button"
-                >
-                  Deactivate
-                </button>
-              )}
-              <button
-                className="rounded-lg bg-error px-4 py-2 text-xs font-bold text-white"
-                onClick={() => setConfirmation("delete")}
-                type="button"
-              >
-                Delete
-              </button>
-            </footer>
           </div>
         )}
       </article>

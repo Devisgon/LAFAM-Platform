@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { ChevronDown, FileSpreadsheet, RotateCcw } from "lucide-react";
+import { ChevronDown, RotateCcw } from "lucide-react";
 import {
   useAdminBookings,
   useAdminPrivateBookings,
@@ -468,13 +468,6 @@ function BookingListPanel({ previousOnly }: { previousOnly: boolean }) {
       <div className="grid gap-4 border-b border-background-secondary px-5 py-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              aria-label="Export booking records"
-              className="flex size-12 shrink-0 items-center justify-center rounded-md bg-button-secondary text-txt-primary transition hover:opacity-80"
-              type="button"
-            >
-              <FileSpreadsheet aria-hidden="true" size={22} strokeWidth={2.4} />
-            </button>
             <div className="flex min-h-12 overflow-hidden rounded-sm border border-background-secondary bg-card-bg-secondary p-1">
               {(["class", "private"] as const).map((mode) => (
                 <button
@@ -1720,17 +1713,7 @@ function CreatePrivateBookingCard({
       </header>
 
       <div className="px-5 py-5">
-        <nav aria-label="Booking type" className="mb-5 flex flex-wrap gap-3">
-          <span className="inline-flex min-h-11 items-center rounded-sm bg-button-primary px-4 text-sm font-semibold text-txt-primary">
-            Private booking
-          </span>
-          <Link
-            className="inline-flex min-h-11 items-center rounded-sm border border-background-secondary px-4 text-sm font-semibold text-txt-secondary transition hover:bg-background-secondary hover:text-txt-primary"
-            href="/admin/services/pilates#create-class"
-          >
-            Group / class booking
-          </Link>
-        </nav>
+        
         <p className="mb-5 text-sm text-txt-secondary">
           Create a private trainer booking for a customer and trainer.
         </p>

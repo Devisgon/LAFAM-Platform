@@ -3,7 +3,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ChevronDown,
-  FileSpreadsheet,
   ReceiptText,
   RotateCcw,
 } from "lucide-react";
@@ -387,14 +386,6 @@ function PaymentListPanel({
 
       <div className="grid gap-4 border-b border-background-secondary px-5 py-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <button
-            aria-label="Export payment records"
-            className="flex size-12 shrink-0 items-center justify-center rounded-md bg-button-secondary text-txt-primary transition hover:opacity-80"
-            type="button"
-          >
-            <FileSpreadsheet aria-hidden="true" size={22} strokeWidth={2.4} />
-          </button>
-
           <div className="grid flex-1 gap-3 md:grid-cols-2">
             <FilterSelect
               disabled={areUsersLoading || userOptions.length === 0}

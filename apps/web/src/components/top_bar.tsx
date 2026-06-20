@@ -92,15 +92,7 @@ export function TopBar({ actionHref, actionLabel, title }: TopBarProps) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        {actionHref && actionLabel ? (
-          <Link
-            className="inline-flex min-h-11 items-center rounded-sm bg-button-primary px-4 text-sm font-semibold text-txt-primary transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            href={actionHref}
-          >
-            {actionLabel}
-          </Link>
-        ) : null}
-
+        
         <div className="relative" ref={accountMenuRef}>
           <button
             aria-expanded={isAccountMenuOpen}

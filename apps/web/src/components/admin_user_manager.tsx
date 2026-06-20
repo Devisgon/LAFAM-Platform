@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import {
   ChevronDown,
-  FileSpreadsheet,
   Power,
   RotateCcw,
   Trash2,
@@ -53,7 +52,6 @@ const statuses: AdminUserStatus[] = [
   "pending_email_verification",
   "guest_active",
   "deactivated",
-  "deleted",
 ];
 
 function label(value: string): string {
@@ -98,7 +96,6 @@ export function AdminUserManager() {
 
   const {
     users,
-    total,
     isLoading,
     isMutating,
     error,
@@ -108,12 +105,19 @@ export function AdminUserManager() {
     hardDeleteUser,
   } = useAdminUsers(filters);
 
-  const pageCount = Math.max(1, Math.ceil(users.length / pageSize));
+  const visibleUsers = useMemo(
+    () => users.filter((user) => user.status !== "deleted"),
+    [users],
+  );
+  const pageCount = Math.max(1, Math.ceil(visibleUsers.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, pageCount);
   const pageStart = (safeCurrentPage - 1) * pageSize;
-  const pagedUsers = users.slice(pageStart, pageStart + pageSize);
-  const visibleStart = users.length === 0 ? 0 : pageStart + 1;
-  const visibleEnd = Math.min(pageStart + pagedUsers.length, users.length);
+  const pagedUsers = visibleUsers.slice(pageStart, pageStart + pageSize);
+  const visibleStart = visibleUsers.length === 0 ? 0 : pageStart + 1;
+  const visibleEnd = Math.min(
+    pageStart + pagedUsers.length,
+    visibleUsers.length,
+  );
 
   const runConfirmedAction = async () => {
     if (!confirmation) return;
@@ -174,14 +178,6 @@ export function AdminUserManager() {
         ) : (
           <>
             <div className="flex flex-col gap-4 px-5 py-5 xl:flex-row xl:items-end xl:justify-between">
-              <button
-                aria-label="Export user list"
-                className="flex size-12 shrink-0 items-center justify-center rounded-md bg-button-secondary text-txt-primary transition hover:opacity-80"
-                type="button"
-              >
-                <FileSpreadsheet aria-hidden="true" size={22} strokeWidth={2.4} />
-              </button>
-
               <div className="grid flex-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1.25fr)_minmax(170px,0.8fr)_minmax(170px,0.8fr)_minmax(190px,0.9fr)]">
                 <label>
                   <span className="sr-only">Search users</span>
@@ -357,7 +353,7 @@ export function AdminUserManager() {
               </label>
 
               <p>
-                Showing {visibleStart} to {visibleEnd} of {total} entries
+                Showing {visibleStart} to {visibleEnd} of {visibleUsers.length} entries
               </p>
 
               <nav aria-label="User list pagination" className="flex items-center">
