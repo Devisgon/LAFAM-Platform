@@ -49,7 +49,10 @@ function LoginForm() {
       router.replace(nextPath);
     } catch (error: unknown) {
       if (isEmailVerificationRequiredError(error)) {
-        const verificationUrl = new URL("/auth/verify-email", window.location.origin);
+        const verificationUrl = new URL(
+          "/auth/verify-email",
+          window.location.origin,
+        );
         const redirectPath = searchParams.get("redirect");
 
         if (redirectPath) {
@@ -64,7 +67,7 @@ function LoginForm() {
   return (
     <main className="relative flex h-screen w-full items-center justify-center overflow-hidden px-4 py-10 font-sans text-black">
       <div
-        className="absolute inset-0 bg-cover bg-center bg-blur  scale-100"
+        className="absolute inset-0 bg-cover bg-center bg-blur blur-sm scale-100"
         style={{
           backgroundImage: "url('/login_bg.jpg')",
         }}
@@ -198,7 +201,7 @@ function LoginForm() {
               <button
                 type="submit"
                 disabled={isLoggingIn}
-                className="min-w-[86px] rounded bg-[#e9caca] px-5 py-3 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                className="min-w-[86px] rounded bg-[#e9caca] px-5 py-3 text-[16px] font-semibold text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isLoggingIn ? "Signing..." : "Sign In"}
               </button>

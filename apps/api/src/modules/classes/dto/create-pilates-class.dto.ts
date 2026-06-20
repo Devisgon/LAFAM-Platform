@@ -100,6 +100,19 @@ function optionalInteger({ value }: TransformFnParams): unknown {
 
   return Number(trimmedValue);
 }
+function optionalUppercaseString({ value }: TransformFnParams): unknown {
+  if (typeof value === 'undefined' || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmedValue = value.trim();
+
+  return trimmedValue.length > 0 ? trimmedValue.toUpperCase() : undefined;
+}
 
 function optionalDecimal({ value }: TransformFnParams): unknown {
   if (typeof value === 'undefined' || value === null || value === '') {
