@@ -19,6 +19,7 @@ import { randomUUID } from 'node:crypto';
 import {
   CallHandler,
   ExecutionContext,
+  HttpException,
   Injectable,
   type NestInterceptor,
 } from '@nestjs/common';
@@ -37,7 +38,7 @@ interface SafeRequestMetadata {
   readonly ip?: string;
   readonly queryKeys?: readonly string[];
 }
-
+const HTTP_STATUS_INTERNAL_SERVER_ERROR = 500;
 function resolveHeaderValue(
   value: string | string[] | undefined,
 ): string | undefined {
@@ -83,11 +84,19 @@ function createRequestMetadata(
   request: Request,
   response?: Response,
   durationMs?: number,
+  statusCodeOverride?: number,
 ): SafeRequestMetadata {
+  const resolvedStatusCode =
+    typeof statusCodeOverride === 'number'
+      ? statusCodeOverride
+      : response?.statusCode;
+
   return {
     method: request.method,
     path: resolveRequestPath(request),
-    ...(response ? { statusCode: response.statusCode } : {}),
+    ...(typeof resolvedStatusCode === 'number'
+      ? { statusCode: resolvedStatusCode }
+      : {}),
     ...(typeof durationMs === 'number' ? { durationMs } : {}),
     ...(request.headers['user-agent']
       ? { userAgent: String(request.headers['user-agent']) }
@@ -98,7 +107,17 @@ function createRequestMetadata(
       : {}),
   };
 }
+function resolveFailureStatusCode(error: unknown, response: Response): number {
+  if (error instanceof HttpException) {
+    return error.getStatus();
+  }
 
+  if (response.statusCode >= 400) {
+    return response.statusCode;
+  }
+
+  return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+}
 function isSlowRequest(durationMs: number): boolean {
   return durationMs >= currentLoggingConfig.slowRequestThresholdMs;
 }
@@ -143,8 +162,14 @@ export class RequestLoggingInterceptor implements NestInterceptor {
       }),
       catchError((error: unknown) => {
         const durationMs = Date.now() - startedAt;
+        const failureStatusCode = resolveFailureStatusCode(error, response);
         const metadata = {
-          ...createRequestMetadata(request, response, durationMs),
+          ...createRequestMetadata(
+            request,
+            response,
+            durationMs,
+            failureStatusCode,
+          ),
           error:
             error instanceof Error
               ? {

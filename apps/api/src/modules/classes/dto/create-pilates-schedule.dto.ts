@@ -4,10 +4,11 @@
  *
  * Role:
  * - Validates admin request body for creating bookable Pilates class occurrences.
- * - Supports existing single schedule creation.
+ * - Supports existing backward-compatible single schedule creation.
+ * - Supports single-date multi-slot schedule creation.
  * - Supports recurring weekly/monthly schedule generation through the same endpoint.
  * - Supports backend-owned schedule pricing fields used by the Payment Module.
- * - Supports optional multi-time recurring schedule slots.
+ * - Supports optional multi-time schedule slots for both single and recurring modes.
  *
  * Important:
  * - This DTO creates scheduled occurrences, not the class template.
@@ -15,7 +16,8 @@
  * - For recurring mode, start_date, end_date, and recurrence are required.
  * - end_time is not accepted from the client.
  * - Backend calculates end_time from start_time + duration_minutes.
- * - For recurring schedules, time_slots can be used to create multiple bookable slots per recurrence date.
+ * - If time_slots is provided, top-level start_time is optional.
+ * - If time_slots is not provided, top-level start_time is required.
  * - Trainer availability, trainer overlap, recurrence generation limits, price resolution,
  *   and conflict checks are handled in service/repository/policy logic.
  */
@@ -196,12 +198,26 @@ function isSingleSchedule(dto: CreatePilatesScheduleDto): boolean {
   return dto.mode !== PILATES_SCHEDULE_CREATION_MODE_RECURRING;
 }
 
-function hasRecurringTimeSlots(dto: CreatePilatesScheduleDto): boolean {
-  return (
-    isRecurringSchedule(dto) &&
-    typeof dto.time_slots !== 'undefined' &&
-    dto.time_slots !== null
-  );
+function hasScheduleTimeSlots(dto: CreatePilatesScheduleDto): boolean {
+  return typeof dto.time_slots !== 'undefined';
+}
+
+function shouldValidateScheduleStartTime(
+  dto: CreatePilatesScheduleDto,
+): boolean {
+  if (!hasScheduleTimeSlots(dto)) {
+    return true;
+  }
+
+  if (typeof dto.start_time === 'undefined' || dto.start_time === null) {
+    return false;
+  }
+
+  if (typeof dto.start_time === 'string') {
+    return dto.start_time.trim().length > 0;
+  }
+
+  return true;
 }
 
 function isWeeklyRecurrence(dto: CreatePilatesScheduleRecurrenceDto): boolean {
@@ -329,7 +345,7 @@ export class CreatePilatesScheduleRecurrenceDto {
 export class CreatePilatesScheduleTimeSlotDto {
   @ApiPropertyOptional({
     description:
-      'Studio or room for this recurring time slot. If omitted, the schedule studio is used.',
+      'Studio or room for this time slot. If omitted, the schedule studio is used.',
     example: PILATES_CLASS_DEFAULT_STUDIO,
     minLength: PILATES_CLASS_STUDIO_MIN_LENGTH,
     maxLength: PILATES_CLASS_STUDIO_MAX_LENGTH,
@@ -378,7 +394,7 @@ export class CreatePilatesScheduleTimeSlotDto {
 
   @ApiPropertyOptional({
     description:
-      'Capacity for this recurring time slot. If omitted, the schedule capacity is used.',
+      'Capacity for this time slot. If omitted, the schedule capacity is used.',
     example: PILATES_CLASS_DEFAULT_CAPACITY,
     minimum: PILATES_CLASS_CAPACITY_MIN,
     maximum: PILATES_CLASS_CAPACITY_MAX,
@@ -398,7 +414,7 @@ export class CreatePilatesScheduleTimeSlotDto {
 
   @ApiPropertyOptional({
     description:
-      'Price override for this recurring time slot. If omitted, the schedule or class price is used.',
+      'Price override for this time slot. If omitted, the schedule or class price is used.',
     example: PILATES_CLASS_DEFAULT_PRICE_AMOUNT,
     minimum: PILATES_CLASS_PRICE_AMOUNT_MIN,
   })
@@ -419,7 +435,7 @@ export class CreatePilatesScheduleTimeSlotDto {
 
   @ApiPropertyOptional({
     description:
-      'Currency for this recurring time slot. Current Payment Module supports KWD only.',
+      'Currency for this time slot. Current Payment Module supports KWD only.',
     enum: PILATES_CLASS_ALLOWED_CURRENCIES,
     example: PILATES_CLASS_DEFAULT_CURRENCY,
   })
@@ -536,16 +552,20 @@ export class CreatePilatesScheduleDto {
   })
   readonly end_date?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
-      'Schedule start time in 24-hour HH:mm format. For recurring multi-slot schedules, this remains the series base start time.',
+      'Schedule start time in 24-hour HH:mm format. Required when time_slots is not provided. Optional when time_slots is provided.',
     example: '10:00',
   })
-  @Transform(requiredTrimmedString)
+  @ValidateIf(shouldValidateScheduleStartTime)
+  @IsDefined({
+    message: 'start_time is required when time_slots is not provided.',
+  })
+  @Transform(optionalTrimmedString)
   @Matches(PILATES_CLASS_TIME_VALUE_PATTERN, {
     message: 'start_time must use HH:mm 24-hour format.',
   })
-  readonly start_time!: string;
+  readonly start_time?: string;
 
   @ApiPropertyOptional({
     description:
@@ -626,7 +646,7 @@ export class CreatePilatesScheduleDto {
 
   @ApiPropertyOptional({
     description:
-      'Recurring schedule time slots. Only used when mode is recurring. Each slot becomes a bookable schedule occurrence for every generated recurrence date.',
+      'Schedule time slots. For single mode, each slot creates one bookable occurrence on class_date. For recurring mode, each slot creates one bookable occurrence for every generated recurrence date.',
     type: [CreatePilatesScheduleTimeSlotDto],
     minItems: PILATES_SCHEDULE_TIME_SLOT_MIN_COUNT,
     maxItems: PILATES_SCHEDULE_TIME_SLOT_MAX_COUNT,
@@ -649,7 +669,7 @@ export class CreatePilatesScheduleDto {
       },
     ],
   })
-  @ValidateIf(hasRecurringTimeSlots)
+  @ValidateIf(hasScheduleTimeSlots)
   @IsArray({
     message: 'time_slots must be an array.',
   })

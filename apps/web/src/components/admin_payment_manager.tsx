@@ -178,14 +178,6 @@ function statusTone(
   return "neutral";
 }
 
-function jsonPreview(value: Record<string, unknown>): string {
-  const keys = Object.keys(value);
-
-  if (keys.length === 0) return "None";
-
-  return JSON.stringify(value, null, 2);
-}
-
 export function AdminPaymentManager() {
   const userFilters = useMemo<AdminUserFilters>(() => ({}), []);
   const bookingFilters = useMemo<AdminBookingFilters>(
@@ -712,7 +704,7 @@ function PaymentDetailPanel({
         </p>
       ) : null}
 
-      <div className="grid gap-5 p-5 xl:grid-cols-[1fr_380px]">
+      <div className="grid items-start gap-5 p-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <section className="grid gap-5">
           <section className="rounded-md border border-background-secondary">
             <header className="border-b border-background-secondary px-4 py-3">
@@ -721,15 +713,10 @@ function PaymentDetailPanel({
             <dl className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
               <DetailItem label="Name" value={userName} />
               <DetailItem label="Transaction ID" value={payment.gateway_reference ?? "None"} />
-              <DetailItem label="Payment ID" value={payment.id} />
               <DetailItem label="Payment method" value={label(payment.payment_method)} />
               <DetailItem label="Payment provider" value={label(payment.payment_provider)} />
               <DetailItem label="Status" value={label(payment.status)} />
-              <DetailItem label="Booking ID" value={payment.booking_id ?? "None"} />
-              <DetailItem label="Private booking ID" value={payment.private_booking_id ?? "None"} />
-              <DetailItem label="Gateway payment ID" value={payment.gateway_payment_id ?? "None"} />
-              <DetailItem label="Gateway invoice ID" value={payment.gateway_invoice_id ?? "None"} />
-              <DetailItem label="Webhook verified" value={formatDateTime(payment.webhook_verified_at)} />
+              <DetailItem label="Booking reference" value={payment.booking_id ?? payment.private_booking_id ?? "None"} />
               <DetailItem label="Created" value={formatDateTime(payment.created_at)} />
             </dl>
           </section>
@@ -749,11 +736,9 @@ function PaymentDetailPanel({
               <DetailItem label="Failure" value={payment.failure_message ?? payment.failure_code ?? "None"} />
             </dl>
           </section>
-
-          <PaymentTransactionsSection paymentId={payment.id} />
         </section>
 
-        <aside className="rounded-md border border-background-secondary bg-card-bg-secondary">
+        <aside className="h-fit rounded-md border border-background-secondary bg-card-bg-secondary">
           <header className="border-b border-background-secondary px-4 py-4">
             <h3 className="text-xl font-semibold">Billing summary</h3>
           </header>
@@ -793,13 +778,11 @@ function PaymentDetailPanel({
               )}
             </div>
           </section>
-          <section className="border-t border-background-secondary p-4">
-            <h4 className="text-sm font-bold">Metadata</h4>
-            <pre className="mt-3 max-h-56 overflow-auto rounded-sm bg-card-bg-primary p-3 text-xs text-txt-secondary">
-              {jsonPreview(payment.metadata)}
-            </pre>
-          </section>
         </aside>
+      </div>
+
+      <div className="mx-5 mb-5">
+        <PaymentTransactionsSection paymentId={payment.id} />
       </div>
 
       {refundOpen ? (

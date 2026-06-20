@@ -11,6 +11,8 @@
  * - It does not create schedules.
  * - It does not assign trainer/time/date directly.
  * - Trainer/date/time belong to pilates_class_schedules.
+ * - Class-level default price and currency are allowed here because schedules can
+ *   fall back to class defaults when schedule-level pricing is not provided.
  */
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -28,27 +30,27 @@ import {
 } from 'class-validator';
 
 import {
+  PILATES_CLASS_ALLOWED_CURRENCIES,
   PILATES_CLASS_CAPACITY_MAX,
   PILATES_CLASS_CAPACITY_MIN,
   PILATES_CLASS_CREATE_ALLOWED_STATUSES,
   PILATES_CLASS_DEFAULT_CAPACITY,
   PILATES_CLASS_DEFAULT_CURRENCY,
   PILATES_CLASS_DEFAULT_DURATION_MINUTES,
-  PILATES_CLASS_DEFAULT_PRICE_AMOUNT,
   PILATES_CLASS_DEFAULT_LEVEL,
+  PILATES_CLASS_DEFAULT_PRICE_AMOUNT,
   PILATES_CLASS_DESCRIPTION_MAX_LENGTH,
   PILATES_CLASS_DURATION_MAX_MINUTES,
   PILATES_CLASS_DURATION_MIN_MINUTES,
   PILATES_CLASS_LEVELS,
-  PILATES_CLASS_ALLOWED_CURRENCIES,
   PILATES_CLASS_PRICE_AMOUNT_MIN,
   PILATES_CLASS_PRICE_DECIMAL_PLACES,
   PILATES_CLASS_STATUS_DRAFT,
   PILATES_CLASS_TITLE_MAX_LENGTH,
   PILATES_CLASS_TITLE_MIN_LENGTH,
   type PilatesClassCreateAllowedStatus,
-  type PilatesClassLevel,
   type PilatesClassCurrency,
+  type PilatesClassLevel,
 } from '../constants/pilates-class.constants';
 
 function requiredTrimmedString({ value }: TransformFnParams): unknown {
@@ -75,6 +77,20 @@ function optionalTrimmedStringOrNull({ value }: TransformFnParams): unknown {
   const trimmedValue = value.trim();
 
   return trimmedValue.length > 0 ? trimmedValue : undefined;
+}
+
+function optionalUppercaseString({ value }: TransformFnParams): unknown {
+  if (typeof value === 'undefined' || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmedValue = value.trim();
+
+  return trimmedValue.length > 0 ? trimmedValue.toUpperCase() : undefined;
 }
 
 function optionalInteger({ value }: TransformFnParams): unknown {

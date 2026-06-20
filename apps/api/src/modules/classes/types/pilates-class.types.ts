@@ -387,11 +387,12 @@ export interface CreateSinglePilatesClassScheduleInput {
   readonly trainer_staff_profile_id: string;
   readonly studio?: string;
   readonly class_date: string;
-  readonly start_time: string;
-  readonly duration_minutes: number;
+  readonly start_time?: string;
+  readonly duration_minutes?: number;
   readonly capacity?: number;
   readonly price_amount?: number;
   readonly currency?: PilatesClassCurrency;
+  readonly time_slots?: readonly PilatesScheduleTimeSlotInput[];
   readonly actor_admin_user_id: string;
 }
 
@@ -402,8 +403,8 @@ export interface CreateRecurringPilatesClassScheduleInput {
   readonly studio?: string;
   readonly start_date: string;
   readonly end_date: string;
-  readonly start_time: string;
-  readonly duration_minutes: number;
+  readonly start_time?: string;
+  readonly duration_minutes?: number;
   readonly capacity?: number;
   readonly price_amount?: number;
   readonly currency?: PilatesClassCurrency;
@@ -451,6 +452,8 @@ export interface CompletePilatesClassScheduleInput {
 export interface CreateSinglePilatesClassScheduleResult {
   readonly mode: Extract<PilatesScheduleCreationMode, 'single'>;
   readonly schedule: PilatesClassScheduleAdminDetail;
+  readonly generated_schedules?: readonly PilatesClassScheduleAdminDetail[];
+  readonly generated_count?: number;
 }
 
 export interface CreateRecurringPilatesClassScheduleResult {

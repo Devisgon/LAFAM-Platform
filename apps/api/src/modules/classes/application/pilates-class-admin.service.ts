@@ -5,7 +5,9 @@
  * Role:
  * - Owns admin-facing Pilates class and schedule business rules.
  * - Validates trainer assignment, trainer availability, schedule conflicts, class status, and lifecycle transitions.
- * - Supports single Pilates schedule creation and recurring weekly/monthly schedule generation.
+ * - Supports backward-compatible single Pilates schedule creation.
+ * - Supports single-date multi-slot schedule creation.
+ * - Supports recurring weekly/monthly schedule generation.
  * - Converts repository records into admin-safe response contracts.
  * - Emits internal domain events after successful mutations.
  *
@@ -350,6 +352,75 @@ function calculateEndTime(startTime: string, durationMinutes: number): string {
   const endMinutes = startMinutes + durationMinutes;
 
   return formatMinutesToTime(endMinutes);
+}
+function resolveScheduleBaseStartTime(dto: CreatePilatesScheduleDto): string {
+  if (typeof dto.start_time === 'string' && dto.start_time.trim().length > 0) {
+    return dto.start_time;
+  }
+
+  const firstTimeSlot = dto.time_slots?.[0];
+
+  if (
+    typeof firstTimeSlot?.start_time === 'string' &&
+    firstTimeSlot.start_time.trim().length > 0
+  ) {
+    return firstTimeSlot.start_time;
+  }
+
+  throw AppError.invalidRequest(
+    'start_time is required when time_slots is not provided.',
+  );
+}
+
+function assertScheduleWindowsDoNotOverlap(
+  windows: readonly PilatesClassScheduleTimeWindow[],
+): void {
+  for (let leftIndex = 0; leftIndex < windows.length; leftIndex += 1) {
+    const leftWindow = windows[leftIndex];
+
+    if (!leftWindow) {
+      continue;
+    }
+
+    const leftStart = parseTimeToMinutes(leftWindow.start_time);
+    const leftEnd = parseTimeToMinutes(leftWindow.end_time);
+
+    for (
+      let rightIndex = leftIndex + 1;
+      rightIndex < windows.length;
+      rightIndex += 1
+    ) {
+      const rightWindow = windows[rightIndex];
+
+      if (!rightWindow || leftWindow.class_date !== rightWindow.class_date) {
+        continue;
+      }
+
+      const rightStart = parseTimeToMinutes(rightWindow.start_time);
+      const rightEnd = parseTimeToMinutes(rightWindow.end_time);
+      const overlaps = leftStart < rightEnd && rightStart < leftEnd;
+
+      if (!overlaps) {
+        continue;
+      }
+
+      throw AppError.pilatesScheduleDuplicateTimeSlot(
+        'Duplicate or overlapping Pilates schedule time slots are not allowed.',
+        {
+          first_slot: {
+            class_date: leftWindow.class_date,
+            start_time: leftWindow.start_time,
+            end_time: leftWindow.end_time,
+          },
+          second_slot: {
+            class_date: rightWindow.class_date,
+            start_time: rightWindow.start_time,
+            end_time: rightWindow.end_time,
+          },
+        },
+      );
+    }
+  }
 }
 
 function isTimeWindowCoveredByRule(
@@ -1584,25 +1655,171 @@ export class PilatesClassAdminService {
     }
 
     const classRecord = await this.resolveSchedulableClass(dto.class_id);
-
-    const durationMinutes =
-      dto.duration_minutes ?? classRecord.default_duration_minutes;
-    const capacity = dto.capacity ?? classRecord.default_capacity;
+    const studio = dto.studio ?? PILATES_CLASS_DEFAULT_STUDIO;
     const pricing = resolveSchedulePrice({
       dtoPriceAmount: dto.price_amount,
       dtoCurrency: dto.currency,
       classRecord,
     });
-    const endTime = calculateEndTime(dto.start_time, durationMinutes);
+
+    assertDateIsNotInPast(dto.class_date);
+
+    if (dto.time_slots !== undefined && dto.time_slots.length > 0) {
+      const windows: PilatesClassScheduleTimeWindow[] = dto.time_slots.map(
+        (timeSlot) => {
+          const durationMinutes =
+            timeSlot.duration_minutes ??
+            dto.duration_minutes ??
+            classRecord.default_duration_minutes;
+          const endTime = calculateEndTime(
+            timeSlot.start_time,
+            durationMinutes,
+          );
+
+          return {
+            class_date: dto.class_date as string,
+            start_time: timeSlot.start_time,
+            end_time: endTime,
+            duration_minutes: durationMinutes,
+          };
+        },
+      );
+
+      assertScheduleWindowsDoNotOverlap(windows);
+
+      for (const window of windows) {
+        await this.assertTrainerCanBeAssigned({
+          trainerStaffProfileId: dto.trainer_staff_profile_id,
+          window,
+        });
+      }
+
+      const schedulePayloads: PilatesClassScheduleInsert[] = dto.time_slots.map(
+        (timeSlot, index) => {
+          const window = windows[index];
+
+          if (!window) {
+            throw AppError.invalidRequest(
+              'A Pilates schedule time slot could not be resolved.',
+              {
+                slot_index: index,
+              },
+            );
+          }
+
+          const currency = resolvePilatesClassCurrency(
+            timeSlot.currency ?? pricing.currency,
+          );
+
+          return {
+            class_id: classRecord.id,
+            trainer_staff_profile_id: dto.trainer_staff_profile_id,
+            studio: timeSlot.studio ?? studio,
+            class_date: window.class_date,
+            start_time: window.start_time,
+            end_time: window.end_time,
+            duration_minutes: window.duration_minutes,
+            capacity:
+              timeSlot.capacity ?? dto.capacity ?? classRecord.default_capacity,
+            price_amount: timeSlot.price_amount ?? pricing.amount,
+            currency,
+            status: PILATES_CLASS_SCHEDULE_STATUS_SCHEDULED,
+            created_by_admin_id: adminUserId,
+            updated_by_admin_id: adminUserId,
+            series_id: null,
+            series_occurrence_index: null,
+            series_time_slot_id: null,
+            series_date_index: null,
+            series_slot_index: null,
+            generation_source: PILATES_SCHEDULE_GENERATION_SOURCE_SINGLE,
+          };
+        },
+      );
+
+      const schedules =
+        await this.pilatesClassRepository.createSchedules(schedulePayloads);
+
+      if (schedules.length === 0) {
+        throw AppError.databaseOperationFailed(
+          new Error('Single multi-slot schedule creation returned no rows.'),
+        );
+      }
+
+      for (const schedule of schedules) {
+        this.pilatesClassEventService.recordScheduleCreated(
+          schedule,
+          createAvailabilitySnapshot(schedule),
+          {
+            actor_admin_user_id: adminUserId,
+          },
+        );
+      }
+
+      const hydratedSchedules = await Promise.all(
+        schedules.map((schedule) =>
+          this.pilatesClassRepository.findScheduleWithRelationsById(
+            schedule.id,
+          ),
+        ),
+      );
+
+      const missingScheduleIds = schedules
+        .filter((_schedule, index) => hydratedSchedules[index] === null)
+        .map((schedule) => schedule.id);
+
+      if (missingScheduleIds.length > 0) {
+        throw AppError.pilatesScheduleNotFound(
+          'One or more created Pilates schedules could not be loaded.',
+          {
+            schedule_ids: missingScheduleIds,
+          },
+        );
+      }
+
+      const generatedSchedules = hydratedSchedules.map((schedule, index) => {
+        if (!schedule) {
+          throw AppError.pilatesScheduleNotFound(
+            'One created Pilates schedule could not be loaded.',
+            {
+              schedule_id: schedules[index]?.id,
+            },
+          );
+        }
+
+        return this.mapScheduleToAdminDetail(schedule);
+      });
+
+      const firstGeneratedSchedule = generatedSchedules[0];
+
+      if (!firstGeneratedSchedule) {
+        throw AppError.pilatesScheduleNotFound(
+          'The created Pilates schedule could not be loaded.',
+          {
+            schedule_ids: schedules.map((schedule) => schedule.id),
+          },
+        );
+      }
+
+      return {
+        mode: PILATES_SCHEDULE_CREATION_MODE_SINGLE,
+        schedule: firstGeneratedSchedule,
+        generated_schedules: generatedSchedules,
+        generated_count: generatedSchedules.length,
+      };
+    }
+
+    const startTime = resolveScheduleBaseStartTime(dto);
+    const durationMinutes =
+      dto.duration_minutes ?? classRecord.default_duration_minutes;
+    const capacity = dto.capacity ?? classRecord.default_capacity;
+    const endTime = calculateEndTime(startTime, durationMinutes);
 
     const window: PilatesClassScheduleTimeWindow = {
       class_date: dto.class_date,
-      start_time: dto.start_time,
+      start_time: startTime,
       end_time: endTime,
       duration_minutes: durationMinutes,
     };
-
-    assertDateIsNotInPast(window.class_date);
 
     await this.assertTrainerCanBeAssigned({
       trainerStaffProfileId: dto.trainer_staff_profile_id,
@@ -1612,7 +1829,7 @@ export class PilatesClassAdminService {
     const payload: PilatesClassScheduleInsert = {
       class_id: classRecord.id,
       trainer_staff_profile_id: dto.trainer_staff_profile_id,
-      studio: dto.studio ?? PILATES_CLASS_DEFAULT_STUDIO,
+      studio,
       class_date: window.class_date,
       start_time: window.start_time,
       end_time: window.end_time,
@@ -1689,11 +1906,12 @@ export class PilatesClassAdminService {
       dtoCurrency: dto.currency,
       classRecord,
     });
+    const baseStartTime = resolveScheduleBaseStartTime(dto);
 
     const recurrenceInput = buildRecurrenceGenerationInput(dto, {
       startDate: dto.start_date,
       endDate: dto.end_date,
-      startTime: dto.start_time,
+      startTime: baseStartTime,
       durationMinutes,
       capacity,
       studio,

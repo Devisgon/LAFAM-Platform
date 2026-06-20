@@ -7,7 +7,6 @@ import {
   ChevronDown,
   CreditCard,
   Gauge,
-  LogOut,
   Menu,
   Settings,
   Star,
@@ -22,7 +21,6 @@ type IconName =
   | "bookings"
   | "calendar"
   | "dashboard"
-  | "logout"
   | "payments"
   | "reviews"
   | "services"
@@ -53,7 +51,6 @@ const icons: Record<IconName, LucideIcon> = {
   payments: CreditCard,
   reviews: Star,
   settings: Settings,
-  logout: LogOut,
 };
 
 const primaryItems: NavItem[] = [
@@ -272,17 +269,6 @@ function SidebarContent({
         ))}
       </nav>
 
-      <a
-        href="#"
-        title="Log Out"
-        onClick={onClose}
-        className={`mt-8 flex min-h-10 items-center rounded-lg text-[17px] font-medium text-black transition hover:bg-black/10 md:mt-auto ${
-          collapsed ? "justify-center px-2" : "gap-4 px-3"
-        }`}
-      >
-        <Icon name="logout" />
-        {!collapsed && <span>Log Out</span>}
-      </a>
     </>
   );
 }
