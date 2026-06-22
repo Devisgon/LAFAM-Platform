@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   type FormEvent,
   type InputHTMLAttributes,
@@ -10,11 +9,10 @@ import {
 import { usePilates } from "@/hooks/admin/usePilates";
 import {
   type CreatePilatesClassPayload,
-  type PilatesClassDefinition,
   type PilatesClassLevel,
   type PilatesClassStatus,
 } from "@/lib/admin/pilates";
-import { Badge } from "@/components/reuseable_ui_components/badge";
+import { ClassCard } from "@/components/reuseable_ui_components/class_card";
 import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
 import { Toast } from "@/components/reuseable_ui_components/toast";
 
@@ -25,12 +23,6 @@ const buttonClass =
 
 function label(value: string): string {
   return value.replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());
-}
-
-function statusTone(status: PilatesClassStatus): "success" | "warning" | "error" {
-  if (status === "active") return "success";
-  if (status === "deleted") return "error";
-  return "warning";
 }
 
 function classPayload(form: HTMLFormElement): CreatePilatesClassPayload {
@@ -137,7 +129,14 @@ export function PilatesClassManager() {
                 No Pilates classes found. Create a new class to get started.
               </div>
             ) : (
-              api.classes.map((item) => <ClassListCard item={item} key={item.id} />)
+              api.classes.map((item) => (
+                <ClassCard
+                  actionHref={`/admin/services/pilates/${item.id}`}
+                  actionLabel="Manage class"
+                  item={item}
+                  key={item.id}
+                />
+              ))
             )}
           </div>
         </section>
@@ -208,43 +207,6 @@ function CreateClassCard({
         </button>
       </footer>
     </form>
-  );
-}
-
-function ClassListCard({ item }: { item: PilatesClassDefinition }) {
-  return (
-    <article className="relative overflow-hidden rounded-2xl border border-background-secondary bg-card-bg-primary shadow-sm before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-primary">
-      <div className="grid gap-5 p-5 pl-6 sm:grid-cols-[168px_minmax(0,1fr)_auto] sm:items-center">
-        <div className="overflow-hidden rounded-lg bg-primary/10">
-          {item.image_url ? (
-            // Runtime storage URLs should not require a broad Next image host allowlist.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img alt="" className="h-28 w-full object-cover" decoding="async" height="224" loading="lazy" src={item.image_url} width="336" />
-          ) : (
-            <div className="flex h-28 items-center justify-center text-sm font-bold text-primary">Pilates</div>
-          )}
-        </div>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={statusTone(item.status)}>{label(item.status)}</Badge>
-            <span className="text-xs text-txt-secondary">◇ Pilates</span>
-          </div>
-          <h3 className="mt-2 text-xl font-bold text-txt-primary">{item.title}</h3>
-          <p className="mt-1 line-clamp-2 text-sm text-txt-secondary">
-            {item.description ?? "No description provided."}
-          </p>
-          <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-txt-primary">
-            <span className="rounded-lg bg-primary/10 px-3 py-2">◷ {item.default_duration_minutes} minutes</span>
-            <span className="rounded-lg bg-primary/10 px-3 py-2">♙ {item.default_capacity} capacity</span>
-            <span className="rounded-lg bg-primary/10 px-3 py-2">Price per booking: {item.default_price_amount.toFixed(3)} {item.currency}</span>
-            <span className="rounded-lg bg-primary/10 px-3 py-2">Level: {label(item.level)}</span>
-          </div>
-        </div>
-        <Link className="inline-flex min-h-10 items-center justify-center rounded-lg bg-button-primary px-5 py-2 text-sm font-bold text-txt-primary transition hover:opacity-90" href={`/admin/services/pilates/${item.id}`}>
-          Manage class
-        </Link>
-      </div>
-    </article>
   );
 }
 

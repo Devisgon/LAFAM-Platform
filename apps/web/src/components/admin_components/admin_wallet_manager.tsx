@@ -21,14 +21,13 @@ import {
   type AdminWalletTransactionFilters,
   type WalletAccountStatus,
   type WalletAccountSummary,
-  type WalletLedgerEntryStatus,
-  type WalletLedgerEntrySummary,
 } from "@/lib/admin/admin-wallets";
 import { type AdminUser, type AdminUserFilters } from "@/lib/admin/admin-users";
 import { Badge } from "@/components/reuseable_ui_components/badge";
 import { DataTable } from "@/components/reuseable_ui_components/data_table";
 import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
 import { Toast } from "@/components/reuseable_ui_components/toast";
+import { WalletTransactionTable } from "@/components/reuseable_ui_components/wallet_transaction_table";
 
 type WalletView = "wallets" | "transactions";
 
@@ -108,15 +107,6 @@ function walletStatusTone(
   if (status === "active") return "success";
   if (status === "frozen") return "warning";
   return "neutral";
-}
-
-function transactionStatusTone(
-  status: WalletLedgerEntryStatus,
-): "neutral" | "info" | "success" | "warning" | "error" {
-  if (status === "posted") return "success";
-  if (status === "pending") return "warning";
-  if (status === "failed") return "error";
-  return "info";
 }
 
 export function AdminWalletManager() {
@@ -945,33 +935,15 @@ function WalletTransactionsPanel({
         </div>
       ) : (
         <>
-          <DataTable
-            columns={[
-              { key: "name", heading: "Name" },
-              { key: "currency", heading: "Currency" },
-              { key: "amount", heading: "Amount" },
-              { key: "balance-before", heading: "Balance Before" },
-              { key: "balance-after", heading: "Balance After" },
-              { key: "entry-type", heading: "Entry Type" },
-              { key: "status", heading: "Status" },
-              { key: "wallet-account-id", heading: "Wallet Account ID" },
-              { key: "payment-id", heading: "Payment ID" },
-              { key: "booking-id", heading: "Booking ID" },
-              { key: "description", heading: "Description" },
-              { key: "created", heading: "Created" },
-            ]}
-            emptyMessage="No wallet transactions found."
-            isEmpty={transactions.length === 0}
-            minWidthClassName="min-w-[1260px]"
-          >
-            {transactions.map((transaction) => (
-              <WalletTransactionRow
-                key={transaction.id}
-                transaction={transaction}
-                userName={getWalletUserName(transaction.user_id, usersById)}
-              />
-            ))}
-          </DataTable>
+          <WalletTransactionTable
+            getUserName={(transaction) =>
+              getWalletUserName(transaction.user_id, usersById)
+            }
+            getWalletName={(transaction) =>
+              `${getWalletUserName(transaction.user_id, usersById)}'s wallet`
+            }
+            transactions={transactions}
+          />
 
           <PaginationFooter
             currentPage={safeCurrentPage}
@@ -989,56 +961,6 @@ function WalletTransactionsPanel({
         </>
       )}
     </section>
-  );
-}
-
-function WalletTransactionRow({
-  transaction,
-  userName,
-}: {
-  transaction: WalletLedgerEntrySummary;
-  userName: string;
-}) {
-  const bookingId =
-    transaction.booking_id ?? transaction.private_booking_id ?? "None";
-
-  return (
-    <tr className="divide-x divide-background-secondary bg-card-bg-primary transition odd:bg-background-secondary/20 hover:bg-card-bg-secondary/40">
-      <td className="px-4 py-4 font-medium text-txt-primary">{userName}</td>
-      <td className="px-4 py-4 font-semibold text-txt-primary">KWD</td>
-      <td className="px-4 py-4 font-semibold text-txt-primary">
-        {formatMoney(transaction.amount)}
-      </td>
-      <td className="px-4 py-4 text-txt-primary">
-        {formatMoney(transaction.balance_before)}
-      </td>
-      <td className="px-4 py-4 text-txt-primary">
-        {formatMoney(transaction.balance_after)}
-      </td>
-      <td className="px-4 py-4 text-txt-primary">
-        {label(transaction.entry_type)}
-      </td>
-      <td className="px-4 py-4">
-        <Badge tone={transactionStatusTone(transaction.entry_status)}>
-          {label(transaction.entry_status)}
-        </Badge>
-      </td>
-      <td className="px-4 py-4 font-mono text-xs text-txt-secondary">
-        {transaction.wallet_account_id}
-      </td>
-      <td className="px-4 py-4 font-mono text-xs text-txt-secondary">
-        {transaction.payment_id ?? "None"}
-      </td>
-      <td className="px-4 py-4 font-mono text-xs text-txt-secondary">
-        {bookingId}
-      </td>
-      <td className="max-w-[260px] px-4 py-4 text-txt-secondary">
-        {transaction.description ?? "No description"}
-      </td>
-      <td className="px-4 py-4 text-txt-secondary">
-        {formatDateTime(transaction.created_at)}
-      </td>
-    </tr>
   );
 }
 
