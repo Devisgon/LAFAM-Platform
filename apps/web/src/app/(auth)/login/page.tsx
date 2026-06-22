@@ -5,11 +5,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, UserRound } from "lucide-react";
-import { useAuth } from "@/hooks/auth/useAuth";
+import { useAuth } from "@/modules/auth";
 import {
   isEmailVerificationRequiredError,
   resolvePostLoginRedirect,
-} from "@/lib/auth/auth";
+} from "@/modules/auth";
 
 export default function LoginScreen() {
   return (
@@ -50,7 +50,7 @@ function LoginForm() {
     } catch (error: unknown) {
       if (isEmailVerificationRequiredError(error)) {
         const verificationUrl = new URL(
-          "/auth/verify-email",
+          "/verify-email",
           window.location.origin,
         );
         const redirectPath = searchParams.get("redirect");
@@ -67,10 +67,7 @@ function LoginForm() {
   return (
     <main className="relative flex h-screen w-full items-center justify-center overflow-hidden px-4 py-10 font-sans text-black">
       <div
-        className="absolute inset-0 bg-cover bg-center bg-blur blur-sm scale-100"
-        style={{
-          backgroundImage: "url('/login_bg.jpg')",
-        }}
+        className="auth-page-background absolute inset-0 scale-100 bg-cover bg-center blur-sm"
       />
 
       <div className="absolute inset-0 bg-black/55" />
@@ -88,7 +85,7 @@ function LoginForm() {
         </div>
 
         <div className="w-full max-w-[500px] overflow-hidden rounded-md bg-white shadow-2xl">
-          <div className="flex h-16 items-center justify-center gap-3 bg-[#e9caca] text-black">
+          <div className="flex h-16 items-center justify-center gap-3 bg-primary text-black">
             <UserRound size={30} strokeWidth={2.5} />
             <h1 className="text-xl font-bold uppercase tracking-wide">
               Sign In
@@ -144,8 +141,8 @@ function LoginForm() {
                 </label>
 
                 <Link
-                  href="/auth/forgot-password"
-                  className="text-[15px] font-medium text-[#e9caca] transition hover:text-black"
+                  href="/forgot-password"
+                  className="text-[15px] font-medium text-primary transition hover:text-black"
                 >
                   Lost Password?
                 </Link>
@@ -201,7 +198,7 @@ function LoginForm() {
               <button
                 type="submit"
                 disabled={isLoggingIn}
-                className="min-w-[86px] rounded bg-[#e9caca] px-5 py-3 text-[16px] font-semibold text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                className="min-w-[86px] rounded bg-primary px-5 py-3 text-[16px] font-semibold text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isLoggingIn ? "Signing..." : "Sign In"}
               </button>
@@ -210,8 +207,8 @@ function LoginForm() {
             <p className="pt-2 text-center text-[15px] text-gray-500">
               Don&apos;t have an account?{" "}
               <Link
-                href="/auth/signup"
-                className="font-semibold text-[#d8abab] transition hover:text-black"
+                href="/signup"
+                className="font-semibold text-auth-link transition hover:text-black"
               >
                 Sign Up
               </Link>

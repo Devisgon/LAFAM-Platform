@@ -1,4 +1,4 @@
-import { type ApiResponse, authFetch } from "@/lib/auth/auth";
+import { type ApiResponse, authFetch } from "@/modules/auth";
 
 export type PaymentCurrency = "KWD";
 export type PaymentTargetType = "booking" | "private_booking" | "wallet_top_up";

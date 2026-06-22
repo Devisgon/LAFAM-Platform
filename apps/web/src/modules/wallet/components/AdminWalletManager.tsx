@@ -7,11 +7,11 @@ import {
   RotateCcw,
   Search,
 } from "lucide-react";
-import { useAdminUsers } from "@/hooks/admin/useAdminUsers";
+import { useAdminUsers } from "@/modules/users";
 import {
   useAdminWallets,
   useAdminWalletTransactions,
-} from "@/hooks/admin/useAdminWallets";
+} from "@/modules/wallet";
 import {
   adminWalletsClient,
   type AdminWalletAdjustmentEntryType,
@@ -21,13 +21,13 @@ import {
   type AdminWalletTransactionFilters,
   type WalletAccountStatus,
   type WalletAccountSummary,
-} from "@/lib/admin/admin-wallets";
-import { type AdminUser, type AdminUserFilters } from "@/lib/admin/admin-users";
-import { Badge } from "@/components/reuseable_ui_components/badge";
-import { DataTable } from "@/components/reuseable_ui_components/data_table";
-import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
-import { Toast } from "@/components/reuseable_ui_components/toast";
-import { WalletTransactionTable } from "@/components/reuseable_ui_components/wallet_transaction_table";
+} from "@/modules/wallet";
+import { type AdminUser, type AdminUserFilters } from "@/modules/users";
+import { Badge } from "@/components/ui/Badge";
+import { DataTable } from "@/components/data-display/DataTable";
+import { LoadingState } from "@/components/data-display/LoadingState";
+import { Toast } from "@/components/ui/Toast";
+import { WalletTransactionTable } from "@/components/data-display/WalletTransactionTable";
 
 type WalletView = "wallets" | "transactions";
 

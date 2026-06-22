@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
-import { useAuth } from "@/hooks/auth/useAuth";
-import { useProfileSessions } from "@/hooks/auth/useProfileSessions";
-import type { ActiveSession } from "@/lib/auth/profile-sessions";
-import { Avatar } from "./reuseable_ui_components/avatar";
-import { Badge } from "./reuseable_ui_components/badge";
-import { Button } from "./reuseable_ui_components/button";
-import { ConfirmationCard } from "./reuseable_ui_components/confirmation_card";
-import { Input } from "./reuseable_ui_components/input";
-import { LoadingState } from "./reuseable_ui_components/loading_state";
-import { Toast } from "./reuseable_ui_components/toast";
+import { useAuth } from "@/modules/auth";
+import { useProfileSessions } from "@/modules/auth";
+import type { ActiveSession } from "@/modules/auth";
+import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { ConfirmationCard } from "@/components/feedback/ConfirmationCard";
+import { Input } from "@/components/ui/Input";
+import { LoadingState } from "@/components/data-display/LoadingState";
+import { Toast } from "@/components/ui/Toast";
 
 type Confirmation =
   | { action: "revoke"; session: ActiveSession }
@@ -258,7 +258,7 @@ export function ProfileSettings() {
   return (
     <>
       <div className="grid gap-6">
-        <section className="rounded-2xl bg-card-bg-primary p-5 shadow-[0_10px_35px_rgb(15_23_42/0.06)] sm:p-7">
+        <section className="profile-card rounded-2xl bg-card-bg-primary p-5 sm:p-7">
           <header className="flex flex-wrap items-center gap-4 border-b border-background-secondary pb-6">
             <div className="relative shrink-0 rounded-full shadow-sm">
               <Avatar

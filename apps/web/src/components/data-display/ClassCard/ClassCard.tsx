@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Badge } from "@/components/reuseable_ui_components/badge";
+import { Badge } from "@/components/ui/Badge";
 
 export type ClassCardItem = {
   id: string;

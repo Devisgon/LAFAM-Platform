@@ -1,4 +1,5 @@
-import type { ApiResponse } from "@/lib/auth/auth";
+import type { ApiResponse } from "@/modules/auth";
+import { apiClient } from "@/lib/api/client";
 export type PublicClassLevel =
   | "beginner"
   | "intermediate"
@@ -35,31 +36,9 @@ export type PublicClassList = {
 
 type PublicClassDetail = { class: PublicPilatesClass };
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-
-function apiUrl(path: string): string {
-  if (!API_BASE_URL) {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL is missing.");
-  }
-
-  return `${API_BASE_URL.replace(/\/$/, "")}${path}`;
-}
-
 async function readResponse<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(apiUrl(path), {
-    headers: { Accept: "application/json" },
-    signal,
-  });
-  const payload = (await response.json().catch(() => null)) as
-    | ApiResponse<T>
-    | { message?: string }
-    | null;
-
-  if (!response.ok || !payload || !("data" in payload)) {
-    throw new Error(payload?.message ?? "The class request failed.");
-  }
-
-  return payload.data;
+  const response = await apiClient.get<ApiResponse<T>>(path, { signal });
+  return response.data;
 }
 
 function listQuery(filters: PublicClassFilters): string {

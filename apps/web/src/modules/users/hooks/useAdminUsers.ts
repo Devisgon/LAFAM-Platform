@@ -5,7 +5,7 @@ import {
   adminUsersClient,
   type AdminUser,
   type AdminUserFilters,
-} from "@/lib/admin/admin-users";
+} from "@/modules/users";
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The user request failed.";

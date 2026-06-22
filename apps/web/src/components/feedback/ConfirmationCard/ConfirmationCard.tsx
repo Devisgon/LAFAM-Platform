@@ -1,5 +1,5 @@
 import type { HTMLAttributes, ReactNode } from "react";
-import { Button } from "./button";
+import { Button } from "@/components/ui/Button";
 
 type ConfirmationTone = "default" | "danger";
 const cn = (...classes: Array<string | undefined>) =>

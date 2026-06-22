@@ -5,7 +5,7 @@ import {
   adminAnalyticsClient,
   type AnalyticsDashboard,
   type AnalyticsDashboardFilters,
-} from "@/lib/admin/admin-analytics";
+} from "@/modules/dashboard";
 import { useCachedQuery } from "@/hooks/useCachedQuery";
 
 const EMPTY_DASHBOARD: AnalyticsDashboard = {

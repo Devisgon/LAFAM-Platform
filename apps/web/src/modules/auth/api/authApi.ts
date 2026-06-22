@@ -1,3 +1,5 @@
+import { toAppError } from "@/lib/error/handleError";
+
 export type AuthRole =
   | "super_admin"
   | "admin"
@@ -444,37 +446,6 @@ async function readJsonSafe(response: Response): Promise<unknown> {
   }
 }
 
-function getApiErrorMessage(payload: unknown): string {
-  const error = (payload as { error?: unknown } | null)?.error;
-
-  if (error && typeof error === "object") {
-    const validationErrors = (
-      error as {
-        details?: { validationErrors?: unknown };
-      }
-    ).details?.validationErrors;
-
-    if (Array.isArray(validationErrors)) {
-      const messages = validationErrors.filter(
-        (message): message is string => typeof message === "string",
-      );
-
-      if (messages.length > 0) {
-        return messages.join(" ");
-      }
-    }
-
-    const message = (error as { message?: unknown }).message;
-
-    if (typeof message === "string") {
-      return message;
-    }
-  }
-
-  const message = (payload as { message?: unknown } | null)?.message;
-  return typeof message === "string" ? message : "Request failed.";
-}
-
 function getApiErrorCode(payload: unknown): string | null {
   const error = (payload as { error?: unknown } | null)?.error;
 
@@ -497,11 +468,8 @@ export function isEmailVerificationRequiredError(error: unknown): boolean {
 }
 
 export function getDashboardPath(role?: string | null): string {
-  if (role === "super_admin" || role === "admin") return "/admin";
-
-  if (role) return "/user";
-
-  return "/";
+  if (role) return "/dashboard";
+  return "/login";
 }
 
 function getSafeRedirectPath(path: string | null): string | null {
@@ -524,10 +492,20 @@ function canRoleAccessPath(
 ): boolean {
   const isAdmin = role === "super_admin" || role === "admin";
 
-  if (isRouteMatch(path, "/admin")) return isAdmin;
-  if (isRouteMatch(path, "/user")) return Boolean(role) && !isAdmin;
-
-  return false;
+  if (!role) return false;
+  if (
+    isRouteMatch(path, "/calendar") ||
+    isRouteMatch(path, "/payments") ||
+    isRouteMatch(path, "/staff") ||
+    isRouteMatch(path, "/users")
+  ) return isAdmin;
+  return (
+    isRouteMatch(path, "/dashboard") ||
+    isRouteMatch(path, "/bookings") ||
+    isRouteMatch(path, "/services/pilates") ||
+    isRouteMatch(path, "/settings") ||
+    isRouteMatch(path, "/wallet")
+  );
 }
 
 export function resolvePostLoginRedirect(
@@ -658,7 +636,7 @@ export async function authFetch<T>(
     clearAuthCookies();
 
     if (isBrowser()) {
-      window.location.href = "/";
+      window.location.href = "/login";
     }
 
     throw new AuthClientError(
@@ -669,8 +647,9 @@ export async function authFetch<T>(
   }
 
   if (!response.ok) {
+    const safeError = toAppError(undefined, response.status);
     throw new AuthClientError(
-      getApiErrorMessage(payload),
+      safeError.message,
       response.status,
       payload,
     );
@@ -699,7 +678,7 @@ export const authClient = {
   async forgotPassword(emailInput: string): Promise<ForgotPasswordResult> {
     const email = normalizeEmail(emailInput);
     const response = await authFetch<ApiResponse<ForgotPasswordResult>>(
-      "/auth/forgot-password",
+      "/forgot-password",
       {
         method: "POST",
         body: JSON.stringify({ email }),
@@ -801,7 +780,7 @@ export const authClient = {
     }
 
     const response = await authFetch<ApiResponse<VerifyEmailResult>>(
-      "/auth/verify-email",
+      "/verify-email",
       {
         method: "POST",
         body: JSON.stringify({ email, otp }),

@@ -15,13 +15,13 @@ import {
   UserCheck,
   UserX,
 } from "lucide-react";
-import { Avatar } from "@/components/reuseable_ui_components/avatar";
-import { Badge } from "@/components/reuseable_ui_components/badge";
-import { ConfirmationCard } from "@/components/reuseable_ui_components/confirmation_card";
-import { DataTable } from "@/components/reuseable_ui_components/data_table";
-import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
-import { Toast } from "@/components/reuseable_ui_components/toast";
-import { useStaff } from "@/hooks/admin/useStaff";
+import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
+import { ConfirmationCard } from "@/components/feedback/ConfirmationCard";
+import { DataTable } from "@/components/data-display/DataTable";
+import { LoadingState } from "@/components/data-display/LoadingState";
+import { Toast } from "@/components/ui/Toast";
+import { useStaff } from "../hooks/useStaff";
 import {
   type CreateStaffPayload,
   type StaffDayOfWeek,
@@ -29,9 +29,7 @@ import {
   type StaffStatus,
   type UpdateStaffAvailabilityPayload,
   type UpdateStaffPayload,
-} from "@/lib/admin/staff";
-
-export type { StaffMember } from "@/lib/admin/staff";
+} from "../api/staffApi";
 
 type ResultToast = {
   message: string;
@@ -43,6 +41,7 @@ type StaffTableAction = "deactivate" | "reactivate" | "delete";
 
 const inputClass =
   "min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-4 py-2 text-base text-txt-primary outline-none transition placeholder:text-txt-secondary focus:border-primary disabled:cursor-not-allowed disabled:opacity-60";
+const ADD_STAFF_HASH = ["#", "add-staff"].join("");
 
 const pageSizeOptions = [10, 25, 50];
 
@@ -177,12 +176,12 @@ export function StaffDirectory() {
   const [pageSize, setPageSize] = useState(pageSizeOptions[0]);
   const [currentPage, setCurrentPage] = useState(1);
   const [isCreateMode, setIsCreateMode] = useState(() =>
-    typeof window === "undefined" ? false : window.location.hash === "#add-staff",
+    typeof window === "undefined" ? false : window.location.hash === ADD_STAFF_HASH,
   );
 
   useEffect(() => {
     const syncCreateMode = () => {
-      setIsCreateMode(window.location.hash === "#add-staff");
+      setIsCreateMode(window.location.hash === ADD_STAFF_HASH);
     };
 
     window.addEventListener("hashchange", syncCreateMode);
@@ -301,7 +300,7 @@ export function StaffDirectory() {
               <button
                 className="min-h-12 rounded-sm bg-button-primary px-5 text-base font-semibold text-txt-primary transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                 onClick={() => {
-                  window.history.replaceState(null, "", "#add-staff");
+                  window.history.replaceState(null, "", ADD_STAFF_HASH);
                   setIsCreateMode(true);
                 }}
                 type="button"

@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, type FormEvent, useState } from "react";
 import { ArrowLeft, Mail, ShieldCheck } from "lucide-react";
-import { useAuth } from "@/hooks/auth/useAuth";
+import { useAuth } from "@/modules/auth";
 import {
   cachePendingVerificationEmail,
   getCachedVerificationEmail,
-} from "@/lib/auth/auth";
+} from "@/modules/auth";
 
 export default function VerifyEmailPage() {
   return (
@@ -69,7 +69,7 @@ function VerifyEmailForm() {
         params.set("redirect", redirectPath);
       }
 
-      router.replace(`/?${params.toString()}`);
+      router.replace(`/login?${params.toString()}`);
     } catch {
       // The shared auth error is rendered below.
     }
@@ -93,10 +93,7 @@ function VerifyEmailForm() {
   return (
     <main className="relative flex min-h-screen w-full items-center justify-center overflow-hidden px-4 py-10 font-sans text-black">
       <div
-        className="absolute inset-0 scale-105 bg-cover bg-center"
-        style={{
-          backgroundImage: "url('/login_bg.jpg')",
-        }}
+        className="auth-page-background absolute inset-0 scale-105 bg-cover bg-center"
       />
       <div className="absolute inset-0 bg-black/55" />
 
@@ -113,7 +110,7 @@ function VerifyEmailForm() {
         </div>
 
         <div className="w-full max-w-[500px] overflow-hidden rounded-md bg-white shadow-2xl">
-          <div className="flex h-16 items-center justify-center gap-3 bg-[#e9caca] text-black">
+          <div className="flex h-16 items-center justify-center gap-3 bg-primary text-black">
             <ShieldCheck size={30} strokeWidth={2.5} />
             <h1 className="text-xl font-bold uppercase tracking-wide">
               Verify Email
@@ -186,7 +183,7 @@ function VerifyEmailForm() {
             <button
               type="submit"
               disabled={isBusy}
-              className="w-full rounded bg-[#e9caca] px-5 py-3.5 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded bg-primary px-5 py-3.5 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isVerifyingEmail ? "Verifying..." : "Verify Email"}
             </button>
@@ -195,7 +192,7 @@ function VerifyEmailForm() {
               type="button"
               onClick={handleResend}
               disabled={isBusy}
-              className="w-full text-center text-[15px] font-semibold text-[#e9caca] transition hover:text-black disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full text-center text-[15px] font-semibold text-primary transition hover:text-black disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isResendingVerification ? "Sending..." : "Resend Code"}
             </button>

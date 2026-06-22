@@ -36,14 +36,18 @@ type VerifiedProxySession = {
 };
 
 const protectedRoutes = [
-  "/admin",
+  "/dashboard",
+  "/bookings",
+  "/calendar",
+  "/payments",
+  "/services/pilates",
+  "/settings",
   "/staff",
-  "/user",
-  "/customer",
-  "/guest",
-  "/profile",
-  "/account",
+  "/users",
+  "/wallet",
 ];
+const adminOnlyRoutes = ["/calendar", "/payments", "/staff", "/users"];
+const authRoutes = ["/login", "/signup", "/forgot-password", "/verify-email"];
 
 const authCookieNames = [
   ACCESS_TOKEN_COOKIE,
@@ -61,25 +65,17 @@ function isAdminRole(role?: string): boolean {
 }
 
 function getDashboardPath(role?: string): string {
-  if (isAdminRole(role)) return "/admin";
+  if (isAdminRole(role)) return "/dashboard";
 
-  if (role) return "/user";
+  if (role) return "/dashboard";
 
   return "/";
 }
 
 function canAccessPath(pathname: string, role?: string): boolean {
   if (!role) return false;
-
-  if (isRouteMatch(pathname, "/admin")) {
-    return isAdminRole(role);
-  }
-
-  if (isRouteMatch(pathname, "/user")) {
-    return !isAdminRole(role);
-  }
-
-  return false;
+  return !adminOnlyRoutes.some((route) => isRouteMatch(pathname, route)) ||
+    isAdminRole(role);
 }
 
 function getApiUrl(path: string): string | null {
@@ -204,9 +200,9 @@ function redirectToLoginWithClearedSession(
   request: NextRequest,
   pathname: string,
 ): NextResponse {
-  const loginUrl = new URL("/", request.url);
+  const loginUrl = new URL("/login", request.url);
 
-  if (pathname !== "/") {
+  if (pathname !== "/login") {
     loginUrl.searchParams.set("redirect", pathname);
   }
 
@@ -219,7 +215,7 @@ function redirectToLoginWithClearedSession(
 function rewriteUnauthorized(request: NextRequest): NextResponse {
   const unauthorizedUrl = new URL("/unauthorized", request.url);
 
-  return NextResponse.rewrite(unauthorizedUrl, { status: 404 });
+  return NextResponse.redirect(unauthorizedUrl);
 }
 
 function extractRole(payload: unknown): string | null {
@@ -318,7 +314,7 @@ export async function proxy(request: NextRequest) {
   const isProtectedRoute = protectedRoutes.some((route) =>
     isRouteMatch(pathname, route),
   );
-  const isAuthRoute = pathname === "/" || pathname.startsWith("/signup");
+  const isAuthRoute = authRoutes.some((route) => isRouteMatch(pathname, route));
 
   if (isProtectedRoute && !hasPossibleSession) {
     return redirectToLoginWithClearedSession(request, pathname);
@@ -369,13 +365,18 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     "/",
+    "/login",
     "/signup/:path*",
-    "/admin/:path*",
+    "/forgot-password/:path*",
+    "/verify-email/:path*",
+    "/dashboard/:path*",
+    "/bookings/:path*",
+    "/calendar/:path*",
+    "/payments/:path*",
+    "/services/pilates/:path*",
+    "/settings/:path*",
     "/staff/:path*",
-    "/user/:path*",
-    "/customer/:path*",
-    "/guest/:path*",
-    "/profile/:path*",
-    "/account/:path*",
+    "/users/:path*",
+    "/wallet/:path*",
   ],
 };

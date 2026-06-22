@@ -7,7 +7,7 @@ import {
   type AdminWalletTransactionFilters,
   type WalletAccountSummary,
   type WalletLedgerEntrySummary,
-} from "@/lib/admin/admin-wallets";
+} from "@/modules/wallet";
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The wallet request failed.";

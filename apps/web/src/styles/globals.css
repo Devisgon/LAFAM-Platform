@@ -1,25 +1,8 @@
 @import "tailwindcss";
+@import "./tokens.css";
+@import "./variables.css";
 
 :root {
-  color-scheme: light;
-  --background: #64748b;
-  --background-primary: #f8fafc;           
-  --background-secondary: #f1f5f9;        
-  --primary: #EDCDCE;                    
-  --secondary: #64748b;                  
-
-  --button-primary: #EDCDCE;              
-  --button-secondary: #000000;           
-  --card-background-primary: #ffffff;
-  --card-background-secondary: #f8fafc;
-
-  --text-primary: #0f172a;                
-  --text-secondary: #64748b;
-
-  --error: #ef4444;                        
-  --warning: #f59e0b;                      
-  --success: #10b981;                      
-
   --calendar-class-schedule-bg: #f4d5d8;
   --calendar-class-schedule-text: #701f2a;
   --calendar-class-booking-bg: #cfe4ff;
@@ -29,7 +12,6 @@
   --calendar-waitlist-bg: #fef3c7;
   --calendar-waitlist-text: #78350f;
 
-  --foreground: #EDCDCE;
 }
 
 
@@ -55,6 +37,9 @@
   --color-error: var(--error);
   --color-warning: var(--warning);
   --color-success: var(--success);
+  --color-auth-surface: var(--auth-surface);
+  --color-auth-link: var(--auth-link);
+  --color-sidebar-header: var(--sidebar-header);
 
   --font-sans: Poppins, Poppins, sans-serif;
   --font-mono: var(--font-geist-mono);
@@ -64,6 +49,14 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-Poppins);
+}
+
+.auth-page-background {
+  background-image: url("/login_bg.jpg");
+}
+
+.profile-card {
+  box-shadow: var(--profile-card-shadow);
 }
 
 .calendar-event-card {

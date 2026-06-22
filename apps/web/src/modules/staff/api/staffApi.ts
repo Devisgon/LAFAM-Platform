@@ -1,4 +1,4 @@
-import { type ApiResponse, authFetch } from "@/lib/auth/auth";
+import { type ApiResponse, authFetch } from "@/modules/auth";
 
 export type StaffDayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export type StaffPortalRole = "trainer";

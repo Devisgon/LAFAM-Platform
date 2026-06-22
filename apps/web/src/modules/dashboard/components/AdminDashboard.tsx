@@ -2,19 +2,19 @@
 import { RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
-import { useAdminAnalyticsDashboard } from "@/hooks/admin/useAdminAnalyticsDashboard";
+import { useAdminAnalyticsDashboard } from "@/modules/dashboard";
 import type {
   AnalyticsBookingListItem,
   AnalyticsDashboard,
   AnalyticsPaymentSummary,
   AnalyticsRevenueWeekPoint,
   AnalyticsTopServiceItem,
-} from "@/lib/admin/admin-analytics";
-import { Avatar } from "@/components/reuseable_ui_components/avatar";
-import { Badge } from "@/components/reuseable_ui_components/badge";
-import { Card } from "@/components/reuseable_ui_components/cards";
-import { DataTable } from "@/components/reuseable_ui_components/data_table";
-import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
+} from "@/modules/dashboard";
+import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
+import { DataTable } from "@/components/data-display/DataTable";
+import { LoadingState } from "@/components/data-display/LoadingState";
 
 type ChartPoint = {
   axisLabel: string;
@@ -348,7 +348,7 @@ function PaymentSummaryChart({ summary }: { summary: AnalyticsPaymentSummary }) 
   const segments = [
     { color: "var(--primary)", label: "Paid", value: summary.paid_count },
     { color: "var(--error)", label: "Failed", value: summary.failed_count },
-    { color: "#38bdf8", label: "Refunded", value: summary.refunded_count },
+    { color: "var(--chart-refunded)", label: "Refunded", value: summary.refunded_count },
   ];
   const total = segments.reduce((sum, segment) => sum + segment.value, 0);
   let offset = 0;
@@ -402,8 +402,13 @@ function PaymentSummaryChart({ summary }: { summary: AnalyticsPaymentSummary }) 
           {segments.map((segment) => (
             <p key={segment.label}>
               <span
-                className="mr-2 inline-block size-2 rounded-full"
-                style={{ backgroundColor: segment.color }}
+                className={`mr-2 inline-block size-2 rounded-full ${
+                  segment.label === "Paid"
+                    ? "bg-primary"
+                    : segment.label === "Failed"
+                      ? "bg-error"
+                      : "bg-[var(--chart-refunded)]"
+                }`}
               />
               {segment.label}
               <br />
@@ -465,7 +470,7 @@ function UpcomingBookings({
       </div>
       <Link
         className="mt-3 inline-block text-xs font-semibold text-primary"
-        href="/admin/bookings"
+        href="/bookings"
       >
         View All Bookings +
       </Link>

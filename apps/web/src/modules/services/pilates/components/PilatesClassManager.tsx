@@ -6,15 +6,15 @@ import {
   useEffect,
   useState,
 } from "react";
-import { usePilates } from "@/hooks/admin/usePilates";
+import { usePilates } from "@/modules/services/pilates";
 import {
   type CreatePilatesClassPayload,
   type PilatesClassLevel,
   type PilatesClassStatus,
-} from "@/lib/admin/pilates";
-import { ClassCard } from "@/components/reuseable_ui_components/class_card";
-import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
-import { Toast } from "@/components/reuseable_ui_components/toast";
+} from "@/modules/services/pilates";
+import { ClassCard } from "@/components/data-display/ClassCard";
+import { LoadingState } from "@/components/data-display/LoadingState";
+import { Toast } from "@/components/ui/Toast";
 
 const fieldClass =
   "min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-3 py-2 text-sm text-txt-primary outline-none focus:border-primary disabled:opacity-60";
@@ -131,7 +131,7 @@ export function PilatesClassManager() {
             ) : (
               api.classes.map((item) => (
                 <ClassCard
-                  actionHref={`/admin/services/pilates/${item.id}`}
+                  actionHref={`/services/pilates/${item.id}`}
                   actionLabel="Manage class"
                   item={item}
                   key={item.id}

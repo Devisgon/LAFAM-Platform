@@ -11,10 +11,10 @@ import { ChevronDown, RotateCcw } from "lucide-react";
 import {
   useAdminBookings,
   useAdminPrivateBookings,
-} from "@/hooks/admin/useAdminBookings";
-import { useAdminUsers } from "@/hooks/admin/useAdminUsers";
-import { usePilates } from "@/hooks/admin/usePilates";
-import { useStaff } from "@/hooks/admin/useStaff";
+} from "@/modules/bookings";
+import { useAdminUsers } from "@/modules/users";
+import { usePilates } from "@/modules/services/pilates";
+import { useStaff } from "@/modules/staff";
 import {
   adminBookingsClient,
   type AdminBooking,
@@ -27,15 +27,12 @@ import {
   type CreatePrivateTrainerBookingPayload,
   type PrivateTrainerBooking,
   type PrivateTrainerBookingDetail,
-} from "@/lib/admin/admin-bookings";
-import { type AdminUserFilters } from "@/lib/admin/admin-users";
-import { Badge } from "@/components/reuseable_ui_components/badge";
-import { DataTable } from "@/components/reuseable_ui_components/data_table";
-import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
-import { Toast } from "@/components/reuseable_ui_components/toast";
-import { PageHeader } from "@/components/page_header";
-import { Sidebar } from "@/components/sidebar";
-import { TopBar } from "@/components/top_bar";
+} from "@/modules/bookings";
+import { type AdminUserFilters } from "@/modules/users";
+import { Badge } from "@/components/ui/Badge";
+import { DataTable } from "@/components/data-display/DataTable";
+import { LoadingState } from "@/components/data-display/LoadingState";
+import { Toast } from "@/components/ui/Toast";
 
 type ResultToast = {
   message: string;
@@ -2000,23 +1997,6 @@ function OptionSelect({
   );
 }
 
-export default function BookingsPage() {
-  return (
-    <div className="min-h-screen bg-background-primary">
-      <TopBar
-        dateLabel="8 Jun - 14 Jun 2026"
-        description="Manage appointments"
-        title="Bookings"
-      />
-      <div className="md:flex">
-        <Sidebar activeItem="Bookings" />
-        <div className="min-w-0 flex-1">
-          <PageHeader title="Bookings" />
-          <main className="p-4 lg:p-10">
-            <BookingExplorer />
-          </main>
-        </div>
-      </div>
-    </div>
-  );
+export function AdminBookingManager() {
+  return <BookingExplorer />;
 }

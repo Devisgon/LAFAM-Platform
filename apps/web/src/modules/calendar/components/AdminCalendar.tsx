@@ -2,17 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { ChevronDown, RotateCcw, X } from "lucide-react";
-import { useAdminBookingCalendar } from "@/hooks/admin/useAdminBookingCalendar";
-import { usePilates } from "@/hooks/admin/usePilates";
+import { useAdminBookingCalendar } from "@/modules/calendar";
+import { usePilates } from "@/modules/services/pilates";
 import {
   type AdminBookingCalendarEvent,
   type AdminBookingCalendarFilters,
-} from "@/lib/admin/admin-bookings";
-import { Badge } from "@/components/reuseable_ui_components/badge";
-import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
-import { PageHeader } from "@/components/page_header";
-import { Sidebar } from "@/components/sidebar";
-import { TopBar } from "@/components/top_bar";
+} from "@/modules/bookings";
+import { Badge } from "@/components/ui/Badge";
+import { LoadingState } from "@/components/data-display/LoadingState";
 
 const fieldClass =
   "min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-4 text-base text-txt-primary outline-none transition placeholder:text-txt-secondary focus:border-primary";
@@ -167,7 +164,7 @@ function buildCalendarDays(
   return days;
 }
 
-export default function CalendarPage() {
+export function AdminCalendar() {
   const [selectedMonth, setSelectedMonth] = useState(defaultMonth);
   const [trainerStaffProfileId, setTrainerStaffProfileId] = useState("");
   const [classId, setClassId] = useState("");
@@ -250,17 +247,7 @@ export default function CalendarPage() {
   }, [events]);
 
   return (
-    <div className="min-h-screen bg-background-primary">
-      <TopBar
-        dateLabel={monthLabel(selectedMonth)}
-        description="View booking calendar events"
-        title="Calendar"
-      />
-      <div className="md:flex">
-        <Sidebar activeItem="Calendar" />
-        <div className="min-w-0 flex-1">
-          <PageHeader title="Calendar" />
-          <main className="grid gap-7 p-4 lg:p-10">
+    <div className="grid gap-7">
             <section className="overflow-hidden rounded-md bg-card-bg-primary shadow-sm">
               <header className="border-b border-background-secondary px-5 py-5">
                 <h2 className="text-2xl font-medium text-txt-primary">
@@ -506,9 +493,6 @@ export default function CalendarPage() {
                 </div>
               )}
             </section>
-          </main>
-        </div>
-      </div>
     </div>
   );
 }

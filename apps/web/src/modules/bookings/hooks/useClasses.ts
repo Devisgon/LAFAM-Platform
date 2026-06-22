@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { CACHE_KEYS } from "@/lib/cache/cacheKeys";
+import { getSafeErrorMessage } from "@/lib/error/handleError";
 import {
   publicClassesClient,
   type PublicClassFilters,
   type PublicClassList,
-} from "@/lib/user/classes";
+} from "../api/classesApi";
 
 const EMPTY_RESULT: PublicClassList = {
   items: [],
@@ -15,54 +17,18 @@ const EMPTY_RESULT: PublicClassList = {
   has_more: false,
 };
 
-export function useClasses(
-  filters: PublicClassFilters,
-  initialResult?: PublicClassList,
-) {
-  const [result, setResult] = useState(initialResult ?? EMPTY_RESULT);
-  const [isLoading, setIsLoading] = useState(!initialResult);
-  const [error, setError] = useState<string | null>(null);
-  const controllerRef = useRef<AbortController | null>(null);
-  const hasInitialResult = useRef(Boolean(initialResult));
+export function useClasses(filters: PublicClassFilters, initialResult?: PublicClassList) {
+  const query = useQuery({
+    initialData: initialResult,
+    queryFn: ({ signal }) => publicClassesClient.list(filters, signal),
+    queryKey: [...CACHE_KEYS.pilates.publicClasses, filters],
+  });
+  const result = query.data ?? EMPTY_RESULT;
 
-  const load = useCallback(async () => {
-    controllerRef.current?.abort();
-    const controller = new AbortController();
-    controllerRef.current = controller;
-    const timeout = window.setTimeout(() => controller.abort(), 10_000);
-
-    setIsLoading(true);
-    setError(null);
-    try {
-      const nextResult = await publicClassesClient.list(filters, controller.signal);
-      setResult(nextResult);
-      return nextResult;
-    } catch (requestError: unknown) {
-      if (controller.signal.aborted) {
-        setError("The class request timed out. Please try again.");
-      } else {
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "The classes could not be loaded.",
-        )
-      }
-      return null;
-    } finally {
-      window.clearTimeout(timeout);
-      if (controllerRef.current === controller) setIsLoading(false);
-    }
-  }, [filters]);
-
-  useEffect(() => {
-    if (hasInitialResult.current) {
-      hasInitialResult.current = false;
-      return;
-    }
-
-    void load();
-    return () => controllerRef.current?.abort();
-  }, [load]);
-
-  return { ...result, error, isLoading, load };
+  return {
+    ...result,
+    error: query.error ? getSafeErrorMessage(query.error) : null,
+    isLoading: query.isPending,
+    load: async () => (await query.refetch()).data ?? null,
+  };
 }

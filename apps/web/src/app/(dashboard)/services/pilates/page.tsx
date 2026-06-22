@@ -1,21 +1,9 @@
-import { PilatesClassManager } from "@/components/admin_components/pilates_class_manager";
-import { Sidebar } from "@/components/sidebar";
-import { TopBar } from "@/components/top_bar";
-import { PageHeader } from "@/components/page_header";
-
-export default function AdminPilatesServicesPage() {
-  return (
-    <div className="min-h-screen bg-background-primary">
-      <TopBar actionHref="#create-class" actionLabel="+ Create class" dateLabel="8 Jun 2026" description="Create classes, assign trainers, and manage schedules" title="Pilates Classes" />
-      <div className="md:flex">
-        <Sidebar activeItem="Pilates" />
-        <div className="min-w-0 flex-1">
-          <PageHeader title="Pilates Classes" />
-          <main className="p-4 lg:p-6">
-            <PilatesClassManager />
-          </main>
-        </div>
-      </div>
-    </div>
-  );
+import { publicClassesClient, UserClasses } from "@/modules/bookings";
+import { PilatesClassManager } from "@/modules/services/pilates";
+import { getServerSession, isAdminRole } from "@/lib/auth/session";
+export default async function PilatesPage() {
+  const session = await getServerSession();
+  if (isAdminRole(session?.role)) return <PilatesClassManager />;
+  const initialResult = await publicClassesClient.list().catch(() => undefined);
+  return <UserClasses filters={{}} initialResult={initialResult} />;
 }

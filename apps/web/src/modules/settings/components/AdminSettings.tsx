@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { AdminUserManager } from "./admin_user_manager";
-import { ProfileSettings } from "@/components/profile_settings";
+import { AdminUserManager } from "@/modules/users";
+import { ProfileSettings } from "./ProfileSettings";
 
 type SettingsView = "profile" | "users" | "history";
 

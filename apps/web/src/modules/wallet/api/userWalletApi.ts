@@ -1,4 +1,5 @@
-import { type ApiResponse, authFetch } from "@/lib/auth/auth";
+import { type ApiResponse, authFetch } from "@/modules/auth";
+import { ENDPOINTS } from "@/lib/api/endpoints";
 
 export type WalletEntryType =
   | "wallet_top_up"
@@ -59,6 +60,28 @@ export type UserWalletTransactionList = {
   has_more: boolean;
 };
 
+export type WalletTopUpPaymentMethod = "knet" | "card";
+
+export type WalletTopUpPayload = {
+  target_type: "wallet_top_up";
+  wallet_top_up_amount: number;
+  payment_method: WalletTopUpPaymentMethod;
+  currency: "KWD";
+  idempotency_key: string;
+  metadata: {
+    source: "checkout_screen";
+  };
+};
+
+export type WalletTopUpResult = {
+  payment: {
+    id: string;
+    payment_number?: string;
+    status: string;
+  };
+  redirect_url: string;
+};
+
 function transactionQuery(filters: UserWalletTransactionFilters): string {
   const query = new URLSearchParams({
     limit: String(filters.limit),
@@ -77,7 +100,7 @@ function transactionQuery(filters: UserWalletTransactionFilters): string {
 export const userWalletClient = {
   async get(signal?: AbortSignal): Promise<UserWallet> {
     const response = await authFetch<ApiResponse<{ wallet: UserWallet }>>(
-      "/wallet",
+      ENDPOINTS.WALLET.GET,
       { method: "GET", signal },
     );
     return response.data.wallet;
@@ -89,7 +112,7 @@ export const userWalletClient = {
   ): Promise<UserWalletTransactionList> {
     const response = await authFetch<
       ApiResponse<{ transactions: UserWalletTransactionList }>
-    >(`/wallet/transactions?${transactionQuery(filters)}`, {
+    >(`${ENDPOINTS.WALLET.TRANSACTIONS}?${transactionQuery(filters)}`, {
       method: "GET",
       signal,
     });
@@ -99,10 +122,21 @@ export const userWalletClient = {
   async getTransaction(id: string, signal?: AbortSignal) {
     const response = await authFetch<
       ApiResponse<{ transaction: UserWalletTransaction }>
-    >(`/wallet/transactions/${encodeURIComponent(id)}`, {
+    >(ENDPOINTS.WALLET.TRANSACTION(id), {
       method: "GET",
       signal,
     });
     return response.data.transaction;
+  },
+
+  async createTopUp(payload: WalletTopUpPayload): Promise<WalletTopUpResult> {
+    const response = await authFetch<ApiResponse<WalletTopUpResult>>(
+      ENDPOINTS.WALLET.TOP_UP,
+      {
+        body: JSON.stringify(payload),
+        method: "POST",
+      },
+    );
+    return response.data;
   },
 };

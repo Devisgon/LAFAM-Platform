@@ -8,7 +8,7 @@ import {
   useEffect,
   useState,
 } from "react";
-import { usePilates } from "@/hooks/admin/usePilates";
+import { usePilates } from "@/modules/services/pilates";
 import {
   type CreatePilatesClassPayload,
   type CreatePilatesSchedulePayload,
@@ -18,10 +18,10 @@ import {
   type PilatesSchedule,
   type PilatesScheduleStatus,
   type UpdatePilatesSchedulePayload,
-} from "@/lib/admin/pilates";
-import { Badge } from "@/components/reuseable_ui_components/badge";
-import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
-import { Toast } from "@/components/reuseable_ui_components/toast";
+} from "@/modules/services/pilates";
+import { Badge } from "@/components/ui/Badge";
+import { LoadingState } from "@/components/data-display/LoadingState";
+import { Toast } from "@/components/ui/Toast";
 
 const fieldClass =
   "min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-3 py-2 text-sm text-txt-primary outline-none focus:border-primary disabled:opacity-60";
@@ -334,7 +334,7 @@ export function PilatesClassDetailManager({ classId }: { classId: string }) {
     return (
       <section className="rounded-xl border border-error/30 bg-error/10 p-6">
         <p className="text-sm text-error">This Pilates class could not be loaded.</p>
-        <Link className={`${buttonClass} mt-4`} href="/admin/services/pilates">Back to classes</Link>
+        <Link className={`${buttonClass} mt-4`} href="/services/pilates">Back to classes</Link>
       </section>
     );
   }
@@ -342,7 +342,7 @@ export function PilatesClassDetailManager({ classId }: { classId: string }) {
   return (
     <>
       <nav className="mb-5 text-sm text-txt-secondary" aria-label="Breadcrumb">
-        <Link className="inline-flex items-center gap-2 font-semibold text-primary hover:underline" href="/admin/services/pilates">
+        <Link className="inline-flex items-center gap-2 font-semibold text-primary hover:underline" href="/services/pilates">
           <span aria-hidden="true">&larr;</span>
           Back to Pilates classes
         </Link>

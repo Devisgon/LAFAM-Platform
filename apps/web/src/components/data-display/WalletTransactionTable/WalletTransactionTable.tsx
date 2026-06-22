@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Badge } from "@/components/reuseable_ui_components/badge";
-import { DataTable } from "@/components/reuseable_ui_components/data_table";
+import { Badge } from "@/components/ui/Badge";
+import { DataTable } from "@/components/data-display/DataTable";
 
 export type WalletTransactionItem = {
   id: string;
@@ -124,7 +124,7 @@ export function WalletTransactionTable({
           <section aria-labelledby="transaction-receipt-title" aria-modal="true" className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-card-bg-primary shadow-2xl" role="dialog">
             <header className="flex items-start justify-between gap-4 border-b border-background-secondary p-5">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.12em] text-txt-secondary">Transaction receipt</p>
+                <p className="text-md font-bold uppercase  text-txt-secondary">Transaction receipt</p>
                 <h2 className="mt-1 text-2xl font-bold text-txt-primary" id="transaction-receipt-title">{label(selected.entry_type)}</h2>
               </div>
               <button aria-label="Close transaction receipt" className="flex size-9 items-center justify-center rounded-lg bg-background-secondary font-bold text-txt-primary" onClick={() => setSelected(null)} type="button">×</button>
@@ -133,8 +133,8 @@ export function WalletTransactionTable({
             <div className="p-5">
               {isLoading ? <p className="text-sm text-txt-secondary">Loading complete transaction…</p> : null}
               {error ? <p className="rounded-lg bg-error/10 p-3 text-sm text-error" role="alert">{error}</p> : null}
-              <div className="mt-2 rounded-2xl bg-primary/10 p-5 text-center">
-                <p className="text-xs font-bold uppercase tracking-[0.12em] text-txt-secondary">Amount</p>
+              <div className="mt-2 rounded-2xl bg-primary p-5 text-center">
+                <p className="text-xs font-bold uppercase text-txt-secondary">Amount</p>
                 <p className="mt-2 text-3xl font-bold text-txt-primary">{money(selected.amount)}</p>
                 <div className="mt-3"><Badge tone={tone(selected.entry_status)}>{label(selected.entry_status)}</Badge></div>
               </div>
@@ -145,16 +145,8 @@ export function WalletTransactionTable({
                 <ReceiptItem label="Balance after" value={money(selected.balance_after)} />
                 <ReceiptItem label="Created" value={dateTime(selected.created_at)} />
                 <ReceiptItem label="Description" value={selected.description ?? "No description"} />
-                <ReceiptItem label="Transaction reference" value={selected.id} />
-                {selected.payment_id ? <ReceiptItem label="Payment reference" value={selected.payment_id} /> : null}
-                {selected.booking_id || selected.private_booking_id ? <ReceiptItem label="Booking reference" value={selected.booking_id ?? selected.private_booking_id ?? ""} /> : null}
               </dl>
-              {Object.keys(selected.metadata).length > 0 ? (
-                <div className="mt-3 rounded-xl border border-background-secondary p-4">
-                  <p className="text-xs font-bold uppercase text-txt-secondary">Additional information</p>
-                  <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-txt-primary">{JSON.stringify(selected.metadata, null, 2)}</pre>
-                </div>
-              ) : null}
+             
             </div>
           </section>
         </div>

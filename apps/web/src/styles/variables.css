@@ -1,0 +1,40 @@
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --background: var(--base-slate-600);
+  --background-primary: var(--base-slate-50);
+  --background-secondary: var(--base-slate-100);
+  --primary: var(--base-brand-300);
+  --secondary: var(--base-slate-600);
+  --foreground: var(--base-brand-300);
+  --button-primary: var(--primary);
+  --button-secondary: var(--base-black);
+  --card-background-primary: var(--base-white);
+  --card-background-secondary: var(--base-slate-50);
+  --text-primary: var(--base-slate-900);
+  --text-secondary: var(--base-slate-600);
+  --error: var(--base-red-500);
+  --warning: var(--base-amber-500);
+  --success: var(--base-green-500);
+  --auth-surface: var(--base-brand-200);
+  --auth-link: var(--base-brand-400);
+  --sidebar-header: var(--base-brand-100);
+  --chart-refunded: var(--base-sky-400);
+  --profile-card-shadow: 0 10px 35px color-mix(in srgb, var(--base-slate-900) 6%, transparent);
+  --notification-error-background: color-mix(in srgb, var(--error) 10%, transparent);
+  --notification-success-background: color-mix(in srgb, var(--success) 10%, transparent);
+  --status-error-background: color-mix(in srgb, var(--error) 12%, transparent);
+  --status-success-background: color-mix(in srgb, var(--success) 12%, transparent);
+  --status-warning-background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --background: var(--base-slate-900);
+  --background-primary: var(--base-slate-900);
+  --background-secondary: var(--base-slate-600);
+  --card-background-primary: var(--base-slate-900);
+  --card-background-secondary: var(--base-slate-600);
+  --text-primary: var(--base-white);
+  --text-secondary: var(--base-slate-100);
+}

@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Badge } from "@/components/reuseable_ui_components/badge";
-import type { PublicPilatesClass } from "@/lib/user/classes";
+import { Badge } from "@/components/ui/Badge";
+import type { PublicPilatesClass } from "@/modules/bookings";
 
 function label(value: string): string {
   return value.replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());
@@ -52,10 +52,10 @@ export function UserClassDetail({ item }: { item: PublicPilatesClass }) {
           </dl>
 
           <div className="mt-8 flex flex-wrap gap-3 border-t border-background-secondary pt-6">
-            <Link className="inline-flex min-h-11 items-center rounded-lg bg-button-primary px-5 text-sm text-black hover:bg-black hover:text-primary font-bold" href="/user/bookings">
+            <Link className="inline-flex min-h-11 items-center rounded-lg bg-button-primary px-5 text-sm text-black hover:bg-black hover:text-primary font-bold" href="/bookings">
               View booking options
             </Link>
-            <Link className="inline-flex min-h-11 items-center rounded-lg border border-background-secondary text-black px-5 text-sm font-bold" href="/user/classes">
+            <Link className="inline-flex min-h-11 items-center rounded-lg border border-background-secondary text-black px-5 text-sm font-bold" href="/services/pilates">
               Back to classes
             </Link>
           </div>

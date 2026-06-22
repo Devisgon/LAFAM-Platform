@@ -1,30 +1,12 @@
-import { PilatesClassDetailManager } from "@/components/admin_components/pilates_class_detail_manager";
-import { Sidebar } from "@/components/sidebar";
-import { TopBar } from "@/components/top_bar";
-import { PageHeader } from "@/components/page_header";
+import { publicClassesClient } from "@/modules/bookings";
+import { PilatesClassDetailManager, UserClassDetail } from "@/modules/services/pilates";
+import { getServerSession, isAdminRole } from "@/lib/auth/session";
 
-export default async function AdminPilatesClassPage({
-  params,
-}: {
-  params: Promise<{ classId: string }>;
-}) {
+export default async function PilatesClassPage({ params }: { params: Promise<{ classId: string }> }) {
   const { classId } = await params;
-
-  return (
-    <div className="min-h-screen bg-background-primary">
-      <TopBar
-        description="Edit this class and manage its bookable schedules"
-        title="Pilates Class"
-      />
-      <div className="md:flex">
-        <Sidebar activeItem="Pilates" />
-        <div className="min-w-0 flex-1">
-          <PageHeader title="Pilates Class" />
-          <main className="p-4 lg:p-6">
-            <PilatesClassDetailManager classId={classId} />
-          </main>
-        </div>
-      </div>
-    </div>
-  );
+  const session = await getServerSession();
+  if (isAdminRole(session?.role)) return <PilatesClassDetailManager classId={classId} />;
+  const item = await publicClassesClient.get(classId).catch(() => null);
+  if (!item) return <section className="rounded-2xl border border-error/30 bg-card-bg-primary p-8 text-center"><h1 className="text-xl font-bold text-txt-primary">Class unavailable</h1><p className="mt-2 text-sm text-txt-secondary">This class could not be found or is no longer available.</p></section>;
+  return <UserClassDetail item={item} />;
 }

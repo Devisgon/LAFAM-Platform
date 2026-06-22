@@ -2,7 +2,7 @@ import { House } from "lucide-react";
 import Link from "next/link";
 
 export function PageHeader({
-  homeHref = "/admin",
+  homeHref = "/dashboard",
   title,
 }: {
   homeHref?: string;

@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, LogOut, Menu, UserRound } from "lucide-react";
-import { useAuth } from "@/hooks/auth/useAuth";
-import { Avatar } from "./reuseable_ui_components/avatar";
+import { useAuth } from "@/modules/auth";
+import { Avatar } from "@/components/ui/Avatar";
 
 type TopBarProps = {
   actionHref?: string;
@@ -25,7 +25,7 @@ export function TopBar({ title }: TopBarProps) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
-  const profileHref = isAdmin ? "/admin/settings" : "/user/settings";
+  const profileHref = isAdmin ? "/settings" : "/settings";
   const accountName = user?.full_name ?? user?.email ?? "Account";
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { ProfileSettings } from "@/components/profile_settings";
+import { ProfileSettings } from "./ProfileSettings";
 
 export function UserSettings() {
   return (

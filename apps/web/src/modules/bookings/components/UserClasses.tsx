@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ClassCard } from "@/components/reuseable_ui_components/class_card";
-import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
-import { useClasses } from "@/hooks/user/useClasses";
+import { ClassCard } from "@/components/data-display/ClassCard";
+import { LoadingState } from "@/components/data-display/LoadingState";
+import { useClasses } from "@/modules/bookings";
 import type {
   PublicClassFilters,
   PublicClassList,
-} from "@/lib/user/classes";
+} from "@/modules/bookings";
 
 const fieldClass =
   "min-h-11 w-full rounded-lg border border-background-secondary bg-card-bg-secondary px-3 text-sm text-txt-primary outline-none focus:border-primary";
@@ -34,7 +34,7 @@ export function UserClasses({
         </div>
 
         <form
-          action="/user/classes"
+          action="/services/pilates"
           className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,2fr)_minmax(150px,1fr)_minmax(150px,1fr)_minmax(150px,1fr)_auto] xl:items-end"
           method="get"
         >
@@ -71,7 +71,7 @@ export function UserClasses({
             <button className="min-h-11 rounded-lg bg-button-primary px-5 text-sm font-bold" type="submit">
               Apply
             </button>
-            <Link className="inline-flex min-h-11 items-center rounded-lg border border-background-secondary px-4 text-sm font-bold" href="/user/classes">
+            <Link className="inline-flex min-h-11 items-center rounded-lg border border-background-secondary px-4 text-sm font-bold" href="/services/pilates">
               Clear
             </Link>
           </div>
@@ -103,7 +103,7 @@ export function UserClasses({
           </p>
           {classes.items.map((item) => (
             <ClassCard
-              actionHref={`/user/classes/${item.id}`}
+              actionHref={`/services/pilates/${item.id}`}
               actionLabel="View class"
               item={item}
               key={item.id}

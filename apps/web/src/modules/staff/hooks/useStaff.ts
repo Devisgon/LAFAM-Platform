@@ -7,7 +7,7 @@ import {
   type StaffMember,
   type UpdateStaffAvailabilityPayload,
   type UpdateStaffPayload,
-} from "@/lib/admin/staff";
+} from "@/modules/staff";
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The staff request failed.";

@@ -1,4 +1,4 @@
-import { type ApiResponse, authFetch } from "@/lib/auth/auth";
+import { type ApiResponse, authFetch } from "@/modules/auth";
 
 export type WalletAccountStatus = "active" | "frozen" | "closed";
 

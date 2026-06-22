@@ -1,75 +1,57 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CACHE_KEYS } from "@/lib/cache/cacheKeys";
+import { getSafeErrorMessage } from "@/lib/error/handleError";
 import {
   userWalletClient,
-  type UserWallet,
-  type UserWalletTransaction,
   type UserWalletTransactionFilters,
-} from "@/lib/user/wallet";
+  type WalletTopUpPayload,
+} from "../api/userWalletApi";
 
-const errorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : "The wallet request failed.";
+export function useWalletTopUp() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: WalletTopUpPayload) =>
+      userWalletClient.createTopUp(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: CACHE_KEYS.wallet.all });
+    },
+  });
+}
 
 export function useWallet(filters: UserWalletTransactionFilters) {
-  const [wallet, setWallet] = useState<UserWallet | null>(null);
-  const [transactions, setTransactions] = useState<UserWalletTransaction[]>([]);
-  const [total, setTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const controllerRef = useRef<AbortController | null>(null);
-
+  const queryClient = useQueryClient();
+  const walletQuery = useQuery({
+    queryFn: ({ signal }) => userWalletClient.get(signal),
+    queryKey: CACHE_KEYS.wallet.userWallet,
+  });
+  const transactionsQuery = useQuery({
+    queryFn: ({ signal }) => userWalletClient.listTransactions(filters, signal),
+    queryKey: [...CACHE_KEYS.wallet.transactions, filters],
+  });
+  const getTransaction = useCallback(
+    (id: string) =>
+      queryClient.fetchQuery({
+        queryFn: ({ signal }) => userWalletClient.getTransaction(id, signal),
+        queryKey: [...CACHE_KEYS.wallet.transaction, id],
+      }),
+    [queryClient],
+  );
   const load = useCallback(async () => {
-    controllerRef.current?.abort();
-    const controller = new AbortController();
-    controllerRef.current = controller;
-    let didTimeout = false;
-    const timeout = window.setTimeout(() => {
-      didTimeout = true;
-      controller.abort();
-    }, 10_000);
-    setIsLoading(true);
-    setError(null);
+    await Promise.all([walletQuery.refetch(), transactionsQuery.refetch()]);
+  }, [transactionsQuery, walletQuery]);
+  const error = walletQuery.error ?? transactionsQuery.error;
 
-    try {
-      const [walletResult, transactionResult] = await Promise.all([
-        userWalletClient.get(controller.signal),
-        userWalletClient.listTransactions(filters, controller.signal),
-      ]);
-      setWallet(walletResult);
-      setTransactions(transactionResult.items);
-      setTotal(transactionResult.total);
-    } catch (requestError: unknown) {
-      if (!controller.signal.aborted || didTimeout) {
-        setError(
-          didTimeout
-            ? "The wallet request timed out. Please try again."
-            : errorMessage(requestError),
-        );
-      }
-    } finally {
-      window.clearTimeout(timeout);
-      if (controllerRef.current === controller) setIsLoading(false);
-    }
-  }, [filters]);
-
-  useEffect(() => {
-    const request = window.setTimeout(() => void load(), 0);
-    return () => {
-      window.clearTimeout(request);
-      controllerRef.current?.abort();
-    };
-  }, [load]);
-
-  const getTransaction = useCallback(async (id: string) => {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 10_000);
-    try {
-      return await userWalletClient.getTransaction(id, controller.signal);
-    } finally {
-      window.clearTimeout(timeout);
-    }
-  }, []);
-
-  return { error, getTransaction, isLoading, load, total, transactions, wallet };
+  return {
+    error: error ? getSafeErrorMessage(error) : null,
+    getTransaction,
+    isLoading: walletQuery.isPending || transactionsQuery.isPending,
+    load,
+    total: transactionsQuery.data?.total ?? 0,
+    transactions: transactionsQuery.data?.items ?? [],
+    wallet: walletQuery.data ?? null,
+  };
 }

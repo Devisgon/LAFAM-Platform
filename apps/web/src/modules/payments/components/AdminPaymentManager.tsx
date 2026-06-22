@@ -9,12 +9,12 @@ import {
 import {
   useAdminPayments,
   useAdminPaymentTransactions,
-} from "@/hooks/admin/useAdminPayments";
+} from "@/modules/payments";
 import {
   useAdminBookings,
   useAdminPrivateBookings,
-} from "@/hooks/admin/useAdminBookings";
-import { useAdminUsers } from "@/hooks/admin/useAdminUsers";
+} from "@/modules/bookings";
+import { useAdminUsers } from "@/modules/users";
 import {
   adminPaymentsClient,
   type AdminPaymentFilters,
@@ -25,18 +25,18 @@ import {
   type PaymentSummary,
   type PaymentTransactionStatus,
   type PaymentTransactionType,
-} from "@/lib/admin/payment";
+} from "@/modules/payments";
 import {
   type AdminBooking,
   type AdminBookingFilters,
   type AdminPrivateBookingFilters,
   type PrivateTrainerBooking,
-} from "@/lib/admin/admin-bookings";
-import { type AdminUser, type AdminUserFilters } from "@/lib/admin/admin-users";
-import { Badge } from "@/components/reuseable_ui_components/badge";
-import { DataTable } from "@/components/reuseable_ui_components/data_table";
-import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
-import { Toast } from "@/components/reuseable_ui_components/toast";
+} from "@/modules/bookings";
+import { type AdminUser, type AdminUserFilters } from "@/modules/users";
+import { Badge } from "@/components/ui/Badge";
+import { DataTable } from "@/components/data-display/DataTable";
+import { LoadingState } from "@/components/data-display/LoadingState";
+import { Toast } from "@/components/ui/Toast";
 
 type ResultToast = {
   message: string;

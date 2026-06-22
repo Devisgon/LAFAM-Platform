@@ -7,7 +7,7 @@ import {
   type AdminPaymentTransactionFilters,
   type PaymentSummary,
   type PaymentTransactionSummary,
-} from "@/lib/admin/payment";
+} from "@/modules/payments";
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The payment request failed.";

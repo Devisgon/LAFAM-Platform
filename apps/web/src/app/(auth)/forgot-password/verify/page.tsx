@@ -5,8 +5,8 @@ import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ShieldCheck } from "lucide-react";
-import { PasswordResetError } from "@/components/password_reset_shell";
-import { useAuth } from "@/hooks/auth/useAuth";
+import { PasswordResetError } from "@/modules/auth";
+import { useAuth } from "@/modules/auth";
 
 export default function VerifyResetOtpPage() {
   const router = useRouter();
@@ -27,14 +27,14 @@ export default function VerifyResetOtpPage() {
 
     try {
       await verifyResetOtp(otp);
-      router.push("/auth/forgot-password/reset");
+      router.push("/forgot-password/reset");
     } catch {
       // The shared auth error is rendered below.
     }
   };
 
   return (
-    <main className="flex h-screen w-full items-center justify-center bg-[#f4dddd] px-4 py-10 font-sans text-black">
+    <main className="flex h-screen w-full items-center justify-center bg-auth-surface px-4 py-10 font-sans text-black">
       <section className="flex w-full flex-col items-center">
         <div className="mb-10 flex flex-col items-center text-center">
           <Image
@@ -48,7 +48,7 @@ export default function VerifyResetOtpPage() {
         </div>
 
         <div className="w-full max-w-[560px] overflow-hidden rounded-md bg-white shadow-2xl">
-          <div className="flex h-20 items-center justify-center gap-3 bg-[#e9caca] text-black">
+          <div className="flex h-20 items-center justify-center gap-3 bg-primary text-black">
             <ShieldCheck size={30} strokeWidth={2.5} />
 
             <h1 className="text-xl font-bold uppercase tracking-wide">
@@ -92,7 +92,7 @@ export default function VerifyResetOtpPage() {
               <button
                 type="submit"
                 disabled={isVerifyingResetOtp}
-                className="flex w-full items-center justify-center gap-2 rounded bg-[#e9caca] px-5 py-3.5 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex w-full items-center justify-center gap-2 rounded bg-primary px-5 py-3.5 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isVerifyingResetOtp ? "Verifying..." : "Verify Reset Code"}
                 <ArrowRight size={18} />
@@ -101,8 +101,8 @@ export default function VerifyResetOtpPage() {
               <p className="pt-2 text-center text-[15px] text-gray-500">
                 Wrong email?{" "}
                 <Link
-                  href="/auth/forgot-password"
-                  className="font-semibold text-[#d8abab] transition hover:text-black"
+                  href="/forgot-password"
+                  className="font-semibold text-auth-link transition hover:text-black"
                 >
                   Request New Code
                 </Link>
@@ -115,8 +115,8 @@ export default function VerifyResetOtpPage() {
               </p>
 
               <Link
-                href="/auth/forgot-password"
-                className="block w-full rounded bg-[#e9caca] px-5 py-3.5 text-center text-[16px] font-semibold text-white transition hover:bg-black"
+                href="/forgot-password"
+                className="block w-full rounded bg-primary px-5 py-3.5 text-center text-[16px] font-semibold text-white transition hover:bg-black"
               >
                 Request New Code
               </Link>

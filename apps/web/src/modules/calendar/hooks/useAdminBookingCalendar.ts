@@ -1,77 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import {
-  adminBookingsClient,
-  type AdminBookingCalendarEvent,
-  type AdminBookingCalendarFilters,
-  type CreatePrivateTrainerBookingPayload,
-} from "@/lib/admin/admin-bookings";
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : "The booking calendar request failed.";
-}
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CACHE_KEYS } from "@/lib/cache/cacheKeys";
+import { getSafeErrorMessage } from "@/lib/error/handleError";
+import type {
+  AdminBookingCalendarFilters,
+  CreatePrivateTrainerBookingPayload,
+} from "@/modules/bookings";
+import { calendarApi } from "../api/calendarApi";
 
 export function useAdminBookingCalendar(filters: AdminBookingCalendarFilters) {
-  const [events, setEvents] = useState<AdminBookingCalendarEvent[]>([]);
-  const [total, setTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadCalendar = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const result = await adminBookingsClient.calendar(filters);
-      setEvents(result.events);
-      setTotal(result.total);
-      return result;
-    } catch (requestError: unknown) {
-      setError(getErrorMessage(requestError));
-      throw requestError;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [filters]);
-
-  useEffect(() => {
-    const load = window.setTimeout(() => {
-      void loadCalendar().catch(() => undefined);
-    }, 200);
-
-    return () => window.clearTimeout(load);
-  }, [loadCalendar]);
-
-  const createPrivateTrainerBooking = useCallback(
-    async (payload: CreatePrivateTrainerBookingPayload) => {
-      setIsCreating(true);
-      setError(null);
-
-      try {
-        const result = await adminBookingsClient.createPrivateTrainer(payload);
-        await loadCalendar();
-        return result;
-      } catch (requestError: unknown) {
-        setError(getErrorMessage(requestError));
-        throw requestError;
-      } finally {
-        setIsCreating(false);
-      }
-    },
-    [loadCalendar],
-  );
+  const queryClient = useQueryClient();
+  const calendarQuery = useQuery({
+    queryFn: () => calendarApi.list(filters),
+    queryKey: [...CACHE_KEYS.calendar.all, filters],
+  });
+  const createMutation = useMutation({
+    mutationFn: (payload: CreatePrivateTrainerBookingPayload) =>
+      calendarApi.createPrivateTrainerBooking(payload),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: CACHE_KEYS.calendar.all }),
+  });
+  const error = calendarQuery.error ?? createMutation.error;
 
   return {
-    createPrivateTrainerBooking,
-    error,
-    events,
-    isCreating,
-    isLoading,
-    loadCalendar,
-    total,
+    createPrivateTrainerBooking: createMutation.mutateAsync,
+    error: error ? getSafeErrorMessage(error) : null,
+    events: calendarQuery.data?.events ?? [],
+    isCreating: createMutation.isPending,
+    isLoading: calendarQuery.isPending,
+    loadCalendar: async () => (await calendarQuery.refetch()).data,
+    total: calendarQuery.data?.total ?? 0,
   };
 }

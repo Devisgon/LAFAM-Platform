@@ -5,8 +5,8 @@ import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Mail } from "lucide-react";
-import { PasswordResetError } from "@/components/password_reset_shell";
-import { useAuth } from "@/hooks/auth/useAuth";
+import { PasswordResetError } from "@/modules/auth";
+import { useAuth } from "@/modules/auth";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -22,14 +22,14 @@ export default function ForgotPasswordPage() {
 
     try {
       await forgotPassword(email);
-      router.push("/auth/forgot-password/verify");
+      router.push("/forgot-password/verify");
     } catch {
       // The shared auth error is rendered below.
     }
   };
 
   return (
-    <main className="flex h-screen w-full items-center justify-center bg-[#f4dddd] px-4 py-10 font-sans text-black">
+    <main className="flex h-screen w-full items-center justify-center bg-auth-surface px-4 py-10 font-sans text-black">
       <section className="flex w-full flex-col items-center">
         <div className="mb-10 flex flex-col items-center text-center">
           <Image
@@ -43,7 +43,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         <div className="w-full max-w-[560px] overflow-hidden rounded-md bg-white shadow-2xl">
-          <div className="flex h-20 items-center justify-center gap-3 bg-[#e9caca] text-black">
+          <div className="flex h-20 items-center justify-center gap-3 bg-primary text-black">
             <Mail size={30} strokeWidth={2.5} />
             <h1 className="text-xl font-bold uppercase tracking-wide">
               Forgot Password
@@ -88,7 +88,7 @@ export default function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={isRequestingPasswordReset}
-              className="flex w-full items-center justify-center gap-2 rounded bg-[#e9caca] px-5 py-3.5 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded bg-primary px-5 py-3.5 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isRequestingPasswordReset ? "Sending..." : "Send Reset Code"}
               <ArrowRight size={18} />
@@ -98,7 +98,7 @@ export default function ForgotPasswordPage() {
               Remember your password?{" "}
               <Link
                 href="/"
-                className="font-semibold text-[#d8abab] transition hover:text-black"
+                className="font-semibold text-auth-link transition hover:text-black"
               >
                 Sign In
               </Link>

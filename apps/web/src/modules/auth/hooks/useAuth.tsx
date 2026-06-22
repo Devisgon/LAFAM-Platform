@@ -9,6 +9,10 @@ import {
   useState,
 } from "react";
 import { usePathname } from "next/navigation";
+import { useRateLimit } from "@/hooks/useRateLimit";
+import { ERROR_MESSAGES } from "@/lib/error/errorMap";
+import { getSafeErrorMessage } from "@/lib/error/handleError";
+import { AppError } from "@/types/api.types";
 import {
   AuthClientError,
   authClient,
@@ -34,7 +38,7 @@ import {
   type SignUpResult,
   type VerifyEmailResult,
   type VerifyResetOtpResult,
-} from "@/lib/auth/auth";
+} from "@/modules/auth";
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -105,6 +109,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     message: string;
     pathname: string;
   } | null>(null);
+  const rateLimiter = useRateLimit();
 
   const isAuthenticated = Boolean(user);
   const error = storedError?.pathname === pathname ? storedError.message : null;
@@ -140,8 +145,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const getErrorMessage = useCallback((err: unknown, fallback: string) => {
-    return err instanceof Error ? err.message : fallback;
+    const message = getSafeErrorMessage(err);
+    return message === ERROR_MESSAGES.unknown ? fallback : message;
   }, []);
+
+  const enforceRateLimit = useCallback(() => {
+    if (rateLimiter.canRun()) return;
+    const error = new AppError("rate_limited", ERROR_MESSAGES.rate_limited, 429);
+    setError(error.message);
+    throw error;
+  }, [rateLimiter, setError]);
 
   const refreshUser = useCallback(async () => {
     setIsChecking(true);
@@ -280,6 +293,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const login = useCallback(
     async (payload: LoginPayload) => {
+      enforceRateLimit();
       setIsLoggingIn(true);
       setError(null);
 
@@ -301,11 +315,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setIsLoggingIn(false);
       }
     },
-    [getErrorMessage, refreshAvatar, setCurrentUser, setError],
+    [enforceRateLimit, getErrorMessage, refreshAvatar, setCurrentUser, setError],
   );
 
   const signUp = useCallback(
     async (payload: SignUpPayload) => {
+      enforceRateLimit();
       setIsSigningUp(true);
       setError(null);
 
@@ -320,7 +335,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setIsSigningUp(false);
       }
     },
-    [getErrorMessage, setError],
+    [enforceRateLimit, getErrorMessage, setError],
   );
 
   const verifyEmail = useCallback(
@@ -358,6 +373,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const forgotPassword = useCallback(
     async (email: string) => {
+      enforceRateLimit();
       setIsRequestingPasswordReset(true);
       setError(null);
 
@@ -372,7 +388,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setIsRequestingPasswordReset(false);
       }
     },
-    [getErrorMessage, setError],
+    [enforceRateLimit, getErrorMessage, setError],
   );
 
   const verifyResetOtp = useCallback(
@@ -396,6 +412,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const resetPassword = useCallback(
     async (payload: ResetPasswordPayload) => {
+      enforceRateLimit();
       setIsResettingPassword(true);
       setError(null);
 
@@ -411,7 +428,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setIsResettingPassword(false);
       }
     },
-    [clearAuthState, getErrorMessage, setError],
+    [clearAuthState, enforceRateLimit, getErrorMessage, setError],
   );
 
   const logout = useCallback(async () => {

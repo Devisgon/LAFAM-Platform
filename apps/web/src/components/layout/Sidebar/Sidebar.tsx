@@ -57,23 +57,22 @@ const icons: Record<IconName, LucideIcon> = {
 };
 
 const primaryItems: NavItem[] = [
-  { href: "/admin", icon: "dashboard", label: "Dashboard" },
-  { href: "/admin/bookings", icon: "bookings", label: "Bookings" },
-  { href: "/admin/calendar", icon: "calendar", label: "Calendar" },
+  { href: "/dashboard", icon: "dashboard", label: "Dashboard" },
+  { href: "/bookings", icon: "bookings", label: "Bookings" },
+  { href: "/calendar", icon: "calendar", label: "Calendar" },
 ];
 
 const managementItems: NavItem[] = [
-  { href: "/admin/payments", icon: "payments", label: "Payments" },
-  { href: "/admin/settings", icon: "settings", label: "Settings" },
+  { href: "/payments", icon: "payments", label: "Payments" },
+  { href: "/settings", icon: "settings", label: "Settings" },
 ];
 
 const userItems: NavItem[] = [
-  { href: "/user", icon: "home", label: "Home" },
-  { href: "/user/classes", icon: "classes", label: "Classes" },
-  { href: "/user/bookings", icon: "bookings", label: "Booking" },
-  { href: "/user/wallet", icon: "wallet", label: "Wallet" },
-  { href: "/user/payments", icon: "payments", label: "Payment" },
-  { href: "/user/settings", icon: "settings", label: "Profile" },
+  { href: "/dashboard", icon: "home", label: "Home" },
+  { href: "/services/pilates", icon: "classes", label: "Classes" },
+  { href: "/bookings", icon: "bookings", label: "Booking" },
+  { href: "/wallet", icon: "wallet", label: "Wallet" },
+  { href: "/settings", icon: "settings", label: "Profile" },
 ];
 
 function Icon({ name }: { name: IconName }) {
@@ -169,7 +168,7 @@ function NavigationGroup({
       </button>
 
       {open && (
-        <div className="w-full border-b border-black/20 bg-[#f7e5e5] py-3 shadow-sm">
+        <div className="w-full border-b border-black/20 bg-sidebar-header py-3 shadow-sm">
           {children.map((child) => (
             <Link
               key={child.label}
@@ -266,13 +265,13 @@ function SidebarContent({
               label="Services"
               onNavigate={onClose}
             >
-              {[{ href: "/admin/services/pilates", label: "Pilates" }]}
+              {[{ href: "/services/pilates", label: "Pilates" }]}
             </NavigationGroup>
 
             <NavigationLink
               active={activeItem === "Staff"}
               collapsed={collapsed}
-              href="/admin/staff"
+              href="/staff"
               icon="staff"
               label="Staff"
               onNavigate={onClose}
@@ -281,7 +280,7 @@ function SidebarContent({
             <NavigationLink
               active={activeItem === "Wallet"}
               collapsed={collapsed}
-              href="/admin/wallet"
+              href="/wallet"
               icon="wallet"
               label="Wallet"
               onNavigate={onClose}

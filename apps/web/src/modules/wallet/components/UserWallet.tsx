@@ -1,16 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { WalletTransactionTable } from "@/components/reuseable_ui_components/wallet_transaction_table";
-import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
-import { getCachedAuthUser } from "@/lib/auth/auth";
-import { useWallet } from "@/hooks/user/useWallet";
+import { useMemo, useRef, useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/Button";
+import { WalletTransactionTable } from "@/components/data-display/WalletTransactionTable";
+import { LoadingState } from "@/components/data-display/LoadingState";
+import { getCachedAuthUser } from "@/modules/auth";
+import { useWallet, useWalletTopUp } from "@/modules/wallet";
+import { useRateLimit } from "@/hooks/useRateLimit";
+import { getSafeErrorMessage } from "@/lib/error/handleError";
 import type {
   UserWalletTransactionFilters,
   WalletEntryStatus,
   WalletEntryType,
   WalletSortField,
-} from "@/lib/user/wallet";
+  WalletTopUpPaymentMethod,
+} from "@/modules/wallet";
 
 const fieldClass =
   "min-h-11 w-full rounded-lg border border-background-secondary bg-card-bg-primary px-3 text-sm text-txt-primary outline-none focus:border-primary";
@@ -26,6 +30,29 @@ const money = (value: number) =>
 const label = (value: string) =>
   value.replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());
 
+const TOP_UP_MIN = 0.001;
+const TOP_UP_MAX = 999_999_999.999;
+
+function parseTopUpAmount(value: string): number | null {
+  if (!/^\d+(\.\d{1,3})?$/.test(value.trim())) return null;
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount >= TOP_UP_MIN && amount <= TOP_UP_MAX
+    ? amount
+    : null;
+}
+
+function resolveCheckoutUrl(value: string): string | null {
+  try {
+    const url = new URL(value, window.location.origin);
+    const isLocalDevelopment =
+      (url.hostname === "localhost" || url.hostname === "127.0.0.1") &&
+      url.protocol === "http:";
+    return url.protocol === "https:" || isLocalDevelopment ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export function UserWalletScreen() {
   const [entryType, setEntryType] = useState<WalletEntryType | "">("");
   const [entryStatus, setEntryStatus] = useState<WalletEntryStatus | "">("");
@@ -33,6 +60,13 @@ export function UserWalletScreen() {
   const [toDate, setToDate] = useState("");
   const [sortBy, setSortBy] = useState<WalletSortField>("created_at");
   const [page, setPage] = useState(1);
+  const [topUpAmount, setTopUpAmount] = useState("");
+  const [topUpMethod, setTopUpMethod] =
+    useState<WalletTopUpPaymentMethod>("knet");
+  const [topUpError, setTopUpError] = useState<string | null>(null);
+  const idempotencyKey = useRef<string | null>(null);
+  const topUp = useWalletTopUp();
+  const topUpRateLimiter = useRateLimit(1_500);
   const pageSize = 20;
   const user = useMemo(() => getCachedAuthUser(), []);
   const customerName = user?.full_name ?? user?.email ?? "My account";
@@ -52,6 +86,43 @@ export function UserWalletScreen() {
   const wallet = useWallet(filters);
   const pageCount = Math.max(1, Math.ceil(wallet.total / pageSize));
   const resetPage = () => setPage(1);
+
+  const handleTopUp = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTopUpError(null);
+
+    const amount = parseTopUpAmount(topUpAmount);
+    if (amount === null) {
+      setTopUpError("Enter a valid amount in KWD with up to three decimal places.");
+      return;
+    }
+    if (!topUpRateLimiter.canRun()) {
+      setTopUpError("Please wait a moment before trying again.");
+      return;
+    }
+
+    idempotencyKey.current ??= `wallet-top-up-${crypto.randomUUID()}`;
+
+    try {
+      const result = await topUp.mutateAsync({
+        currency: "KWD",
+        idempotency_key: idempotencyKey.current,
+        metadata: { source: "checkout_screen" },
+        payment_method: topUpMethod,
+        target_type: "wallet_top_up",
+        wallet_top_up_amount: amount,
+      });
+      const checkoutUrl = resolveCheckoutUrl(result.redirect_url);
+      if (!checkoutUrl) {
+        setTopUpError("The secure checkout link is unavailable. Please try again.");
+        return;
+      }
+      idempotencyKey.current = null;
+      window.location.assign(checkoutUrl);
+    } catch (error: unknown) {
+      setTopUpError(getSafeErrorMessage(error));
+    }
+  };
 
   return (
     <div className="grid gap-6 text-txt-primary">
@@ -85,6 +156,79 @@ export function UserWalletScreen() {
           </div>
         </section>
       ) : null}
+
+      <section
+        aria-labelledby="wallet-top-up-title"
+        className="overflow-hidden rounded-2xl border border-background-secondary bg-card-bg-primary shadow-sm"
+      >
+        <header className="border-b border-background-secondary p-5 sm:p-6">
+          <h2 className="text-2xl font-bold" id="wallet-top-up-title">
+            Top up wallet
+          </h2>
+          <p className="mt-1 text-sm text-txt-secondary">
+            Add funds through a secure hosted KNET or card checkout.
+          </p>
+        </header>
+        <form
+          className="grid gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end sm:p-6"
+          onSubmit={handleTopUp}
+        >
+          <label className="grid gap-1.5 text-xs font-bold">
+            Amount (KWD)
+            <input
+              className={fieldClass}
+              disabled={topUp.isPending || wallet.wallet?.status !== "active"}
+              inputMode="decimal"
+              max={TOP_UP_MAX}
+              min={TOP_UP_MIN}
+              onChange={(event) => {
+                setTopUpAmount(event.target.value);
+                idempotencyKey.current = null;
+                setTopUpError(null);
+              }}
+              placeholder="25.000"
+              required
+              step="0.001"
+              type="number"
+              value={topUpAmount}
+            />
+          </label>
+          <label className="grid gap-1.5 text-xs font-bold">
+            Payment method
+            <select
+              className={fieldClass}
+              disabled={topUp.isPending || wallet.wallet?.status !== "active"}
+              onChange={(event) => {
+                setTopUpMethod(event.target.value as WalletTopUpPaymentMethod);
+                idempotencyKey.current = null;
+                setTopUpError(null);
+              }}
+              value={topUpMethod}
+            >
+              <option value="knet">KNET</option>
+              <option value="card">Card</option>
+            </select>
+          </label>
+          <Button
+            disabled={!wallet.wallet || wallet.wallet.status !== "active"}
+            loading={topUp.isPending}
+            size="lg"
+            type="submit"
+          >
+            {topUp.isPending ? "Opening checkout..." : "Continue to checkout"}
+          </Button>
+          {topUpError ? (
+            <p className="text-sm text-error sm:col-span-3" role="alert">
+              {topUpError}
+            </p>
+          ) : null}
+          {wallet.wallet && wallet.wallet.status !== "active" ? (
+            <p className="text-sm text-warning sm:col-span-3">
+              Wallet top-up is unavailable while your wallet is {wallet.wallet.status}.
+            </p>
+          ) : null}
+        </form>
+      </section>
 
       <section className="overflow-hidden rounded-2xl border border-background-secondary bg-card-bg-primary shadow-sm" aria-labelledby="wallet-transactions-title">
         <header className="border-b border-background-secondary p-5 sm:p-6">
