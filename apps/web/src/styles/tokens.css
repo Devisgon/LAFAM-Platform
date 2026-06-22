@@ -1,0 +1,16 @@
+:root {
+  --base-white: #ffffff;
+  --base-black: #000000;
+  --base-slate-50: #f8fafc;
+  --base-slate-100: #f1f5f9;
+  --base-slate-600: #64748b;
+  --base-slate-900: #0f172a;
+  --base-brand-100: #f7e5e5;
+  --base-brand-200: #f4dddd;
+  --base-brand-300: #edcdce;
+  --base-brand-400: #d8abab;
+  --base-red-500: #ef4444;
+  --base-amber-500: #f59e0b;
+  --base-green-500: #10b981;
+  --base-sky-400: #38bdf8;
+}

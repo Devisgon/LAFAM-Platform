@@ -144,14 +144,10 @@ function mapInternalSessionToSafeSessionResponse(
   };
 }
 
-function resolveProviderSessionExpiresAt(
-  session: SupabaseAuthSession,
-): string | null {
-  if (typeof session.expiresAt !== 'number') {
-    return null;
-  }
-
-  return new Date(session.expiresAt * 1000).toISOString();
+function resolveAppSessionExpiresAt(now: Date): string {
+  return new Date(
+    now.getTime() + currentAuthConfig.session.ttlHours * 60 * 60 * 1000,
+  ).toISOString();
 }
 
 function isIsoDateExpired(
@@ -165,7 +161,7 @@ function isIsoDateExpired(
   const parsedDate = new Date(value);
 
   if (Number.isNaN(parsedDate.getTime())) {
-    return false;
+    return true;
   }
 
   return parsedDate.getTime() <= now.getTime();
@@ -396,7 +392,15 @@ export class AuthService {
       throw AppError.invalidCredentials('The refresh token is invalid.');
     }
 
-    this.assertSessionCanRefresh(existingSession);
+    const refreshTime = new Date();
+
+    this.assertSessionCanRefresh(existingSession, refreshTime);
+
+    const user = await this.authUserRepository.getById({
+      userId: existingSession.userId,
+    });
+
+    this.assertUserCanLogin(user);
 
     const providerResult = await this.supabaseAuthRepository.refreshSession({
       refreshToken: dto.refresh_token,
@@ -416,11 +420,18 @@ export class AuthService {
 
     const updatedSession = await this.authSessionRepository.updateTokenHashes({
       sessionId: existingSession.id,
+      previousRefreshTokenHash: existingSession.refreshTokenHash,
       accessTokenHash: tokenHashes.accessTokenHash,
       refreshTokenHash: tokenHashes.refreshTokenHash,
-      expiresAt: resolveProviderSessionExpiresAt(providerResult.session),
-      lastSeenAt: new Date().toISOString(),
+      expiresAt: resolveAppSessionExpiresAt(refreshTime),
+      lastSeenAt: refreshTime.toISOString(),
     });
+
+    if (!updatedSession) {
+      throw AppError.invalidCredentials(
+        'The refresh token has already been rotated.',
+      );
+    }
 
     await this.authAuditRepository.createEvent({
       actorUserId: updatedSession.userId,
@@ -453,6 +464,8 @@ export class AuthService {
       currentAuthConfig.token.accessTokenHashPepper,
     );
 
+    const createdAt = new Date();
+
     return this.authSessionRepository.createSession({
       userId: input.user.id,
       supabaseAuthUserId: input.user.authUserId,
@@ -463,7 +476,7 @@ export class AuthService {
       deviceName: input.device.deviceName,
       ipAddress: input.device.ipAddress,
       userAgent: input.device.userAgent,
-      expiresAt: resolveProviderSessionExpiresAt(input.providerSession),
+      expiresAt: resolveAppSessionExpiresAt(createdAt),
     });
   }
 
@@ -534,7 +547,10 @@ export class AuthService {
     }
   }
 
-  private assertSessionCanRefresh(session: AuthSessionInternal): void {
+  private assertSessionCanRefresh(
+    session: AuthSessionInternal,
+    now: Date,
+  ): void {
     if (session.revokedAt) {
       throw AppError.sessionRevoked('The session has been revoked.');
     }
@@ -543,7 +559,7 @@ export class AuthService {
       throw AppError.sessionRevoked('The session has already been converted.');
     }
 
-    if (isIsoDateExpired(session.expiresAt)) {
+    if (!session.expiresAt || isIsoDateExpired(session.expiresAt, now)) {
       throw AppError.sessionExpired('The session has expired.');
     }
   }

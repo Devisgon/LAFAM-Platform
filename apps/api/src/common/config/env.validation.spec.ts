@@ -24,6 +24,7 @@ function createValidEnvironment(
     AUTH_AVATAR_BUCKET: 'avatars',
     AUTH_AVATAR_MAX_SIZE_BYTES: '2097152',
     AUTH_AVATAR_SIGNED_URL_TTL_SECONDS: '3600',
+    AUTH_SESSION_TTL_HOURS: '24',
     AUTH_GUEST_SESSION_TTL_HOURS: '24',
     AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR: '20',
     AUTH_GUEST_REQUIRE_CAPTCHA: 'false',
@@ -69,6 +70,7 @@ describe('validateEnvironment', () => {
         avatarBucket: 'avatars',
         avatarMaxSizeBytes: 2097152,
         avatarSignedUrlTtlSeconds: 3600,
+        authenticatedSessionTtlHours: 24,
         guestSessionTtlHours: 24,
         guestMaxSessionsPerIpPerHour: 20,
         guestRequireCaptcha: false,
@@ -331,6 +333,19 @@ describe('validateEnvironment', () => {
       'AUTH_GUEST_SESSION_TTL_HOURS must be an integer between 1 and 168.',
     );
   });
+
+  it.each(['0', '721'])(
+    'rejects invalid authenticated session ttl value %s',
+    (sessionTtlHours) => {
+      expect(() =>
+        validateEnvironment(
+          createValidEnvironment({
+            AUTH_SESSION_TTL_HOURS: sessionTtlHours,
+          }),
+        ),
+      ).toThrow('AUTH_SESSION_TTL_HOURS must be an integer between 1 and 720.');
+    },
+  );
 
   it('rejects invalid guest session rate-limit values', () => {
     expect(() =>

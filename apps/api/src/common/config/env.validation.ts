@@ -42,6 +42,7 @@ const DEFAULT_AUTH_MAX_RESET_OTP_ATTEMPTS = 5;
 const DEFAULT_AUTH_AVATAR_BUCKET = 'avatars';
 const DEFAULT_AUTH_AVATAR_MAX_SIZE_BYTES = 2_097_152;
 const DEFAULT_AUTH_AVATAR_SIGNED_URL_TTL_SECONDS = 3600;
+const DEFAULT_AUTH_SESSION_TTL_HOURS = 24;
 const DEFAULT_AUTH_GUEST_SESSION_TTL_HOURS = 24;
 const DEFAULT_AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR = 20;
 const DEFAULT_AUTH_GUEST_REQUIRE_CAPTCHA = false;
@@ -519,6 +520,15 @@ export function validateEnvironment(
     errors,
   );
 
+  const authenticatedSessionTtlHours = parseIntegerInRange(
+    readRequiredString(environment, 'AUTH_SESSION_TTL_HOURS', errors),
+    'AUTH_SESSION_TTL_HOURS',
+    1,
+    720,
+    DEFAULT_AUTH_SESSION_TTL_HOURS,
+    errors,
+  );
+
   const guestSessionTtlHours = parseIntegerInRange(
     readRequiredString(environment, 'AUTH_GUEST_SESSION_TTL_HOURS', errors),
     'AUTH_GUEST_SESSION_TTL_HOURS',
@@ -679,6 +689,7 @@ export function validateEnvironment(
       avatarBucket,
       avatarMaxSizeBytes,
       avatarSignedUrlTtlSeconds,
+      authenticatedSessionTtlHours,
       guestSessionTtlHours,
       guestMaxSessionsPerIpPerHour,
       guestRequireCaptcha,

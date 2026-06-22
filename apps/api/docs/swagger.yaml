@@ -266,7 +266,11 @@ paths:
   /auth/refresh-token:
     post:
       summary: Refresh token
-      description: Rotates the refresh token, refreshes the provider session, and updates app-owned token hashes.
+      description: >-
+        Rotates an eligible app-owned session and updates the provider access and refresh tokens.
+        The old access token may already be expired. The refresh token hash must match a known
+        session whose local user remains active and authorized, and the session must be unrevoked,
+        unconverted, and inside the LAFAM app-session lifetime.
       operationId: authRefreshToken
       tags:
         - Auth - Public
@@ -285,6 +289,10 @@ paths:
                 $ref: '#/components/schemas/AuthRefreshTokenSuccessResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
   /auth/forgot-password:
     post:
       summary: Request password reset OTP

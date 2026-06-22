@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
-import { AuthProvider } from "@/hooks/useAuth";
+import { AuthProvider } from "@/modules/auth";
+import { QueryProvider } from "@/lib/cache/QueryProvider";
 
 import "./globals.css";
 
@@ -43,7 +44,9 @@ export default function RootLayout({
         <Script id="lafam-theme-init" strategy="beforeInteractive">
           {`try{var t=localStorage.getItem("theme");document.documentElement.dataset.theme=t==="dark"?"dark":"light"}catch{document.documentElement.dataset.theme="light"}`}
         </Script>
-        <AuthProvider>{children}</AuthProvider>
+        <QueryProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

@@ -58,6 +58,7 @@ export type EnvironmentVariableName =
   | 'AUTH_AVATAR_BUCKET'
   | 'AUTH_AVATAR_MAX_SIZE_BYTES'
   | 'AUTH_AVATAR_SIGNED_URL_TTL_SECONDS'
+  | 'AUTH_SESSION_TTL_HOURS'
   | 'AUTH_GUEST_SESSION_TTL_HOURS'
   | 'AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR'
   | 'AUTH_GUEST_REQUIRE_CAPTCHA'
@@ -115,6 +116,7 @@ export interface AuthEnvironment {
   readonly avatarBucket: string;
   readonly avatarMaxSizeBytes: number;
   readonly avatarSignedUrlTtlSeconds: number;
+  readonly authenticatedSessionTtlHours: number;
   readonly guestSessionTtlHours: number;
   readonly guestMaxSessionsPerIpPerHour: number;
   readonly guestRequireCaptcha: boolean;
@@ -167,6 +169,7 @@ export const ENVIRONMENT_VARIABLE_NAMES = [
   'AUTH_AVATAR_BUCKET',
   'AUTH_AVATAR_MAX_SIZE_BYTES',
   'AUTH_AVATAR_SIGNED_URL_TTL_SECONDS',
+  'AUTH_SESSION_TTL_HOURS',
   'AUTH_GUEST_SESSION_TTL_HOURS',
   'AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR',
   'AUTH_GUEST_REQUIRE_CAPTCHA',
@@ -203,6 +206,7 @@ export const REQUIRED_ENVIRONMENT_VARIABLE_NAMES = [
   'AUTH_AVATAR_BUCKET',
   'AUTH_AVATAR_MAX_SIZE_BYTES',
   'AUTH_AVATAR_SIGNED_URL_TTL_SECONDS',
+  'AUTH_SESSION_TTL_HOURS',
   'AUTH_GUEST_SESSION_TTL_HOURS',
   'AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR',
   'AUTH_GUEST_REQUIRE_CAPTCHA',

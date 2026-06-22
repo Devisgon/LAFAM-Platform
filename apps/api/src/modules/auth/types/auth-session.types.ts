@@ -104,6 +104,7 @@ export interface CreateAuthSessionInput {
 
 export interface UpdateAuthSessionTokenHashesInput {
   readonly sessionId: string;
+  readonly previousRefreshTokenHash: string;
   readonly accessTokenHash: string;
   readonly refreshTokenHash: string;
   readonly expiresAt?: string | null;

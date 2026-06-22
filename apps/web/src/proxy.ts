@@ -1,5 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+import {
+  LEGACY_AUTH_SESSION_MAX_AGE_SECONDS,
+  resolveSessionCookieMaxAgeSeconds,
+} from "@/lib/auth/session-cookie";
+
 const ACCESS_TOKEN_COOKIE = "lafam_access_token";
 const REFRESH_TOKEN_COOKIE = "lafam_refresh_token";
 const ROLE_COOKIE = "lafam_role";
@@ -19,6 +24,7 @@ type ProxyRefreshApiData = {
   } | null;
   session?: {
     id?: string | null;
+    expires_at?: string | null;
   } | null;
 };
 
@@ -28,6 +34,7 @@ type ProxyRefreshSession = {
   expiresIn: number;
   role: string | null;
   sessionId: string | null;
+  sessionCookieMaxAgeSeconds: number;
 };
 
 type VerifiedProxySession = {
@@ -36,14 +43,18 @@ type VerifiedProxySession = {
 };
 
 const protectedRoutes = [
-  "/admin",
+  "/dashboard",
+  "/bookings",
+  "/calendar",
+  "/payments",
+  "/services/pilates",
+  "/settings",
   "/staff",
-  "/user",
-  "/customer",
-  "/guest",
-  "/profile",
-  "/account",
+  "/users",
+  "/wallet",
 ];
+const adminOnlyRoutes = ["/calendar", "/payments", "/staff", "/users"];
+const authRoutes = ["/login", "/signup", "/forgot-password", "/verify-email"];
 
 const authCookieNames = [
   ACCESS_TOKEN_COOKIE,
@@ -61,25 +72,17 @@ function isAdminRole(role?: string): boolean {
 }
 
 function getDashboardPath(role?: string): string {
-  if (isAdminRole(role)) return "/admin";
+  if (isAdminRole(role)) return "/dashboard";
 
-  if (role) return "/user";
+  if (role) return "/dashboard";
 
   return "/";
 }
 
 function canAccessPath(pathname: string, role?: string): boolean {
   if (!role) return false;
-
-  if (isRouteMatch(pathname, "/admin")) {
-    return isAdminRole(role);
-  }
-
-  if (isRouteMatch(pathname, "/user")) {
-    return !isAdminRole(role);
-  }
-
-  return false;
+  return !adminOnlyRoutes.some((route) => isRouteMatch(pathname, route)) ||
+    isAdminRole(role);
 }
 
 function getApiUrl(path: string): string | null {
@@ -95,12 +98,21 @@ function extractRefreshSession(payload: unknown): ProxyRefreshSession | null {
     return null;
   }
 
+  const sessionCookieMaxAgeSeconds = resolveSessionCookieMaxAgeSeconds(
+    data.session?.expires_at,
+  );
+
+  if (!sessionCookieMaxAgeSeconds) {
+    return null;
+  }
+
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
     expiresIn: data.expires_in ?? 3600,
     role: data.user?.role ?? null,
     sessionId: data.session?.id ?? null,
+    sessionCookieMaxAgeSeconds,
   };
 }
 
@@ -148,14 +160,14 @@ function setSessionCookies(
   });
 
   response.cookies.set(REFRESH_TOKEN_COOKIE, session.refreshToken, {
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: session.sessionCookieMaxAgeSeconds,
     path: "/",
     sameSite: "lax",
     secure,
   });
 
   response.cookies.set(ROLE_COOKIE, role, {
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: session.sessionCookieMaxAgeSeconds,
     path: "/",
     sameSite: "lax",
     secure,
@@ -163,7 +175,7 @@ function setSessionCookies(
 
   if (session.sessionId) {
     response.cookies.set(SESSION_ID_COOKIE, session.sessionId, {
-      maxAge: 30 * 24 * 60 * 60,
+      maxAge: session.sessionCookieMaxAgeSeconds,
       path: "/",
       sameSite: "lax",
       secure,
@@ -177,7 +189,8 @@ function setRoleCookie(
   role: string,
 ): void {
   response.cookies.set(ROLE_COOKIE, role, {
-    maxAge: 30 * 24 * 60 * 60,
+    // This path has no refresh response, so it uses the temporary legacy window.
+    maxAge: LEGACY_AUTH_SESSION_MAX_AGE_SECONDS,
     path: "/",
     sameSite: "lax",
     secure: request.nextUrl.protocol === "https:",
@@ -204,9 +217,9 @@ function redirectToLoginWithClearedSession(
   request: NextRequest,
   pathname: string,
 ): NextResponse {
-  const loginUrl = new URL("/", request.url);
+  const loginUrl = new URL("/login", request.url);
 
-  if (pathname !== "/") {
+  if (pathname !== "/login") {
     loginUrl.searchParams.set("redirect", pathname);
   }
 
@@ -219,7 +232,7 @@ function redirectToLoginWithClearedSession(
 function rewriteUnauthorized(request: NextRequest): NextResponse {
   const unauthorizedUrl = new URL("/unauthorized", request.url);
 
-  return NextResponse.rewrite(unauthorizedUrl, { status: 404 });
+  return NextResponse.redirect(unauthorizedUrl);
 }
 
 function extractRole(payload: unknown): string | null {
@@ -318,7 +331,7 @@ export async function proxy(request: NextRequest) {
   const isProtectedRoute = protectedRoutes.some((route) =>
     isRouteMatch(pathname, route),
   );
-  const isAuthRoute = pathname === "/" || pathname.startsWith("/signup");
+  const isAuthRoute = authRoutes.some((route) => isRouteMatch(pathname, route));
 
   if (isProtectedRoute && !hasPossibleSession) {
     return redirectToLoginWithClearedSession(request, pathname);
@@ -369,13 +382,18 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     "/",
+    "/login",
     "/signup/:path*",
-    "/admin/:path*",
+    "/forgot-password/:path*",
+    "/verify-email/:path*",
+    "/dashboard/:path*",
+    "/bookings/:path*",
+    "/calendar/:path*",
+    "/payments/:path*",
+    "/services/pilates/:path*",
+    "/settings/:path*",
     "/staff/:path*",
-    "/user/:path*",
-    "/customer/:path*",
-    "/guest/:path*",
-    "/profile/:path*",
-    "/account/:path*",
+    "/users/:path*",
+    "/wallet/:path*",
   ],
 };
