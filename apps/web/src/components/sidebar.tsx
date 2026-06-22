@@ -6,7 +6,9 @@ import {
   CalendarDays,
   ChevronDown,
   CreditCard,
+  Dumbbell,
   Gauge,
+  House,
   Menu,
   Settings,
   UserRound,
@@ -20,6 +22,8 @@ type IconName =
   | "bookings"
   | "calendar"
   | "dashboard"
+  | "classes"
+  | "home"
   | "payments"
   | "services"
   | "settings"
@@ -41,6 +45,8 @@ const MOBILE_SIDEBAR_EVENT = "lafam:open-mobile-sidebar";
 
 const icons: Record<IconName, LucideIcon> = {
   dashboard: Gauge,
+  classes: Dumbbell,
+  home: House,
   bookings: CalendarDays,
   calendar: CalendarDays,
   services: ListChecks,
@@ -59,6 +65,15 @@ const primaryItems: NavItem[] = [
 const managementItems: NavItem[] = [
   { href: "/admin/payments", icon: "payments", label: "Payments" },
   { href: "/admin/settings", icon: "settings", label: "Settings" },
+];
+
+const userItems: NavItem[] = [
+  { href: "/user", icon: "home", label: "Home" },
+  { href: "/user/classes", icon: "classes", label: "Classes" },
+  { href: "/user/bookings", icon: "bookings", label: "Booking" },
+  { href: "/user/wallet", icon: "wallet", label: "Wallet" },
+  { href: "/user/payments", icon: "payments", label: "Payment" },
+  { href: "/user/settings", icon: "settings", label: "Profile" },
 ];
 
 function Icon({ name }: { name: IconName }) {
@@ -180,12 +195,14 @@ function SidebarContent({
   isMobile = false,
   onClose,
   onToggleCollapse,
+  variant,
 }: {
   activeItem: string;
   collapsed: boolean;
   isMobile?: boolean;
   onClose?: () => void;
   onToggleCollapse?: () => void;
+  variant: "admin" | "user";
 }) {
   return (
     <>
@@ -218,59 +235,81 @@ function SidebarContent({
       </div>
 
       <nav className="mt-8 grid" aria-label="Main navigation">
-        {primaryItems.map((item) => (
-          <NavigationLink
-            key={item.label}
-            active={item.label === activeItem}
-            collapsed={collapsed}
-            onNavigate={onClose}
-            {...item}
-          />
-        ))}
+        {variant === "user"
+          ? userItems.map((item) => (
+              <NavigationLink
+                key={item.label}
+                active={item.label === activeItem}
+                collapsed={collapsed}
+                onNavigate={onClose}
+                {...item}
+              />
+            ))
+          : null}
 
-        <NavigationGroup
-          activeItem={activeItem}
-          collapsed={collapsed}
-          icon="services"
-          label="Services"
-          onNavigate={onClose}
-        >
-          {[{ href: "/admin/services/pilates", label: "Pilates" }]}
-        </NavigationGroup>
+        {variant === "admin" ? (
+          <>
+            {primaryItems.map((item) => (
+              <NavigationLink
+                key={item.label}
+                active={item.label === activeItem}
+                collapsed={collapsed}
+                onNavigate={onClose}
+                {...item}
+              />
+            ))}
 
-        <NavigationLink
-          active={activeItem === "Staff"}
-          collapsed={collapsed}
-          href="/admin/staff"
-          icon="staff"
-          label="Staff"
-          onNavigate={onClose}
-        />
+            <NavigationGroup
+              activeItem={activeItem}
+              collapsed={collapsed}
+              icon="services"
+              label="Services"
+              onNavigate={onClose}
+            >
+              {[{ href: "/admin/services/pilates", label: "Pilates" }]}
+            </NavigationGroup>
 
-        <NavigationLink
-          active={activeItem === "Wallet"}
-          collapsed={collapsed}
-          href="/admin/wallet"
-          icon="wallet"
-          label="Wallet"
-          onNavigate={onClose}
-        />
+            <NavigationLink
+              active={activeItem === "Staff"}
+              collapsed={collapsed}
+              href="/admin/staff"
+              icon="staff"
+              label="Staff"
+              onNavigate={onClose}
+            />
 
-        {managementItems.map((item) => (
-          <NavigationLink
-            key={item.label}
-            active={item.label === activeItem}
-            collapsed={collapsed}
-            onNavigate={onClose}
-            {...item}
-          />
-        ))}
+            <NavigationLink
+              active={activeItem === "Wallet"}
+              collapsed={collapsed}
+              href="/admin/wallet"
+              icon="wallet"
+              label="Wallet"
+              onNavigate={onClose}
+            />
+
+            {managementItems.map((item) => (
+              <NavigationLink
+                key={item.label}
+                active={item.label === activeItem}
+                collapsed={collapsed}
+                onNavigate={onClose}
+                {...item}
+              />
+            ))}
+          </>
+        ) : null}
       </nav>
     </>
   );
 }
 
-export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
+export function Sidebar({
+  activeItem = "Dashboard",
+  variant = "admin",
+}: {
+  activeItem?: string;
+  variant?: "admin" | "user";
+}) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -309,6 +348,7 @@ export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
           collapsed={false}
           isMobile
           onClose={() => setMobileOpen(false)}
+          variant={variant}
         />
       </aside>
 
@@ -320,6 +360,7 @@ export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
           activeItem={activeItem}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((value) => !value)}
+          variant={variant}
         />
       </aside>
 

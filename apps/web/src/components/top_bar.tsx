@@ -25,7 +25,7 @@ export function TopBar({ title }: TopBarProps) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
-  const profileHref = isAdmin ? "/admin/settings" : "/admin/settings";
+  const profileHref = isAdmin ? "/admin/settings" : "/user/settings";
   const accountName = user?.full_name ?? user?.email ?? "Account";
 
   useEffect(() => {
