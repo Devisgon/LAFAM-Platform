@@ -2,30 +2,30 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  adminWalletsClient,
-  type AdminWalletFilters,
-  type AdminWalletTransactionFilters,
-  type WalletAccountSummary,
-  type WalletLedgerEntrySummary,
-} from "@/lib/admin-wallets";
+  adminPaymentsClient,
+  type AdminPaymentFilters,
+  type AdminPaymentTransactionFilters,
+  type PaymentSummary,
+  type PaymentTransactionSummary,
+} from "@/lib/admin/payment";
 
 function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "The wallet request failed.";
+  return error instanceof Error ? error.message : "The payment request failed.";
 }
 
-export function useAdminWallets(filters: AdminWalletFilters) {
-  const [wallets, setWallets] = useState<WalletAccountSummary[]>([]);
+export function useAdminPayments(filters: AdminPaymentFilters) {
+  const [payments, setPayments] = useState<PaymentSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadWallets = useCallback(async () => {
+  const loadPayments = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const result = await adminWalletsClient.list(filters);
-      setWallets(result.items);
+      const result = await adminPaymentsClient.list(filters);
+      setPayments(result.items);
       setTotal(result.total);
       return result;
     } catch (requestError: unknown) {
@@ -38,35 +38,35 @@ export function useAdminWallets(filters: AdminWalletFilters) {
 
   useEffect(() => {
     const load = window.setTimeout(() => {
-      void loadWallets().catch(() => undefined);
+      void loadPayments().catch(() => undefined);
     }, 200);
 
     return () => window.clearTimeout(load);
-  }, [loadWallets]);
+  }, [loadPayments]);
 
   return {
     error,
     isLoading,
-    loadWallets,
+    loadPayments,
+    payments,
     total,
-    wallets,
   };
 }
 
-export function useAdminWalletTransactions(
-  userId: string,
-  filters: AdminWalletTransactionFilters,
+export function useAdminPaymentTransactions(
+  paymentId: string,
+  filters: AdminPaymentTransactionFilters,
   enabled = true,
 ) {
-  const [transactions, setTransactions] = useState<WalletLedgerEntrySummary[]>(
-    [],
-  );
+  const [transactions, setTransactions] = useState<
+    PaymentTransactionSummary[]
+  >([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
 
   const loadTransactions = useCallback(async () => {
-    if (!enabled || !userId) {
+    if (!enabled || !paymentId) {
       setTransactions([]);
       setTotal(0);
       setIsLoading(false);
@@ -83,8 +83,8 @@ export function useAdminWalletTransactions(
     setError(null);
 
     try {
-      const result = await adminWalletsClient.listTransactionsByUserId(
-        userId,
+      const result = await adminPaymentsClient.listTransactions(
+        paymentId,
         filters,
       );
       setTransactions(result.items);
@@ -96,7 +96,7 @@ export function useAdminWalletTransactions(
     } finally {
       setIsLoading(false);
     }
-  }, [enabled, filters, userId]);
+  }, [enabled, filters, paymentId]);
 
   useEffect(() => {
     const load = window.setTimeout(() => {

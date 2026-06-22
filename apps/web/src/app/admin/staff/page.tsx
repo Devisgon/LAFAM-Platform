@@ -1,5 +1,5 @@
 import { Sidebar } from "@/components/sidebar";
-import { StaffDirectory } from "@/components/staff_directory";
+import { StaffDirectory } from "@/components/admin_components/staff_directory";
 import { TopBar } from "@/components/top_bar";
 import { PageHeader } from "@/components/page_header";
 

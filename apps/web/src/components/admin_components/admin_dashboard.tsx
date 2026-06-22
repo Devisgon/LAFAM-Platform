@@ -2,14 +2,14 @@
 import { RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
-import { useAdminAnalyticsDashboard } from "@/hooks/useAdminAnalyticsDashboard";
+import { useAdminAnalyticsDashboard } from "@/hooks/admin/useAdminAnalyticsDashboard";
 import type {
   AnalyticsBookingListItem,
   AnalyticsDashboard,
   AnalyticsPaymentSummary,
   AnalyticsRevenueWeekPoint,
   AnalyticsTopServiceItem,
-} from "@/lib/admin-analytics";
+} from "@/lib/admin/admin-analytics";
 import { Avatar } from "@/components/reuseable_ui_components/avatar";
 import { Badge } from "@/components/reuseable_ui_components/badge";
 import { Card } from "@/components/reuseable_ui_components/cards";

@@ -7,7 +7,7 @@ import {
   type AdminBookingFilters,
   type AdminPrivateBookingFilters,
   type PrivateTrainerBooking,
-} from "@/lib/admin-bookings";
+} from "@/lib/admin/admin-bookings";
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The bookings request failed.";

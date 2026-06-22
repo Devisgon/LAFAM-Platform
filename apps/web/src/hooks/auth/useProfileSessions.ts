@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/hooks/auth/useAuth";
 import {
   type ActiveSession,
   type ChangePasswordPayload,
   profileSessionsClient,
   type UpdateProfilePayload,
-} from "@/lib/profile-sessions";
+} from "@/lib/auth/profile-sessions";
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error

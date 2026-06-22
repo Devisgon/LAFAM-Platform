@@ -15,13 +15,13 @@ import {
   UserCheck,
   UserX,
 } from "lucide-react";
-import { Avatar } from "./reuseable_ui_components/avatar";
-import { Badge } from "./reuseable_ui_components/badge";
-import { ConfirmationCard } from "./reuseable_ui_components/confirmation_card";
-import { DataTable } from "./reuseable_ui_components/data_table";
-import { LoadingState } from "./reuseable_ui_components/loading_state";
-import { Toast } from "./reuseable_ui_components/toast";
-import { useStaff } from "@/hooks/useStaff";
+import { Avatar } from "@/components/reuseable_ui_components/avatar";
+import { Badge } from "@/components/reuseable_ui_components/badge";
+import { ConfirmationCard } from "@/components/reuseable_ui_components/confirmation_card";
+import { DataTable } from "@/components/reuseable_ui_components/data_table";
+import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
+import { Toast } from "@/components/reuseable_ui_components/toast";
+import { useStaff } from "@/hooks/admin/useStaff";
 import {
   type CreateStaffPayload,
   type StaffDayOfWeek,
@@ -29,9 +29,9 @@ import {
   type StaffStatus,
   type UpdateStaffAvailabilityPayload,
   type UpdateStaffPayload,
-} from "@/lib/staff";
+} from "@/lib/admin/staff";
 
-export type { StaffMember } from "@/lib/staff";
+export type { StaffMember } from "@/lib/admin/staff";
 
 type ResultToast = {
   message: string;

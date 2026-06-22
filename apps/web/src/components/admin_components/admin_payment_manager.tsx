@@ -9,12 +9,12 @@ import {
 import {
   useAdminPayments,
   useAdminPaymentTransactions,
-} from "@/hooks/useAdminPayments";
+} from "@/hooks/admin/useAdminPayments";
 import {
   useAdminBookings,
   useAdminPrivateBookings,
-} from "@/hooks/useAdminBookings";
-import { useAdminUsers } from "@/hooks/useAdminUsers";
+} from "@/hooks/admin/useAdminBookings";
+import { useAdminUsers } from "@/hooks/admin/useAdminUsers";
 import {
   adminPaymentsClient,
   type AdminPaymentFilters,
@@ -25,14 +25,14 @@ import {
   type PaymentSummary,
   type PaymentTransactionStatus,
   type PaymentTransactionType,
-} from "@/lib/payment";
+} from "@/lib/admin/payment";
 import {
   type AdminBooking,
   type AdminBookingFilters,
   type AdminPrivateBookingFilters,
   type PrivateTrainerBooking,
-} from "@/lib/admin-bookings";
-import { type AdminUser, type AdminUserFilters } from "@/lib/admin-users";
+} from "@/lib/admin/admin-bookings";
+import { type AdminUser, type AdminUserFilters } from "@/lib/admin/admin-users";
 import { Badge } from "@/components/reuseable_ui_components/badge";
 import { DataTable } from "@/components/reuseable_ui_components/data_table";
 import { LoadingState } from "@/components/reuseable_ui_components/loading_state";

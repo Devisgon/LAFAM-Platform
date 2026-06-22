@@ -1,4 +1,4 @@
-import { AdminDashboard } from "@/components/admin-dashboard/admin_dashboard";
+import { AdminDashboard } from "@/components/admin_components/admin_dashboard";
 import { PageHeader } from "@/components/page_header";
 import { Sidebar } from "@/components/sidebar";
 import { TopBar } from "@/components/top_bar";

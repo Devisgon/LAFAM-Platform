@@ -1,4 +1,4 @@
-import { type ApiResponse, authFetch } from "@/lib/auth";
+import { type ApiResponse, authFetch } from "@/lib/auth/auth";
 
 export type PilatesClassLevel =
   | "beginner"

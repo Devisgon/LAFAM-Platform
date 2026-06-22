@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { ChevronDown, RotateCcw, X } from "lucide-react";
-import { useAdminBookingCalendar } from "@/hooks/useAdminBookingCalendar";
-import { usePilates } from "@/hooks/usePilates";
+import { useAdminBookingCalendar } from "@/hooks/admin/useAdminBookingCalendar";
+import { usePilates } from "@/hooks/admin/usePilates";
 import {
   type AdminBookingCalendarEvent,
   type AdminBookingCalendarFilters,
-} from "@/lib/admin-bookings";
+} from "@/lib/admin/admin-bookings";
 import { Badge } from "@/components/reuseable_ui_components/badge";
 import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
 import { PageHeader } from "@/components/page_header";

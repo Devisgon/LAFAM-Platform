@@ -4,7 +4,7 @@ import {
   type AuthUser,
   authFetch,
   clearAuthCookies,
-} from "@/lib/auth";
+} from "@/lib/auth/auth";
 
 export type ActiveSession = {
   id: string;

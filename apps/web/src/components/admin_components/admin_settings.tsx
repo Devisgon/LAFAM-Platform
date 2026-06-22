@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AdminUserManager } from "./admin_user_manager";
-import { ProfileSettings } from "./profile_settings";
+import { ProfileSettings } from "@/components/profile_settings";
 
 type SettingsView = "profile" | "users" | "history";
 

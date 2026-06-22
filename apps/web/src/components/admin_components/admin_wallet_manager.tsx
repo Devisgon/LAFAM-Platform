@@ -7,11 +7,11 @@ import {
   RotateCcw,
   Search,
 } from "lucide-react";
-import { useAdminUsers } from "@/hooks/useAdminUsers";
+import { useAdminUsers } from "@/hooks/admin/useAdminUsers";
 import {
   useAdminWallets,
   useAdminWalletTransactions,
-} from "@/hooks/useAdminWallets";
+} from "@/hooks/admin/useAdminWallets";
 import {
   adminWalletsClient,
   type AdminWalletAdjustmentEntryType,
@@ -23,8 +23,8 @@ import {
   type WalletAccountSummary,
   type WalletLedgerEntryStatus,
   type WalletLedgerEntrySummary,
-} from "@/lib/admin-wallets";
-import { type AdminUser, type AdminUserFilters } from "@/lib/admin-users";
+} from "@/lib/admin/admin-wallets";
+import { type AdminUser, type AdminUserFilters } from "@/lib/admin/admin-users";
 import { Badge } from "@/components/reuseable_ui_components/badge";
 import { DataTable } from "@/components/reuseable_ui_components/data_table";
 import { LoadingState } from "@/components/reuseable_ui_components/loading_state";

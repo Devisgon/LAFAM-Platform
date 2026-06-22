@@ -9,8 +9,8 @@ import {
   type PilatesSchedule,
   type UpdatePilatesClassPayload,
   type UpdatePilatesSchedulePayload,
-} from "@/lib/pilates";
-import { staffClient, type StaffMember } from "@/lib/staff";
+} from "@/lib/admin/pilates";
+import { staffClient, type StaffMember } from "@/lib/admin/staff";
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : "The Pilates request failed.";

@@ -34,7 +34,7 @@ import {
   type SignUpResult,
   type VerifyEmailResult,
   type VerifyResetOtpResult,
-} from "@/lib/auth";
+} from "@/lib/auth/auth";
 
 type AuthContextValue = {
   user: AuthUser | null;

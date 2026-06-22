@@ -1,4 +1,4 @@
-import { AdminSettings } from "@/components/admin_settings";
+import { AdminSettings } from "@/components/admin_components/admin_settings";
 import { Sidebar } from "@/components/sidebar";
 import { TopBar } from "@/components/top_bar";
 import { PageHeader } from "@/components/page_header";

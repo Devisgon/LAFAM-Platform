@@ -1,4 +1,4 @@
-import { AdminWalletManager } from "@/components/admin_wallet_manager";
+import { AdminWalletManager } from "@/components/admin_components/admin_wallet_manager";
 import { PageHeader } from "@/components/page_header";
 import { Sidebar } from "@/components/sidebar";
 import { TopBar } from "@/components/top_bar";

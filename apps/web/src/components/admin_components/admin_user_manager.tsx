@@ -7,18 +7,18 @@ import {
   RotateCcw,
   Trash2,
 } from "lucide-react";
-import { useAdminUsers } from "@/hooks/useAdminUsers";
+import { useAdminUsers } from "@/hooks/admin/useAdminUsers";
 import {
   type AdminUser,
   type AdminUserFilters,
   type AdminUserRole,
   type AdminUserStatus,
-} from "@/lib/admin-users";
-import { Badge } from "./reuseable_ui_components/badge";
-import { ConfirmationCard } from "./reuseable_ui_components/confirmation_card";
-import { DataTable } from "./reuseable_ui_components/data_table";
-import { LoadingState } from "./reuseable_ui_components/loading_state";
-import { Toast } from "./reuseable_ui_components/toast";
+} from "@/lib/admin/admin-users";
+import { Badge } from "@/components/reuseable_ui_components/badge";
+import { ConfirmationCard } from "@/components/reuseable_ui_components/confirmation_card";
+import { DataTable } from "@/components/reuseable_ui_components/data_table";
+import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
+import { Toast } from "@/components/reuseable_ui_components/toast";
 
 type Confirmation = {
   action: "deactivate" | "reactivate" | "delete";

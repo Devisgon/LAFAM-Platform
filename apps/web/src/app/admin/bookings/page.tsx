@@ -11,10 +11,10 @@ import { ChevronDown, RotateCcw } from "lucide-react";
 import {
   useAdminBookings,
   useAdminPrivateBookings,
-} from "@/hooks/useAdminBookings";
-import { useAdminUsers } from "@/hooks/useAdminUsers";
-import { usePilates } from "@/hooks/usePilates";
-import { useStaff } from "@/hooks/useStaff";
+} from "@/hooks/admin/useAdminBookings";
+import { useAdminUsers } from "@/hooks/admin/useAdminUsers";
+import { usePilates } from "@/hooks/admin/usePilates";
+import { useStaff } from "@/hooks/admin/useStaff";
 import {
   adminBookingsClient,
   type AdminBooking,
@@ -27,8 +27,8 @@ import {
   type CreatePrivateTrainerBookingPayload,
   type PrivateTrainerBooking,
   type PrivateTrainerBookingDetail,
-} from "@/lib/admin-bookings";
-import { type AdminUserFilters } from "@/lib/admin-users";
+} from "@/lib/admin/admin-bookings";
+import { type AdminUserFilters } from "@/lib/admin/admin-users";
 import { Badge } from "@/components/reuseable_ui_components/badge";
 import { DataTable } from "@/components/reuseable_ui_components/data_table";
 import { LoadingState } from "@/components/reuseable_ui_components/loading_state";

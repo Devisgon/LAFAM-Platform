@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
-import { useAuth } from "@/hooks/useAuth";
-import { useProfileSessions } from "@/hooks/useProfileSessions";
-import type { ActiveSession } from "@/lib/profile-sessions";
+import { useAuth } from "@/hooks/auth/useAuth";
+import { useProfileSessions } from "@/hooks/auth/useProfileSessions";
+import type { ActiveSession } from "@/lib/auth/profile-sessions";
 import { Avatar } from "./reuseable_ui_components/avatar";
 import { Badge } from "./reuseable_ui_components/badge";
 import { Button } from "./reuseable_ui_components/button";

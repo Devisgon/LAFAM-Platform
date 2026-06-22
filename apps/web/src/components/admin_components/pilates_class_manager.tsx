@@ -7,16 +7,16 @@ import {
   useEffect,
   useState,
 } from "react";
-import { usePilates } from "@/hooks/usePilates";
+import { usePilates } from "@/hooks/admin/usePilates";
 import {
   type CreatePilatesClassPayload,
   type PilatesClassDefinition,
   type PilatesClassLevel,
   type PilatesClassStatus,
-} from "@/lib/pilates";
-import { Badge } from "./reuseable_ui_components/badge";
-import { LoadingState } from "./reuseable_ui_components/loading_state";
-import { Toast } from "./reuseable_ui_components/toast";
+} from "@/lib/admin/pilates";
+import { Badge } from "@/components/reuseable_ui_components/badge";
+import { LoadingState } from "@/components/reuseable_ui_components/loading_state";
+import { Toast } from "@/components/reuseable_ui_components/toast";
 
 const fieldClass =
   "min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-3 py-2 text-sm text-txt-primary outline-none focus:border-primary disabled:opacity-60";

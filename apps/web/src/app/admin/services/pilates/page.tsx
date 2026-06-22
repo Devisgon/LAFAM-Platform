@@ -1,4 +1,4 @@
-import { PilatesClassManager } from "@/components/pilates_class_manager";
+import { PilatesClassManager } from "@/components/admin_components/pilates_class_manager";
 import { Sidebar } from "@/components/sidebar";
 import { TopBar } from "@/components/top_bar";
 import { PageHeader } from "@/components/page_header";

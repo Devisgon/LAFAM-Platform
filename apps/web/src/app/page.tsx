@@ -5,11 +5,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, UserRound } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/hooks/auth/useAuth";
 import {
   isEmailVerificationRequiredError,
   resolvePostLoginRedirect,
-} from "@/lib/auth";
+} from "@/lib/auth/auth";
 
 export default function LoginScreen() {
   return (
@@ -210,7 +210,7 @@ function LoginForm() {
             <p className="pt-2 text-center text-[15px] text-gray-500">
               Don&apos;t have an account?{" "}
               <Link
-                href="/signup"
+                href="/auth/signup"
                 className="font-semibold text-[#d8abab] transition hover:text-black"
               >
                 Sign Up

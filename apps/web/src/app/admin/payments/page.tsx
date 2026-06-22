@@ -1,4 +1,4 @@
-import { AdminPaymentManager } from "@/components/admin_payment_manager";
+import { AdminPaymentManager } from "@/components/admin_components/admin_payment_manager";
 import { PageHeader } from "@/components/page_header";
 import { Sidebar } from "@/components/sidebar";
 import { TopBar } from "@/components/top_bar";

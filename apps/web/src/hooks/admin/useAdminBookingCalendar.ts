@@ -6,7 +6,7 @@ import {
   type AdminBookingCalendarEvent,
   type AdminBookingCalendarFilters,
   type CreatePrivateTrainerBookingPayload,
-} from "@/lib/admin-bookings";
+} from "@/lib/admin/admin-bookings";
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error

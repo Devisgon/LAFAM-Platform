@@ -6,7 +6,7 @@ import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Mail } from "lucide-react";
 import { PasswordResetError } from "@/components/password_reset_shell";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/hooks/auth/useAuth";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();

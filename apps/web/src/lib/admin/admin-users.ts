@@ -1,4 +1,4 @@
-import { type ApiResponse, authFetch, type AuthRole } from "@/lib/auth";
+import { type ApiResponse, authFetch, type AuthRole } from "@/lib/auth/auth";
 
 export type AdminUserStatus =
   | "guest_active"

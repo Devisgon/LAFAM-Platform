@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, type FormEvent, useState } from "react";
 import { ArrowLeft, Mail, ShieldCheck } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/hooks/auth/useAuth";
 import {
   cachePendingVerificationEmail,
   getCachedVerificationEmail,
-} from "@/lib/auth";
+} from "@/lib/auth/auth";
 
 export default function VerifyEmailPage() {
   return (
