@@ -1,5 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+import {
+  LEGACY_AUTH_SESSION_MAX_AGE_SECONDS,
+  resolveSessionCookieMaxAgeSeconds,
+} from "@/lib/auth/session-cookie";
+
 const ACCESS_TOKEN_COOKIE = "lafam_access_token";
 const REFRESH_TOKEN_COOKIE = "lafam_refresh_token";
 const ROLE_COOKIE = "lafam_role";
@@ -19,6 +24,7 @@ type ProxyRefreshApiData = {
   } | null;
   session?: {
     id?: string | null;
+    expires_at?: string | null;
   } | null;
 };
 
@@ -28,6 +34,7 @@ type ProxyRefreshSession = {
   expiresIn: number;
   role: string | null;
   sessionId: string | null;
+  sessionCookieMaxAgeSeconds: number;
 };
 
 type VerifiedProxySession = {
@@ -91,12 +98,21 @@ function extractRefreshSession(payload: unknown): ProxyRefreshSession | null {
     return null;
   }
 
+  const sessionCookieMaxAgeSeconds = resolveSessionCookieMaxAgeSeconds(
+    data.session?.expires_at,
+  );
+
+  if (!sessionCookieMaxAgeSeconds) {
+    return null;
+  }
+
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
     expiresIn: data.expires_in ?? 3600,
     role: data.user?.role ?? null,
     sessionId: data.session?.id ?? null,
+    sessionCookieMaxAgeSeconds,
   };
 }
 
@@ -144,14 +160,14 @@ function setSessionCookies(
   });
 
   response.cookies.set(REFRESH_TOKEN_COOKIE, session.refreshToken, {
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: session.sessionCookieMaxAgeSeconds,
     path: "/",
     sameSite: "lax",
     secure,
   });
 
   response.cookies.set(ROLE_COOKIE, role, {
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: session.sessionCookieMaxAgeSeconds,
     path: "/",
     sameSite: "lax",
     secure,
@@ -159,7 +175,7 @@ function setSessionCookies(
 
   if (session.sessionId) {
     response.cookies.set(SESSION_ID_COOKIE, session.sessionId, {
-      maxAge: 30 * 24 * 60 * 60,
+      maxAge: session.sessionCookieMaxAgeSeconds,
       path: "/",
       sameSite: "lax",
       secure,
@@ -173,7 +189,8 @@ function setRoleCookie(
   role: string,
 ): void {
   response.cookies.set(ROLE_COOKIE, role, {
-    maxAge: 30 * 24 * 60 * 60,
+    // This path has no refresh response, so it uses the temporary legacy window.
+    maxAge: LEGACY_AUTH_SESSION_MAX_AGE_SECONDS,
     path: "/",
     sameSite: "lax",
     secure: request.nextUrl.protocol === "https:",

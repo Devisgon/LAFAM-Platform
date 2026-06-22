@@ -36,9 +36,14 @@ export interface AuthGuestConfig {
   readonly cleanupEnabled: boolean;
 }
 
+export interface AuthSessionConfig {
+  readonly ttlHours: number;
+}
+
 export interface AuthConfig {
   readonly token: AuthTokenConfig;
   readonly avatar: AuthAvatarConfig;
+  readonly session: AuthSessionConfig;
   readonly guest: AuthGuestConfig;
 }
 
@@ -65,6 +70,9 @@ export function createAuthConfig(
       maxSizeBytes: auth.avatarMaxSizeBytes,
       signedUrlTtlSeconds: auth.avatarSignedUrlTtlSeconds,
       allowedMimeTypes: AUTH_AVATAR_ALLOWED_MIME_TYPES,
+    },
+    session: {
+      ttlHours: auth.authenticatedSessionTtlHours,
     },
     guest: {
       sessionTtlHours: auth.guestSessionTtlHours,
