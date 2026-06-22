@@ -227,7 +227,7 @@ export class AuthSessionRepository {
 
   async updateTokenHashes(
     input: UpdateAuthSessionTokenHashesInput,
-  ): Promise<AuthSessionInternal> {
+  ): Promise<AuthSessionInternal | null> {
     const updatePayload: AuthSessionUpdate = {
       access_token_hash: input.accessTokenHash,
       refresh_token_hash: input.refreshTokenHash,
@@ -239,7 +239,9 @@ export class AuthSessionRepository {
       .from('auth_sessions')
       .update(updatePayload)
       .eq('id', input.sessionId)
+      .eq('refresh_token_hash', input.previousRefreshTokenHash)
       .is('revoked_at', null)
+      .is('converted_at', null)
       .select('*')
       .maybeSingle();
 
@@ -247,11 +249,7 @@ export class AuthSessionRepository {
       throw mapDatabaseError(error);
     }
 
-    return mapAuthSessionRowToInternal(
-      assertAuthSessionRow(data, {
-        session_id: input.sessionId,
-      }),
-    );
+    return data ? mapAuthSessionRowToInternal(data) : null;
   }
 
   async updateLastSeen(

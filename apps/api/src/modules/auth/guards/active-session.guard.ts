@@ -177,7 +177,7 @@ export class ActiveSessionGuard implements CanActivate {
   private async assertSessionIsNotExpired(
     auth: AuthInternalContext,
   ): Promise<void> {
-    if (isIsoDateExpired(auth.session.expiresAt)) {
+    if (isRequiredIsoDateExpired(auth.session.expiresAt)) {
       await this.expireGuestSessionIfNeeded(auth);
 
       if (isGuestAuthContext(auth)) {

@@ -1,3 +1,5 @@
+import { resolveSessionCookieMaxAgeSeconds } from "@/lib/auth/session-cookie";
+
 export type AuthRole =
   | "super_admin"
   | "admin"
@@ -159,7 +161,6 @@ const PASSWORD_RESET_EMAIL_KEY = "lafam_password_reset_email";
 const PASSWORD_RESET_TOKEN_KEY = "lafam_password_reset_token";
 const AUTH_DISPLAY_USER_KEY = "lafam_current_user";
 const AUTH_DISPLAY_AVATAR_URL_KEY = "lafam_avatar_url";
-const REFRESH_TOKEN_MAX_AGE_SECONDS = 24 * 60 * 60;
 export const AUTH_REFRESH_INTERVAL_MS = 50 * 60 * 1000;
 
 let refreshSessionRequest: Promise<boolean> | null = null;
@@ -219,7 +220,16 @@ function setAuthCookies(data: {
   expires_in: number | null;
   user?: AuthUser;
   session?: AuthSession;
-}): void {
+}): boolean {
+  const sessionCookieMaxAgeSeconds = resolveSessionCookieMaxAgeSeconds(
+    data.session?.expires_at,
+  );
+
+  if (!sessionCookieMaxAgeSeconds) {
+    clearAuthCookies();
+    return false;
+  }
+
   setCookie(
     AUTH_COOKIE_NAMES.accessToken,
     data.access_token,
@@ -230,7 +240,7 @@ function setAuthCookies(data: {
     setCookie(
       AUTH_COOKIE_NAMES.refreshToken,
       data.refresh_token,
-      REFRESH_TOKEN_MAX_AGE_SECONDS,
+      sessionCookieMaxAgeSeconds,
     );
   }
 
@@ -238,7 +248,7 @@ function setAuthCookies(data: {
     setCookie(
       AUTH_COOKIE_NAMES.role,
       data.user.role,
-      REFRESH_TOKEN_MAX_AGE_SECONDS,
+      sessionCookieMaxAgeSeconds,
     );
   }
 
@@ -246,9 +256,11 @@ function setAuthCookies(data: {
     setCookie(
       AUTH_COOKIE_NAMES.sessionId,
       data.session.id,
-      REFRESH_TOKEN_MAX_AGE_SECONDS,
+      sessionCookieMaxAgeSeconds,
     );
   }
+
+  return true;
 }
 
 export function clearAuthCookies(): void {
@@ -605,7 +617,7 @@ async function runRefreshSession(): Promise<boolean> {
     return false;
   }
 
-  setAuthCookies({
+  const cookiesSet = setAuthCookies({
     access_token: data.access_token,
     refresh_token: data.refresh_token,
     expires_in: data.expires_in ?? 3600,
@@ -613,7 +625,7 @@ async function runRefreshSession(): Promise<boolean> {
     session: data.session,
   });
 
-  return true;
+  return cookiesSet;
 }
 
 export function refreshAuthSession(): Promise<boolean> {
@@ -863,13 +875,21 @@ export const authClient = {
       throw error;
     }
 
-    setAuthCookies({
+    const cookiesSet = setAuthCookies({
       access_token: response.data.access_token,
       refresh_token: response.data.refresh_token,
       expires_in: response.data.expires_in ?? 3600,
       user: response.data.user,
       session: response.data.session,
     });
+
+    if (!cookiesSet) {
+      throw new AuthClientError(
+        "Unable to establish a valid authentication session.",
+        502,
+        null,
+      );
+    }
 
     return {
       authenticated: response.data.authenticated,
