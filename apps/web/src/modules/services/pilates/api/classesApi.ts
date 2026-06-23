@@ -1,5 +1,7 @@
 import type { ApiResponse } from "@/modules/auth";
 import { apiClient } from "@/lib/api/client";
+import { ENDPOINTS } from "@/lib/api/endpoints";
+
 export type PublicClassLevel =
   | "beginner"
   | "intermediate"
@@ -59,14 +61,14 @@ function listQuery(filters: PublicClassFilters): string {
 export const publicClassesClient = {
   list(filters: PublicClassFilters = {}, signal?: AbortSignal) {
     return readResponse<PublicClassList>(
-      `/pilates/classes?${listQuery(filters)}`,
+      `${ENDPOINTS.PUBLIC_PILATES.CLASSES}?${listQuery(filters)}`,
       signal,
     );
   },
 
   async get(classId: string, signal?: AbortSignal) {
     const result = await readResponse<PublicClassDetail>(
-      `/pilates/classes/${encodeURIComponent(classId)}`,
+      ENDPOINTS.PUBLIC_PILATES.CLASS(classId),
       signal,
     );
     return result.class;

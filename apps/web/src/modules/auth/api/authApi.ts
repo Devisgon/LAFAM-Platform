@@ -506,13 +506,13 @@ function canRoleAccessPath(
   if (!role) return false;
   if (
     isRouteMatch(path, "/calendar") ||
-    isRouteMatch(path, "/payments") ||
     isRouteMatch(path, "/staff") ||
     isRouteMatch(path, "/users")
   ) return isAdmin;
   return (
     isRouteMatch(path, "/dashboard") ||
     isRouteMatch(path, "/bookings") ||
+    isRouteMatch(path, "/payments") ||
     isRouteMatch(path, "/services/pilates") ||
     isRouteMatch(path, "/settings") ||
     isRouteMatch(path, "/wallet")

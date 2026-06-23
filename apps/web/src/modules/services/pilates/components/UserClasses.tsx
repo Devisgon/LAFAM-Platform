@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { ClassCard } from "@/components/data-display/ClassCard";
 import { LoadingState } from "@/components/data-display/LoadingState";
-import { useClasses } from "@/modules/bookings";
+import { useClasses } from "../hooks/useClasses";
 import type {
   PublicClassFilters,
   PublicClassList,
-} from "@/modules/bookings";
+} from "../api/classesApi";
 
 const fieldClass =
   "min-h-11 w-full rounded-lg border border-background-secondary bg-card-bg-secondary px-3 text-sm text-txt-primary outline-none focus:border-primary";

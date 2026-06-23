@@ -53,7 +53,7 @@ const protectedRoutes = [
   "/users",
   "/wallet",
 ];
-const adminOnlyRoutes = ["/calendar", "/payments", "/staff", "/users"];
+const adminOnlyRoutes = ["/calendar", "/staff", "/users"];
 const authRoutes = ["/login", "/signup", "/forgot-password", "/verify-email"];
 
 const authCookieNames = [

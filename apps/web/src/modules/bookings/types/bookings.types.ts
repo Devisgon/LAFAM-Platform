@@ -1,3 +1,14 @@
 export type { AdminBooking, AdminBookingFilters, AdminBookingStatus } from "../api/adminBookingsApi";
-export type { PublicClassFilters, PublicClassLevel, PublicClassList, PublicPilatesClass } from "../api/classesApi";
-
+export type {
+  UserBooking,
+  UserBookingDetail,
+  UserBookingFilters,
+  UserBookingListResult,
+  UserBookingPaymentStatus,
+  UserPrivateBooking,
+  UserPrivateBookingDetail,
+  UserPrivateBookingFilters,
+  UserPrivateBookingListResult,
+  UserPrivateBookingSortField,
+  UserBookingStatus,
+} from "../api/userBookingsApi";

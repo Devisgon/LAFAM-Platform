@@ -71,6 +71,7 @@ const userItems: NavItem[] = [
   { href: "/dashboard", icon: "home", label: "Home" },
   { href: "/services/pilates", icon: "classes", label: "Classes" },
   { href: "/bookings", icon: "bookings", label: "Booking" },
+  { href: "/payments", icon: "payments", label: "Payments" },
   { href: "/wallet", icon: "wallet", label: "Wallet" },
   { href: "/settings", icon: "settings", label: "Profile" },
 ];
