@@ -14,10 +14,11 @@
  * - Guards are exported because later business modules need protected route enforcement.
  */
 
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 
 import { LoggingModule } from '../../common/logging/logging.module';
 import { DatabaseModule } from '../../database/database.module';
+import { CustomersModule } from '../customers/customers.module';
 import { AuthAdminService } from './application/auth-admin.service';
 import { AuthContextService } from './application/auth-context.service';
 import { AuthProfileService } from './application/auth-profile.service';
@@ -45,7 +46,7 @@ import { PasswordResetRepository } from './repositories/password-reset.repositor
 import { SupabaseAuthRepository } from './repositories/supabase-auth.repository';
 
 @Module({
-  imports: [DatabaseModule, LoggingModule],
+  imports: [DatabaseModule, LoggingModule, forwardRef(() => CustomersModule)],
   controllers: [
     AuthPublicController,
     AuthGuestController,

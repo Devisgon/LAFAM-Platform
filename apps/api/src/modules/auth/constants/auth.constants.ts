@@ -81,6 +81,8 @@ export const AUTH_FIELD_LIMITS = {
   emailMaxLength: 254,
   phoneMaxLength: 32,
   fullNameMaxLength: 120,
+  civilIdMaxLength: 32,
+  civilIdNormalizedLength: 12,
   passwordMinLength: 8,
   passwordMaxLength: 128,
   otpMinLength: 4,
@@ -145,9 +147,13 @@ export const AUTH_AUDIT_EVENT_TYPES = [
   'PROFILE_UPDATED',
   'AVATAR_UPLOADED',
   'ACCOUNT_DELETED',
+  'USER_CREATED_BY_ADMIN',
   'USER_DEACTIVATED',
   'USER_REACTIVATED',
   'USER_HARD_DELETED',
+  'CUSTOMER_PROFILE_CREATED',
+  'CUSTOMER_PROFILE_UPDATED',
+  'CUSTOMER_PROFILE_DELETED',
   'AUTH_CONTEXT_RESOLVED',
   'GUEST_SESSION_CREATED',
   'GUEST_SESSION_ENDED',
@@ -190,12 +196,20 @@ export const AUTH_AUDIT_EVENT_AVATAR_UPLOADED =
   'AVATAR_UPLOADED' satisfies AuthAuditEventType;
 export const AUTH_AUDIT_EVENT_ACCOUNT_DELETED =
   'ACCOUNT_DELETED' satisfies AuthAuditEventType;
+export const AUTH_AUDIT_EVENT_USER_CREATED_BY_ADMIN =
+  'USER_CREATED_BY_ADMIN' satisfies AuthAuditEventType;
 export const AUTH_AUDIT_EVENT_USER_DEACTIVATED =
   'USER_DEACTIVATED' satisfies AuthAuditEventType;
 export const AUTH_AUDIT_EVENT_USER_REACTIVATED =
   'USER_REACTIVATED' satisfies AuthAuditEventType;
 export const AUTH_AUDIT_EVENT_USER_HARD_DELETED =
   'USER_HARD_DELETED' satisfies AuthAuditEventType;
+export const AUTH_AUDIT_EVENT_CUSTOMER_PROFILE_CREATED =
+  'CUSTOMER_PROFILE_CREATED' satisfies AuthAuditEventType;
+export const AUTH_AUDIT_EVENT_CUSTOMER_PROFILE_UPDATED =
+  'CUSTOMER_PROFILE_UPDATED' satisfies AuthAuditEventType;
+export const AUTH_AUDIT_EVENT_CUSTOMER_PROFILE_DELETED =
+  'CUSTOMER_PROFILE_DELETED' satisfies AuthAuditEventType;
 export const AUTH_AUDIT_EVENT_AUTH_CONTEXT_RESOLVED =
   'AUTH_CONTEXT_RESOLVED' satisfies AuthAuditEventType;
 export const AUTH_AUDIT_EVENT_GUEST_SESSION_CREATED =

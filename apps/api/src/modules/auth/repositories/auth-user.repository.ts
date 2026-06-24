@@ -60,6 +60,11 @@ export interface FindAppUserByEmailInput {
   readonly email: string;
 }
 
+export interface FindAppUserByPhoneInput {
+  readonly phone: string;
+  readonly excludeUserId?: string | null;
+}
+
 export interface ActivateAppUserByAuthUserIdInput {
   readonly authUserId: string;
   readonly email: string;
@@ -107,12 +112,37 @@ const MAX_LIST_USERS_LIMIT = 100;
 function isDatabaseError(value: unknown): value is {
   readonly code?: string;
   readonly message?: string;
+  readonly details?: string | null;
+  readonly hint?: string | null;
 } {
   return typeof value === 'object' && value !== null;
 }
 
+function databaseErrorText(error: {
+  readonly code?: string;
+  readonly message?: string;
+  readonly details?: string | null;
+  readonly hint?: string | null;
+}): string {
+  return [error.code, error.message, error.details, error.hint]
+    .filter((value): value is string => Boolean(value))
+    .join(' ')
+    .toLowerCase();
+}
+
 function mapDatabaseError(error: unknown): AppError {
   if (isDatabaseError(error) && error.code === POSTGRES_UNIQUE_VIOLATION_CODE) {
+    const errorText = databaseErrorText(error);
+
+    if (
+      errorText.includes('app_users_non_guest_active_phone_uidx') ||
+      errorText.includes('(phone)')
+    ) {
+      return AppError.customerPhoneAlreadyExists(undefined, {
+        field: 'phone',
+      });
+    }
+
     return AppError.emailAlreadyRegistered(
       'An account with this email already exists.',
     );
@@ -278,6 +308,31 @@ export class AuthUserRepository {
     return user;
   }
 
+  async findByPhone(
+    input: FindAppUserByPhoneInput,
+  ): Promise<AuthUserInternalProfile | null> {
+    let query = this.adminClient
+      .from('app_users')
+      .select('*')
+      .eq('phone', input.phone)
+      .eq('is_guest', false)
+      .neq('status', AUTH_USER_STATUS_DELETED)
+      .is('deleted_at', null)
+      .limit(1);
+
+    if (input.excludeUserId) {
+      query = query.neq('id', input.excludeUserId);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return data ? mapAppUserRowToInternalProfile(data) : null;
+  }
+
   async activateByAuthUserId(
     input: ActivateAppUserByAuthUserIdInput,
   ): Promise<AuthUserInternalProfile> {
@@ -423,7 +478,7 @@ export class AuthUserRepository {
   ): Promise<AuthUserInternalProfile> {
     const updatePayload: AppUserUpdate = {
       email: input.customer.email,
-      phone: input.customer.phone ?? null,
+      phone: input.customer.phone,
       full_name: input.customer.fullName,
       timezone: input.customer.timezone ?? null,
       role: AUTH_CUSTOMER_ROLE,

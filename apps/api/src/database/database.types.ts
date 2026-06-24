@@ -455,6 +455,65 @@ export interface Database {
         ];
       };
 
+      customer_profiles: {
+        Row: {
+          id: string;
+          app_user_id: string;
+          civil_id: string;
+          civil_id_normalized: string;
+          created_by_admin_id: string | null;
+          updated_by_admin_id: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          app_user_id: string;
+          civil_id: string;
+          civil_id_normalized: string;
+          created_by_admin_id?: string | null;
+          updated_by_admin_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          app_user_id?: string;
+          civil_id?: string;
+          civil_id_normalized?: string;
+          created_by_admin_id?: string | null;
+          updated_by_admin_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'customer_profiles_app_user_id_fkey';
+            columns: ['app_user_id'];
+            isOneToOne: true;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'customer_profiles_created_by_admin_id_fkey';
+            columns: ['created_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'customer_profiles_updated_by_admin_id_fkey';
+            columns: ['updated_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
       staff_profiles: {
         Row: {
           id: string;
@@ -2428,6 +2487,13 @@ export type AuthAuditEventInsert =
   Database['public']['Tables']['auth_audit_events']['Insert'];
 export type AuthAuditEventUpdate =
   Database['public']['Tables']['auth_audit_events']['Update'];
+
+export type CustomerProfileRow =
+  Database['public']['Tables']['customer_profiles']['Row'];
+export type CustomerProfileInsert =
+  Database['public']['Tables']['customer_profiles']['Insert'];
+export type CustomerProfileUpdate =
+  Database['public']['Tables']['customer_profiles']['Update'];
 
 export type StaffProfileRow =
   Database['public']['Tables']['staff_profiles']['Row'];

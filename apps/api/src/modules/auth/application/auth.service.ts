@@ -5,20 +5,23 @@
  * Role:
  * - Owns public Auth flows: sign-up, verify email, resend verification OTP, login, and refresh-token.
  * - Coordinates Supabase Auth provider calls with LAFAM-owned app_users/auth_sessions state.
+ * - Creates required customer profile identity during public customer sign-up.
  * - Keeps controllers thin and keeps provider/database details out of route handlers.
  *
  * Important:
  * - Public sign-up always creates customer users.
- * - Passwords, OTPs, access tokens, refresh tokens, and reset tokens must never be logged.
+ * - Public customer sign-up requires full name, email, phone, Civil ID, password, and password confirmation.
+ * - Passwords, OTPs, access tokens, refresh tokens, reset tokens, and Civil ID values must never be logged.
  * - Raw access/refresh tokens are returned only in login/refresh responses and stored only as hashes.
  * - LAFAM session state must be checked because provider JWTs can remain valid until expiry.
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 
 import { currentAuthConfig } from '../../../common/config';
 import { AppError } from '../../../common/errors/app-error';
 import type { DatabaseJsonObject } from '../../../database/database.types';
+import { CustomerRepository } from '../../customers/repositories/customer.repository';
 import {
   AUTH_ERROR_REASON_PASSWORD_CONFIRMATION_MISMATCH,
   AUTH_ERROR_REASON_PASSWORD_POLICY_FAILED,
@@ -78,6 +81,7 @@ import {
   createAuthSessionHashPair,
   hashAuthRefreshToken,
 } from '../utils/auth-token-hash.util';
+import { normalizeAuthCivilIdNormalized } from '../utils/auth-normalization.util';
 import {
   validateAuthPasswordAndConfirmation,
   getAuthPasswordPolicyFailureCodes,
@@ -181,6 +185,21 @@ function buildPasswordFailureDetails(
   };
 }
 
+function resolveRequiredCivilIdNormalized(civilId: string): string {
+  const civilIdNormalized = normalizeAuthCivilIdNormalized(civilId);
+
+  if (!civilIdNormalized) {
+    throw AppError.validationFailed(
+      'civil_id must contain exactly 12 digits and may include spaces or hyphens.',
+      {
+        field: 'civil_id',
+      },
+    );
+  }
+
+  return civilIdNormalized;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -188,50 +207,73 @@ export class AuthService {
     private readonly authUserRepository: AuthUserRepository,
     private readonly authSessionRepository: AuthSessionRepository,
     private readonly authAuditRepository: AuthAuditRepository,
+    @Optional()
+    private readonly customerRepository?: CustomerRepository,
   ) {}
 
   async signUp(
     dto: SignUpDto,
     request: AuthServiceRequestMetadata = EMPTY_REQUEST_METADATA,
   ): Promise<AuthSignUpResponse> {
+    const civilIdNormalized = resolveRequiredCivilIdNormalized(dto.civil_id);
+
     this.assertPasswordAllowed(dto.password, dto.confirm_password, {
       email: dto.email,
       fullName: dto.full_name,
     });
 
-    const existingUser = await this.authUserRepository.findByEmail({
+    await this.assertCustomerSignupIdentityAvailable({
       email: dto.email,
+      phone: dto.phone,
+      civilIdNormalized,
     });
-
-    if (existingUser) {
-      throw AppError.emailAlreadyRegistered(
-        'An account with this email already exists.',
-      );
-    }
 
     const providerResult = await this.supabaseAuthRepository.signUpWithPassword(
       {
         email: dto.email,
         password: dto.password,
         fullName: dto.full_name,
-        phone: dto.phone ?? null,
+        phone: dto.phone,
         timezone: dto.timezone ?? null,
       },
     );
 
-    const user = await this.authUserRepository.createAppUser({
-      authUserId: providerResult.user.id,
-      email: dto.email,
-      phone: dto.phone ?? null,
-      fullName: dto.full_name,
-      role: AUTH_CUSTOMER_ROLE,
-      status: AUTH_USER_STATUS_PENDING_EMAIL_VERIFICATION,
-      isGuest: false,
-      timezone: dto.timezone ?? null,
-      metadata: {
-        source: 'public_sign_up',
-      },
-    });
+    let user: AuthUserInternalProfile | null = null;
+
+    try {
+      user = await this.authUserRepository.createAppUser({
+        authUserId: providerResult.user.id,
+        email: dto.email,
+        phone: dto.phone,
+        fullName: dto.full_name,
+        role: AUTH_CUSTOMER_ROLE,
+        status: AUTH_USER_STATUS_PENDING_EMAIL_VERIFICATION,
+        isGuest: false,
+        timezone: dto.timezone ?? null,
+        metadata: {
+          source: 'public_sign_up',
+        },
+      });
+
+      await this.getCustomerRepository().createProfile({
+        appUserId: user.id,
+        civilId: dto.civil_id,
+        civilIdNormalized,
+        createdByAdminId: null,
+        updatedByAdminId: null,
+      });
+    } catch (error) {
+      await this.cleanupFailedPublicSignUp({
+        authUserId: providerResult.user.id,
+        appUserId: user?.id ?? null,
+      });
+
+      if (error instanceof AppError) {
+        throw error;
+      }
+
+      throw AppError.customerCreateFailed(error);
+    }
 
     await this.authAuditRepository.createEvent({
       actorUserId: user.id,
@@ -451,6 +493,44 @@ export class AuthService {
     };
   }
 
+  private async assertCustomerSignupIdentityAvailable(input: {
+    readonly email: string;
+    readonly phone: string;
+    readonly civilIdNormalized: string;
+  }): Promise<void> {
+    const existingUser = await this.authUserRepository.findByEmail({
+      email: input.email,
+    });
+
+    if (existingUser) {
+      throw AppError.emailAlreadyRegistered(
+        'An account with this email already exists.',
+      );
+    }
+
+    const existingPhoneUser = await this.authUserRepository.findByPhone({
+      phone: input.phone,
+    });
+
+    if (existingPhoneUser) {
+      throw AppError.customerPhoneAlreadyExists(undefined, {
+        field: 'phone',
+      });
+    }
+
+    const existingCivilIdProfile =
+      await this.getCustomerRepository().findByCivilIdNormalized({
+        civilIdNormalized: input.civilIdNormalized,
+        includeDeleted: true,
+      });
+
+    if (existingCivilIdProfile) {
+      throw AppError.customerCivilIdAlreadyExists(undefined, {
+        field: 'civil_id',
+      });
+    }
+  }
+
   private async createSessionForProviderSession(input: {
     readonly user: AuthUserInternalProfile;
     readonly providerSession: SupabaseAuthSession;
@@ -561,6 +641,43 @@ export class AuthService {
 
     if (!session.expiresAt || isIsoDateExpired(session.expiresAt, now)) {
       throw AppError.sessionExpired('The session has expired.');
+    }
+  }
+
+  private getCustomerRepository(): CustomerRepository {
+    if (!this.customerRepository) {
+      throw AppError.customerProfileCreationFailed(
+        new Error('CustomerRepository provider is not registered.'),
+      );
+    }
+
+    return this.customerRepository;
+  }
+
+  private async cleanupFailedPublicSignUp(input: {
+    readonly authUserId: string;
+    readonly appUserId: string | null;
+  }): Promise<void> {
+    const deletedAt = new Date().toISOString();
+
+    if (input.appUserId) {
+      try {
+        await this.authUserRepository.softDeleteById({
+          userId: input.appUserId,
+          deletedAt,
+        });
+      } catch (error) {
+        void error;
+      }
+    }
+
+    try {
+      await this.supabaseAuthRepository.deleteAuthUser({
+        authUserId: input.authUserId,
+        shouldSoftDelete: false,
+      });
+    } catch (error) {
+      void error;
     }
   }
 }

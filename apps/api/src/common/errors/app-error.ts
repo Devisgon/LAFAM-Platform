@@ -87,6 +87,21 @@ export type AppErrorCode =
   | 'STAFF_ALREADY_ACTIVE'
   | 'STAFF_ALREADY_DELETED'
   | 'STAFF_EMPTY_UPDATE'
+  | 'CUSTOMER_EMAIL_ALREADY_EXISTS'
+  | 'CUSTOMER_PHONE_ALREADY_EXISTS'
+  | 'CUSTOMER_CIVIL_ID_ALREADY_EXISTS'
+  | 'CUSTOMER_NOT_FOUND'
+  | 'CUSTOMER_LOOKUP_QUERY_REQUIRED'
+  | 'CUSTOMER_LOOKUP_CONFLICT'
+  | 'CUSTOMER_AUTH_USER_CREATION_FAILED'
+  | 'CUSTOMER_PROFILE_CREATION_FAILED'
+  | 'CUSTOMER_CREATE_FAILED'
+  | 'CUSTOMER_UPDATE_FAILED'
+  | 'CUSTOMER_DELETE_FAILED'
+  | 'CUSTOMER_ALREADY_DEACTIVATED'
+  | 'CUSTOMER_ALREADY_ACTIVE'
+  | 'CUSTOMER_ALREADY_DELETED'
+  | 'CUSTOMER_EMPTY_UPDATE'
   | 'PILATES_CLASS_NOT_FOUND'
   | 'PILATES_CLASS_ALREADY_DELETED'
   | 'PILATES_CLASS_EMPTY_UPDATE'
@@ -865,6 +880,163 @@ export class AppError extends Error {
     publicMessage = 'At least one staff field must be provided for update.',
   ): AppError {
     return AppError.createValidationError('STAFF_EMPTY_UPDATE', publicMessage);
+  }
+
+  static customerEmailAlreadyExists(
+    publicMessage = 'A customer account with this email already exists.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'CUSTOMER_EMAIL_ALREADY_EXISTS',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerPhoneAlreadyExists(
+    publicMessage = 'A customer account with this phone number already exists.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'CUSTOMER_PHONE_ALREADY_EXISTS',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerCivilIdAlreadyExists(
+    publicMessage = 'A customer account with this Civil ID already exists.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'CUSTOMER_CIVIL_ID_ALREADY_EXISTS',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerNotFound(
+    publicMessage = 'The requested customer was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'CUSTOMER_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerLookupQueryRequired(
+    publicMessage = 'Phone number or Civil ID is required for customer lookup.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'CUSTOMER_LOOKUP_QUERY_REQUIRED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerLookupConflict(
+    publicMessage = 'The submitted phone number and Civil ID do not match the same customer.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'CUSTOMER_LOOKUP_CONFLICT',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerAuthUserCreationFailed(cause?: unknown): AppError {
+    return AppError.createExternalProviderError(
+      'CUSTOMER_AUTH_USER_CREATION_FAILED',
+      'Customer login account creation failed. Please try again later.',
+      cause,
+    );
+  }
+
+  static customerProfileCreationFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'CUSTOMER_PROFILE_CREATION_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage:
+        'Customer profile creation failed. Please try again later.',
+      cause,
+    });
+  }
+
+  static customerCreateFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'CUSTOMER_CREATE_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage: 'Customer creation failed. Please try again later.',
+      cause,
+    });
+  }
+
+  static customerUpdateFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'CUSTOMER_UPDATE_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage: 'Customer update failed. Please try again later.',
+      cause,
+    });
+  }
+
+  static customerDeleteFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'CUSTOMER_DELETE_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage: 'Customer deletion failed. Please try again later.',
+      cause,
+    });
+  }
+
+  static customerAlreadyDeactivated(
+    publicMessage = 'This customer is already deactivated.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'CUSTOMER_ALREADY_DEACTIVATED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerAlreadyActive(
+    publicMessage = 'This customer is already active.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'CUSTOMER_ALREADY_ACTIVE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerAlreadyDeleted(
+    publicMessage = 'This customer is already deleted.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'CUSTOMER_ALREADY_DELETED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerEmptyUpdate(
+    publicMessage = 'At least one customer field must be provided for update.',
+  ): AppError {
+    return AppError.createValidationError(
+      'CUSTOMER_EMPTY_UPDATE',
+      publicMessage,
+    );
   }
 
   static pilatesClassNotFound(

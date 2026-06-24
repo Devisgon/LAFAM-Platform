@@ -4,7 +4,7 @@ info:
   version: 0.1.0
   description:
     'LAFAM backend API contract for the single-tenant Pilates and ladies salon booking platform. The contract exposes
-    Core, Auth, Staff, Pilates Classes, Schedules, Bookings, Payment, Wallet, KNET callback/webhook, and Admin management
+    Core, Auth, Customers, Staff, Pilates Classes, Schedules, Bookings, Payment, Wallet, KNET callback/webhook, and Admin management
     endpoints.
 
 
@@ -36,6 +36,8 @@ tags:
     description: Protected admin user-management endpoints
   - name: Auth - Context
     description: Authenticated frontend bootstrapping context endpoint
+  - name: Customers - Admin
+    description: Protected admin customer management endpoints
   - name: Staff - Admin
     description: Protected admin staff and trainer management endpoints
   - name: Pilates - Public
@@ -178,7 +180,7 @@ paths:
   /auth/sign-up:
     post:
       summary: Create customer account
-      description: Creates a customer account and starts email verification. Public sign-up never accepts privileged roles.
+      description: Creates a customer account with required full name, email, phone, and Civil ID, then starts email verification. Public sign-up never accepts privileged roles.
       operationId: authSignUp
       tags:
         - Auth - Public
@@ -405,7 +407,7 @@ paths:
   /auth/guest/convert:
     post:
       summary: Convert guest to customer
-      description: Converts the current authenticated guest user into a pending customer account and starts email verification.
+      description: Converts the current authenticated guest user into a pending customer account with required full name, email, phone, and Civil ID, then starts email verification.
       operationId: authConvertGuestToCustomer
       tags:
         - Auth - Guest
@@ -840,6 +842,318 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/AuthenticationRequired'
+  /admin/customers:
+    get:
+      summary: List customers
+      description: Lists customer records for the admin dashboard. Supports broad search, auth-status filtering, soft-deleted inclusion, and pagination. Requires admin or super_admin.
+      operationId: customerAdminListCustomers
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 254
+          description: Broad search over customer name, email, or phone. Use the lookup endpoint for exact phone or Civil ID lookup.
+        - name: auth_status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/AuthUserStatus'
+          description: Filter customers by app user status.
+        - name: include_deleted
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Whether to include soft-deleted customer profiles.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Customers retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerListSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+    post:
+      summary: Create customer
+      description: Creates an active and verified customer account from the admin dashboard. Admin-created customers can log in immediately and do not require email OTP verification.
+      operationId: customerAdminCreateCustomer
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCustomerRequest'
+      responses:
+        '201':
+          description: Customer created successfully. The customer can log in immediately.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: Customer login account creation failed because the authentication provider is temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/customers/lookup:
+    get:
+      summary: Lookup customer
+      description: Performs exact customer lookup by phone, Civil ID, or both. At least one lookup field is required. If both are provided, both must match the same customer. Requires admin or super_admin.
+      operationId: customerAdminLookupCustomer
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: phone
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 32
+            pattern: '^\+?[1-9]\d{6,15}$'
+            example: '+923001234567'
+          description: Customer phone number in international format for exact lookup.
+        - name: civil_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 32
+            pattern: '^(?=(?:\D*\d){12}\D*$)[0-9 -]+$'
+            example: '2990-1011-2345'
+          description: Customer Civil ID for exact lookup. Must contain exactly 12 digits; spaces and hyphens are allowed.
+      responses:
+        '200':
+          description: Customer lookup completed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerLookupSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/customers/{customerId}:
+    get:
+      summary: Get customer
+      description: Returns one customer record by customer profile id. Requires admin or super_admin.
+      operationId: customerAdminGetCustomerById
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Customer profile id from public.customer_profiles.id.
+      responses:
+        '200':
+          description: Customer retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update customer
+      description: Updates safe customer fields. Email, password, role, and status are not updated through this endpoint.
+      operationId: customerAdminUpdateCustomer
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Customer profile id from public.customer_profiles.id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCustomerRequest'
+      responses:
+        '200':
+          description: Customer updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      summary: Delete customer
+      description: Soft-deletes a customer profile and marks the related app user as deleted. Requires admin or super_admin.
+      operationId: customerAdminDeleteCustomer
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Customer profile id from public.customer_profiles.id.
+      responses:
+        '200':
+          description: Customer deleted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerDeleteSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/customers/{customerId}/deactivate:
+    post:
+      summary: Deactivate customer
+      description: Deactivates a customer account. Requires admin or super_admin.
+      operationId: customerAdminDeactivateCustomer
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Customer profile id from public.customer_profiles.id.
+      responses:
+        '200':
+          description: Customer deactivated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/customers/{customerId}/reactivate:
+    post:
+      summary: Reactivate customer
+      description: Reactivates a deactivated customer account. Requires admin or super_admin.
+      operationId: customerAdminReactivateCustomer
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Customer profile id from public.customer_profiles.id.
+      responses:
+        '200':
+          description: Customer reactivated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /admin/staff:
     get:
       summary: List staff members
@@ -908,7 +1222,7 @@ paths:
           $ref: '#/components/responses/AuthorizationDenied'
     post:
       summary: Create staff member
-      description: Creates a staff or trainer account from the admin dashboard. The created Supabase Auth user must verify email before login.
+      description: Creates an active and verified staff or trainer account from the admin dashboard. Admin-created staff can log in immediately and do not require email OTP verification.
       operationId: staffAdminCreateStaff
       tags:
         - Staff - Admin
@@ -922,7 +1236,7 @@ paths:
               $ref: '#/components/schemas/CreateStaffRequest'
       responses:
         '201':
-          description: Staff member created successfully. Email verification is required before login.
+          description: Staff member created successfully. The staff member can log in immediately.
           content:
             application/json:
               schema:
@@ -4709,10 +5023,18 @@ components:
     SignUpRequest:
       type: object
       required:
+        - full_name
         - email
+        - phone
+        - civil_id
         - password
         - confirm_password
       properties:
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Saqiba Customer
         email:
           type: string
           format: email
@@ -4721,13 +5043,14 @@ components:
         phone:
           type: string
           maxLength: 32
-          nullable: true
+          pattern: '^\+?[1-9]\d{6,15}$'
           example: '+96550000000'
-        full_name:
+        civil_id:
           type: string
-          maxLength: 120
-          nullable: true
-          example: Saqiba Customer
+          maxLength: 32
+          pattern: '^(?=(?:\D*\d){12}\D*$)[0-9 -]+$'
+          example: '2990-1011-2345'
+          description: Must contain exactly 12 digits. Spaces and hyphens are allowed for readability.
         password:
           type: string
           format: password
@@ -4895,11 +5218,14 @@ components:
       required:
         - full_name
         - email
+        - phone
+        - civil_id
         - password
         - confirm_password
       properties:
         full_name:
           type: string
+          minLength: 1
           maxLength: 120
           example: Saqiba Customer
         email:
@@ -4910,8 +5236,14 @@ components:
         phone:
           type: string
           maxLength: 32
-          nullable: true
+          pattern: '^\+?[1-9]\d{6,15}$'
           example: '+96550000000'
+        civil_id:
+          type: string
+          maxLength: 32
+          pattern: '^(?=(?:\D*\d){12}\D*$)[0-9 -]+$'
+          example: '2990-1011-2345'
+          description: Must contain exactly 12 digits. Spaces and hyphens are allowed for readability.
         password:
           type: string
           format: password
@@ -5777,7 +6109,7 @@ components:
           $ref: '#/components/schemas/AuthUserStatus'
         email_verification_required:
           type: boolean
-          example: true
+          example: false
         availability:
           type: array
           items:
@@ -6011,6 +6343,269 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/StaffDeleteData'
+    CustomerProfile:
+      type: object
+      required:
+        - id
+        - app_user_id
+        - auth_user_id
+        - email
+        - phone
+        - full_name
+        - civil_id
+        - role
+        - auth_status
+        - is_guest
+        - avatar_path
+        - timezone
+        - created_by_admin_id
+        - updated_by_admin_id
+        - created_at
+        - updated_at
+        - deactivated_at
+        - deleted_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Customer profile id from public.customer_profiles.id.
+        app_user_id:
+          type: string
+          format: uuid
+          description: Related app user id from public.app_users.id.
+        auth_user_id:
+          type: string
+          format: uuid
+          description: Related Supabase Auth user id.
+        email:
+          type: string
+          format: email
+          example: customer@example.com
+        phone:
+          type: string
+          example: '+923001234567'
+        full_name:
+          type: string
+          example: Ahmad Sajid
+        civil_id:
+          type: string
+          maxLength: 32
+          example: '2990-1011-2345'
+          description: Admin-visible Civil ID. This value must not be logged or written to audit metadata.
+        role:
+          type: string
+          enum:
+            - customer
+          example: customer
+        auth_status:
+          $ref: '#/components/schemas/AuthUserStatus'
+        is_guest:
+          type: boolean
+          enum:
+            - false
+        avatar_path:
+          type: string
+          nullable: true
+          example: avatars/customer.png
+        timezone:
+          type: string
+          nullable: true
+          maxLength: 64
+          example: Asia/Kuwait
+        created_by_admin_id:
+          type: string
+          format: uuid
+          nullable: true
+        updated_by_admin_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deactivated_at:
+          type: string
+          format: date-time
+          nullable: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateCustomerRequest:
+      type: object
+      required:
+        - full_name
+        - email
+        - phone
+        - civil_id
+        - password
+        - confirm_password
+      properties:
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Ahmad Sajid
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: customer@example.com
+        phone:
+          type: string
+          maxLength: 32
+          pattern: '^\+?[1-9]\d{6,15}$'
+          example: '+923001234567'
+        civil_id:
+          type: string
+          maxLength: 32
+          pattern: '^(?=(?:\D*\d){12}\D*$)[0-9 -]+$'
+          example: '2990-1011-2345'
+          description: Must contain exactly 12 digits. Spaces and hyphens are allowed for readability.
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          writeOnly: true
+          example: StrongPass123!
+        confirm_password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          writeOnly: true
+          example: StrongPass123!
+        timezone:
+          type: string
+          nullable: true
+          maxLength: 64
+          example: Asia/Kuwait
+
+    UpdateCustomerRequest:
+      type: object
+      minProperties: 1
+      properties:
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Ahmad Sajid
+        phone:
+          type: string
+          maxLength: 32
+          pattern: '^\+?[1-9]\d{6,15}$'
+          example: '+923001234567'
+        civil_id:
+          type: string
+          maxLength: 32
+          pattern: '^(?=(?:\D*\d){12}\D*$)[0-9 -]+$'
+          example: '2990-1011-2345'
+          description: Must contain exactly 12 digits. Spaces and hyphens are allowed for readability.
+        timezone:
+          type: string
+          nullable: true
+          maxLength: 64
+          example: Asia/Kuwait
+
+    CustomerListData:
+      type: object
+      required:
+        - customers
+        - total
+        - limit
+        - offset
+      properties:
+        customers:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerProfile'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+
+    CustomerMutationData:
+      type: object
+      required:
+        - customer
+      properties:
+        customer:
+          $ref: '#/components/schemas/CustomerProfile'
+
+    CustomerLookupData:
+      type: object
+      required:
+        - customer
+        - matched_by
+      properties:
+        customer:
+          allOf:
+            - $ref: '#/components/schemas/CustomerProfile'
+          nullable: true
+        matched_by:
+          type: string
+          nullable: true
+          enum:
+            - phone
+            - civil_id
+            - phone_and_civil_id
+          example: phone
+
+    CustomerDeleteData:
+      type: object
+      required:
+        - deleted
+        - customer_id
+      properties:
+        deleted:
+          type: boolean
+          enum:
+            - true
+        customer_id:
+          type: string
+          format: uuid
+
+    CustomerListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CustomerListData'
+
+    CustomerMutationSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CustomerMutationData'
+
+    CustomerLookupSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CustomerLookupData'
+
+    CustomerDeleteSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CustomerDeleteData'
     PilatesClassLevel:
       type: string
       enum:

@@ -94,7 +94,7 @@ export interface StaffCreateRepositoryInput {
     readonly phone: string | null;
     readonly full_name: string;
     readonly role: StaffPortalRole;
-    readonly status: 'pending_email_verification';
+    readonly status: 'active';
     readonly is_guest: false;
     readonly metadata: {
       readonly source: string;
@@ -159,7 +159,7 @@ export interface StaffAuthUserCreateInput {
 export interface StaffAuthUserCreateResult {
   readonly auth_user_id: string;
   readonly email: string;
-  readonly email_verification_required: true;
+  readonly email_verification_required: false;
 }
 
 export interface StaffProfileWithUser {

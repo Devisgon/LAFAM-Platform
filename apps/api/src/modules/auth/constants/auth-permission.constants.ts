@@ -69,6 +69,14 @@ export const AUTH_PERMISSIONS = [
   'admin:users:deactivate',
   'admin:users:reactivate',
 
+  'admin:customers:read',
+  'admin:customers:lookup',
+  'admin:customers:create',
+  'admin:customers:update',
+  'admin:customers:deactivate',
+  'admin:customers:reactivate',
+  'admin:customers:delete',
+
   'super_admin:users:hard_delete',
 ] as const;
 
@@ -133,12 +141,23 @@ export const AUTH_STAFF_PERMISSIONS = [
   'staff:access_dashboard',
 ] as const satisfies readonly AuthPermission[];
 
+export const AUTH_ADMIN_CUSTOMER_PERMISSIONS = [
+  'admin:customers:read',
+  'admin:customers:lookup',
+  'admin:customers:create',
+  'admin:customers:update',
+  'admin:customers:deactivate',
+  'admin:customers:reactivate',
+  'admin:customers:delete',
+] as const satisfies readonly AuthPermission[];
+
 export const AUTH_ADMIN_PERMISSIONS = [
   ...AUTH_STAFF_PERMISSIONS,
   'admin:access_dashboard',
   'admin:users:read',
   'admin:users:deactivate',
   'admin:users:reactivate',
+  ...AUTH_ADMIN_CUSTOMER_PERMISSIONS,
 ] as const satisfies readonly AuthPermission[];
 
 export const AUTH_SUPER_ADMIN_PERMISSIONS = [
@@ -162,6 +181,13 @@ export const AUTH_GUEST_DENIED_PERMISSIONS = [
   'admin:users:read',
   'admin:users:deactivate',
   'admin:users:reactivate',
+  'admin:customers:read',
+  'admin:customers:lookup',
+  'admin:customers:create',
+  'admin:customers:update',
+  'admin:customers:deactivate',
+  'admin:customers:reactivate',
+  'admin:customers:delete',
   'super_admin:users:hard_delete',
 ] as const satisfies readonly AuthPermission[];
 
