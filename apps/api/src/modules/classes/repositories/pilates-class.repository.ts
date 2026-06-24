@@ -141,11 +141,12 @@ function mapDatabaseError(error: unknown): AppError {
 
   if (
     error.code === '23505' &&
-    (message.includes(
-      'pilates_schedule_series_time_slots_series_slot_unique',
-    ) ||
+    (message.includes('pilates_schedule_series_time_slots_series_slot_uidx') ||
       message.includes(
-        'pilates_schedule_series_time_slots_series_window_unique',
+        'pilates_schedule_series_time_slots_weekday_time_uidx',
+      ) ||
+      message.includes(
+        'pilates_schedule_series_time_slots_legacy_series_time_uidx',
       ))
   ) {
     return AppError.pilatesScheduleDuplicateTimeSlot(
@@ -570,6 +571,8 @@ export class PilatesClassRepository {
 
     return [...(data ?? [])].sort(
       (firstTimeSlot, secondTimeSlot) =>
+        (firstTimeSlot.day_of_week ?? -1) -
+          (secondTimeSlot.day_of_week ?? -1) ||
         firstTimeSlot.slot_index - secondTimeSlot.slot_index,
     );
   }
@@ -1373,6 +1376,7 @@ export class PilatesClassRepository {
       .from('pilates_schedule_series_time_slots')
       .select('*')
       .in('series_id', seriesIds)
+      .order('day_of_week', { ascending: true })
       .order('slot_index', { ascending: true });
 
     if (error) {

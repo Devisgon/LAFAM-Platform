@@ -1691,8 +1691,8 @@ paths:
           $ref: '#/components/responses/AuthorizationDenied'
 
     post:
-      summary: Create Pilates schedule
-      description: Creates either one Pilates schedule occurrence, one date with multiple bookable time slots, or a recurring schedule series that generates concrete bookable schedule rows. Backend calculates end_time from each resolved start_time and duration_minutes pair.
+      summary: Create Pilates weekly schedule plan
+      description: Creates one weekly Pilates schedule plan and generates concrete bookable schedule rows between start_date and end_date. Backend calculates each end_time from start_time and duration_minutes.
       operationId: pilatesAdminCreateSchedule
       tags:
         - Pilates - Admin
@@ -1705,89 +1705,29 @@ paths:
             schema:
               $ref: '#/components/schemas/CreatePilatesScheduleRequest'
             examples:
-              singleMultiSlot:
-                summary: Create one date with multiple bookable time slots
+              weeklyPlan:
+                summary: Create a weekly schedule plan
                 value:
-                  mode: single
                   class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
                   trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
                   studio: LAFAM Pilates Studio
-                  class_date: '2026-06-22'
+                  start_date: '2026-07-01'
+                  end_date: '2026-09-30'
+                  default_capacity: 8
                   price_amount: 15
                   currency: KWD
-                  time_slots:
-                    - start_time: '09:00'
-                      duration_minutes: 60
-                      capacity: 8
-                      studio: LAFAM Pilates Studio
-                    - start_time: '11:00'
-                      duration_minutes: 60
-                      capacity: 8
-                      studio: LAFAM Pilates Studio
-              singleBackwardCompatible:
-                summary: Create one schedule occurrence with legacy single-time shape
-                value:
-                  mode: single
-                  class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
-                  trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
-                  studio: LAFAM Pilates Studio
-                  class_date: '2026-06-22'
-                  start_time: '10:00'
-                  duration_minutes: 60
-                  capacity: 8
-                  price_amount: 15
-                  currency: KWD
-              recurringWeeklyMultiSlot:
-                summary: Create weekly recurring schedules with multiple time slots
-                value:
-                  mode: recurring
-                  class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
-                  trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
-                  studio: LAFAM Pilates Studio
-                  start_date: '2026-06-22'
-                  end_date: '2026-07-22'
-                  price_amount: 15
-                  currency: KWD
-                  time_slots:
-                    - start_time: '09:00'
-                      duration_minutes: 60
-                      capacity: 8
-                      studio: LAFAM Pilates Studio
-                    - start_time: '11:00'
-                      duration_minutes: 60
-                      capacity: 8
-                      studio: LAFAM Pilates Studio
-                  recurrence:
-                    frequency: weekly
-                    days_of_week:
-                      - 1
-                      - 3
-                      - 5
-                    excluded_dates:
-                      - '2026-07-01'
-              recurringMonthlyMultiSlot:
-                summary: Create monthly recurring schedules with multiple time slots
-                value:
-                  mode: recurring
-                  class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
-                  trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
-                  studio: LAFAM Pilates Studio
-                  start_date: '2026-06-22'
-                  end_date: '2026-09-22'
-                  price_amount: 15
-                  currency: KWD
-                  time_slots:
-                    - start_time: '09:00'
-                      duration_minutes: 60
-                      capacity: 8
-                    - start_time: '11:00'
-                      duration_minutes: 60
-                      capacity: 8
-                  recurrence:
-                    frequency: monthly
-                    monthly_rule: day_of_month
-                    day_of_month: 22
-                    excluded_dates: []
+                  schedule_days:
+                    - day_of_week: 1
+                      time_slots:
+                        - start_time: '09:00'
+                          duration_minutes: 60
+                          capacity: 8
+                        - start_time: '11:00'
+                          duration_minutes: 60
+                    - day_of_week: 3
+                      time_slots:
+                        - start_time: '18:00'
+                          duration_minutes: 60
       responses:
         '201':
           description: Pilates schedule created successfully.
@@ -7024,122 +6964,49 @@ components:
           minimum: 1
           maximum: 100
           example: 8
-          description: Optional slot-level capacity override. If omitted, the schedule/class capacity fallback is used.
-        studio:
-          type: string
-          minLength: 1
-          maxLength: 120
-          nullable: true
-          example: LAFAM Pilates Studio
-          description: Optional slot-level studio override. If omitted, the schedule studio is used.
-        price_amount:
-          type: number
-          minimum: 0
-          nullable: true
-          example: 15
-          description: Optional slot-level price override. If omitted, the schedule/class price fallback is used.
-        currency:
-          allOf:
-            - $ref: '#/components/schemas/PaymentCurrency'
-          nullable: true
-          description: Optional slot-level currency. KWD is currently supported.
-    CreatePilatesScheduleRequest:
-      oneOf:
-        - $ref: '#/components/schemas/CreateSinglePilatesScheduleRequest'
-        - $ref: '#/components/schemas/CreateRecurringPilatesScheduleRequest'
+          description: Optional slot-level capacity override. If omitted, default_capacity is used.
 
-    CreateSinglePilatesScheduleRequest:
+    PilatesScheduleDayInput:
       type: object
       required:
-        - class_id
-        - trainer_staff_profile_id
-        - class_date
-      anyOf:
-        - required:
-            - start_time
-        - required:
-            - time_slots
+        - day_of_week
+        - time_slots
       properties:
-        mode:
-          type: string
+        day_of_week:
+          type: integer
+          minimum: 0
+          maximum: 6
           enum:
-            - single
-          default: single
-          description: Optional. Missing mode is treated as single for backward compatibility.
-          example: single
-        class_id:
-          type: string
-          format: uuid
-        trainer_staff_profile_id:
-          type: string
-          format: uuid
-        studio:
-          type: string
-          minLength: 1
-          maxLength: 120
-          default: LAFAM Pilates Studio
-          example: LAFAM Pilates Studio
-        class_date:
-          type: string
-          pattern: '^\d{4}-\d{2}-\d{2}$'
-          example: '2026-06-22'
-        start_time:
-          type: string
-          pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
-          example: '10:00'
-          description: Backward-compatible single-time field. Required when time_slots is omitted.
-        duration_minutes:
-          type: integer
-          minimum: 15
-          maximum: 240
-          default: 60
-          example: 60
-          description: Schedule-level duration used by backward-compatible single-time creation. Slot-level duration_minutes is used when time_slots is provided.
-        capacity:
-          type: integer
-          minimum: 1
-          maximum: 100
-          example: 8
-          description: Schedule-level capacity fallback. Slot-level capacity overrides this value when time_slots is provided.
+            - 0
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            - 6
+          example: 1
+          description: Weekday for this schedule day. Uses 0 = Sunday through 6 = Saturday.
         time_slots:
           type: array
           minItems: 1
-          maxItems: 12
-          description: Multiple schedule slots to create on the same class_date. Required when start_time is omitted.
+          maxItems: 24
           items:
             $ref: '#/components/schemas/PilatesScheduleTimeSlotInput'
-        price_amount:
-          type: number
-          minimum: 0
-          nullable: true
-          example: 15
-          description: Optional schedule-level price override. If null or omitted, class default price is used. Slot-level price_amount overrides this value.
-        currency:
-          allOf:
-            - $ref: '#/components/schemas/PaymentCurrency'
-          nullable: true
-          description: Optional schedule-level currency. KWD is currently supported. Slot-level currency overrides this value.
+          description: Time slots generated for this weekday.
 
-    CreateRecurringPilatesScheduleRequest:
+    CreatePilatesScheduleRequest:
       type: object
       required:
-        - mode
         - class_id
         - trainer_staff_profile_id
+        - studio
         - start_date
         - end_date
-        - recurrence
-      anyOf:
-        - required:
-            - start_time
-        - required:
-            - time_slots
+        - default_capacity
+        - price_amount
+        - currency
+        - schedule_days
       properties:
-        mode:
-          type: string
-          enum:
-            - recurring
-          example: recurring
         class_id:
           type: string
           format: uuid
@@ -7150,55 +7017,36 @@ components:
           type: string
           minLength: 1
           maxLength: 120
-          default: LAFAM Pilates Studio
           example: LAFAM Pilates Studio
         start_date:
           type: string
           pattern: '^\d{4}-\d{2}-\d{2}$'
-          example: '2026-06-22'
+          example: '2026-07-01'
         end_date:
           type: string
           pattern: '^\d{4}-\d{2}-\d{2}$'
-          example: '2026-07-22'
-        start_time:
-          type: string
-          pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
-          example: '10:00'
-          description: Backward-compatible base start time. Required when time_slots is omitted. When time_slots is provided and start_time is omitted, the backend uses the first slot start_time as the series base start time.
-        duration_minutes:
-          type: integer
-          minimum: 15
-          maximum: 240
-          default: 60
-          example: 60
-          description: Schedule-level duration used by backward-compatible recurring creation. Slot-level duration_minutes is used when time_slots is provided.
-        capacity:
+          example: '2026-09-30'
+        default_capacity:
           type: integer
           minimum: 1
           maximum: 100
           example: 8
-          description: Schedule-level capacity fallback. Slot-level capacity overrides this value when time_slots is provided.
-        time_slots:
-          type: array
-          minItems: 1
-          maxItems: 12
-          description: Multiple recurring slots generated for every matched recurrence date. Required when start_time is omitted.
-          items:
-            $ref: '#/components/schemas/PilatesScheduleTimeSlotInput'
+          description: Default generated schedule capacity. Slot capacity overrides may narrow or expand this value.
         price_amount:
           type: number
           minimum: 0
-          nullable: true
           example: 15
-          description: Optional schedule-level price override copied to generated schedules. Slot-level price_amount overrides this value.
+          description: Price snapshot copied to every generated schedule row.
         currency:
-          allOf:
-            - $ref: '#/components/schemas/PaymentCurrency'
-          nullable: true
-          description: Optional schedule-level currency. KWD is currently supported. Slot-level currency overrides this value.
-        recurrence:
-          $ref: '#/components/schemas/PilatesScheduleRecurrenceInput'
-
+          $ref: '#/components/schemas/PaymentCurrency'
+        schedule_days:
+          type: array
+          minItems: 1
+          maxItems: 7
+          uniqueItems: false
+          items:
+            $ref: '#/components/schemas/PilatesScheduleDayInput'
+          description: Weekly schedule days. day_of_week values must be unique.
     UpdatePilatesScheduleRequest:
       type: object
       minProperties: 1
@@ -7379,46 +7227,80 @@ components:
       properties:
         schedule:
           $ref: '#/components/schemas/PilatesScheduleAdminSummary'
-    CreatePilatesScheduleSingleData:
+    PilatesWeeklySchedulePlanAdminSummary:
       type: object
       required:
-        - mode
-        - schedule
+        - id
+        - class_id
+        - trainer_staff_profile_id
+        - studio
+        - start_date
+        - end_date
+        - days_of_week
+        - default_capacity
+        - price_amount
+        - currency
+        - time_slot_count
+        - generated_schedule_count
       properties:
-        mode:
+        id:
           type: string
-          enum:
-            - single
-          example: single
-        schedule:
-          $ref: '#/components/schemas/PilatesScheduleAdminSummary'
-        generated_schedules:
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+        studio:
+          type: string
+          example: LAFAM Pilates Studio
+        start_date:
+          type: string
+          format: date
+          example: '2026-07-01'
+        end_date:
+          type: string
+          format: date
+          example: '2026-09-30'
+        days_of_week:
           type: array
-          description: Present for single-date multi-slot creation. Contains every schedule row created for the submitted class_date.
           items:
-            $ref: '#/components/schemas/PilatesScheduleAdminSummary'
-        generated_count:
+            type: integer
+            minimum: 0
+            maximum: 6
+          example:
+            - 1
+            - 3
+        default_capacity:
+          type: integer
+          minimum: 1
+          example: 8
+        price_amount:
+          type: number
+          minimum: 0
+          example: 15
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+        time_slot_count:
+          type: integer
+          minimum: 1
+          example: 3
+        generated_schedule_count:
           type: integer
           minimum: 0
-          description: Present for single-date multi-slot creation. Equals generated_schedules.length.
-          example: 3
+          example: 39
 
-    CreatePilatesScheduleRecurringData:
+    CreatePilatesScheduleData:
       type: object
       required:
-        - mode
-        - series
+        - schedule_plan
         - generated_schedules
         - generated_count
         - skipped_dates
       properties:
-        mode:
-          type: string
-          enum:
-            - recurring
-          example: recurring
-        series:
-          $ref: '#/components/schemas/PilatesScheduleSeriesAdminSummary'
+        schedule_plan:
+          $ref: '#/components/schemas/PilatesWeeklySchedulePlanAdminSummary'
         generated_schedules:
           type: array
           items:
@@ -7426,20 +7308,13 @@ components:
         generated_count:
           type: integer
           minimum: 0
-          example: 12
+          example: 39
         skipped_dates:
           type: array
           items:
             type: string
             format: date
-          example:
-            - '2026-07-01'
-
-    CreatePilatesScheduleData:
-      oneOf:
-        - $ref: '#/components/schemas/CreatePilatesScheduleSingleData'
-        - $ref: '#/components/schemas/CreatePilatesScheduleRecurringData'
-
+          example: []
     PilatesScheduleAdminDetailData:
       type: object
       required:
@@ -7545,59 +7420,43 @@ components:
         message: Pilates schedule created successfully.
         timestamp_ms: 1780918065292
         data:
-          mode: single
-          schedule:
-            id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+          schedule_plan:
+            id: 7fa85f64-5717-4562-b3fc-2c963f66afa9
             class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
             trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
             studio: LAFAM Pilates Studio
-            class_date: '2026-06-22'
-            start_time: '09:00'
-            end_time: '10:00'
-            duration_minutes: 60
-            capacity: 8
-            booked_count: 0
-            waitlist_count: 0
+            start_date: '2026-07-01'
+            end_date: '2026-09-30'
+            days_of_week:
+              - 1
+              - 3
+            default_capacity: 8
             price_amount: 15
             currency: KWD
-            status: scheduled
-            created_at: '2026-06-19T09:30:00.000Z'
-            updated_at: '2026-06-19T09:30:00.000Z'
+            time_slot_count: 3
+            generated_schedule_count: 39
           generated_schedules:
             - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
               class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
               trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
               studio: LAFAM Pilates Studio
-              class_date: '2026-06-22'
+              class_date: '2026-07-01'
               start_time: '09:00'
               end_time: '10:00'
               duration_minutes: 60
               capacity: 8
-              booked_count: 0
-              waitlist_count: 0
               price_amount: 15
               currency: KWD
               status: scheduled
+              series_id: 7fa85f64-5717-4562-b3fc-2c963f66afa9
+              series_occurrence_index: 1
+              series_date_index: 1
+              series_slot_index: 1
+              generation_source: recurring
               created_at: '2026-06-19T09:30:00.000Z'
               updated_at: '2026-06-19T09:30:00.000Z'
-            - id: 4fa85f64-5717-4562-b3fc-2c963f66afa7
-              class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
-              trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
-              studio: LAFAM Pilates Studio
-              class_date: '2026-06-22'
-              start_time: '11:00'
-              end_time: '12:00'
-              duration_minutes: 60
-              capacity: 8
-              booked_count: 0
-              waitlist_count: 0
-              price_amount: 15
-              currency: KWD
-              status: scheduled
-              created_at: '2026-06-19T09:30:00.000Z'
-              updated_at: '2026-06-19T09:30:00.000Z'
-          generated_count: 2
-
+          generated_count: 39
+          skipped_dates: []
     PilatesScheduleAdminDetailSuccessResponse:
       allOf:
         - $ref: '#/components/schemas/ApiSuccessBase'

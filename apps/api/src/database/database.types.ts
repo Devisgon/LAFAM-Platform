@@ -761,6 +761,7 @@ export interface Database {
         Row: {
           id: string;
           series_id: string;
+          day_of_week: number | null;
           slot_index: number;
           studio: string;
           start_time: string;
@@ -775,6 +776,7 @@ export interface Database {
         Insert: {
           id?: string;
           series_id: string;
+          day_of_week?: number | null;
           slot_index: number;
           studio?: string;
           start_time: string;
@@ -789,6 +791,7 @@ export interface Database {
         Update: {
           id?: string;
           series_id?: string;
+          day_of_week?: number | null;
           slot_index?: number;
           studio?: string;
           start_time?: string;
