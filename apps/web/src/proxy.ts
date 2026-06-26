@@ -53,8 +53,7 @@ const protectedRoutes = [
   "/users",
   "/wallet",
 ];
-const adminOnlyRoutes = ["/calendar", "/staff", "/users"];
-const authRoutes = ["/login", "/signup", "/forgot-password", "/verify-email"];
+const authRoutes = ["/login", "/forgot-password"];
 
 const authCookieNames = [
   ACCESS_TOKEN_COOKIE,
@@ -81,8 +80,10 @@ function getDashboardPath(role?: string): string {
 
 function canAccessPath(pathname: string, role?: string): boolean {
   if (!role) return false;
-  return !adminOnlyRoutes.some((route) => isRouteMatch(pathname, route)) ||
-    isAdminRole(role);
+  return (
+    isAdminRole(role) &&
+    protectedRoutes.some((route) => isRouteMatch(pathname, route))
+  );
 }
 
 function getApiUrl(path: string): string | null {
@@ -383,9 +384,7 @@ export const config = {
   matcher: [
     "/",
     "/login",
-    "/signup/:path*",
     "/forgot-password/:path*",
-    "/verify-email/:path*",
     "/dashboard/:path*",
     "/bookings/:path*",
     "/calendar/:path*",

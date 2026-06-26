@@ -8,7 +8,6 @@ import {
   CreditCard,
   Dumbbell,
   Gauge,
-  House,
   Menu,
   Settings,
   UserRound,
@@ -21,9 +20,8 @@ import {
 type IconName =
   | "bookings"
   | "calendar"
-  | "dashboard"
   | "classes"
-  | "home"
+  | "dashboard"
   | "payments"
   | "services"
   | "settings"
@@ -44,16 +42,15 @@ type NavigationChild = {
 const MOBILE_SIDEBAR_EVENT = "lafam:open-mobile-sidebar";
 
 const icons: Record<IconName, LucideIcon> = {
-  dashboard: Gauge,
-  classes: Dumbbell,
-  home: House,
   bookings: CalendarDays,
   calendar: CalendarDays,
+  classes: Dumbbell,
+  dashboard: Gauge,
+  payments: CreditCard,
   services: ListChecks,
+  settings: Settings,
   staff: UserRound,
   wallet: WalletCards,
-  payments: CreditCard,
-  settings: Settings,
 };
 
 const primaryItems: NavItem[] = [
@@ -63,17 +60,9 @@ const primaryItems: NavItem[] = [
 ];
 
 const managementItems: NavItem[] = [
+  { href: "/users", icon: "staff", label: "Users" },
   { href: "/payments", icon: "payments", label: "Payments" },
   { href: "/settings", icon: "settings", label: "Settings" },
-];
-
-const userItems: NavItem[] = [
-  { href: "/dashboard", icon: "home", label: "Home" },
-  { href: "/services/pilates", icon: "classes", label: "Classes" },
-  { href: "/bookings", icon: "bookings", label: "Booking" },
-  { href: "/payments", icon: "payments", label: "Payments" },
-  { href: "/wallet", icon: "wallet", label: "Wallet" },
-  { href: "/settings", icon: "settings", label: "Profile" },
 ];
 
 function Icon({ name }: { name: IconName }) {
@@ -99,14 +88,14 @@ function NavigationLink({
 }) {
   return (
     <Link
-      href={href}
-      title={label}
-      aria-label={label}
       aria-current={active ? "page" : undefined}
-      onClick={onNavigate}
+      aria-label={label}
       className={`flex min-h-14 w-full items-center text-[14px] transition hover:bg-black hover:text-white ${
         collapsed ? "justify-center px-0" : "gap-4 px-5"
       } ${active ? "bg-black text-white" : ""}`}
+      href={href}
+      onClick={onNavigate}
+      title={label}
     >
       <Icon name={icon} />
       {!collapsed && <span>{label}</span>}
@@ -146,45 +135,43 @@ function NavigationGroup({
   return (
     <div className="w-full">
       <button
-        type="button"
-        title={label}
-        aria-label={label}
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        aria-label={label}
         className={`flex min-h-14 w-full items-center gap-4 px-5 text-[14px] transition ${
           open
             ? "bg-black text-white"
             : "text-black hover:bg-black hover:text-white"
         }`}
+        onClick={() => setOpen((value) => !value)}
+        title={label}
+        type="button"
       >
         <Icon name={icon} />
-
         <span className="flex-1 text-left">{label}</span>
-
         <ChevronDown
+          className={`transition ${open ? "rotate-180" : ""}`}
           size={18}
           strokeWidth={3}
-          className={`transition ${open ? "rotate-180" : ""}`}
         />
       </button>
 
-      {open && (
+      {open ? (
         <div className="w-full border-b border-black/20 bg-sidebar-header py-3 shadow-sm">
           {children.map((child) => (
             <Link
-              key={child.label}
-              href={child.href}
               aria-current={child.label === activeItem ? "page" : undefined}
-              onClick={onNavigate}
               className={`block w-full px-[72px] py-2 text-[16px] font-medium text-black transition hover:bg-black/10 ${
                 child.label === activeItem ? "bg-black/10" : ""
               }`}
+              href={child.href}
+              key={child.label}
+              onClick={onNavigate}
             >
               {child.label}
             </Link>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -195,14 +182,12 @@ function SidebarContent({
   isMobile = false,
   onClose,
   onToggleCollapse,
-  variant,
 }: {
   activeItem: string;
   collapsed: boolean;
   isMobile?: boolean;
   onClose?: () => void;
   onToggleCollapse?: () => void;
-  variant: "admin" | "user";
 }) {
   return (
     <>
@@ -212,22 +197,21 @@ function SidebarContent({
         }`}
       >
         {!collapsed && <h2 className="text-[16px]">Navigation</h2>}
-
         {isMobile ? (
           <button
-            type="button"
             aria-label="Close sidebar"
-            onClick={onClose}
             className="rounded-md p-1 transition"
+            onClick={onClose}
+            type="button"
           >
             <X size={24} strokeWidth={3} />
           </button>
         ) : (
           <button
-            type="button"
             aria-label="Toggle sidebar"
-            onClick={onToggleCollapse}
             className="rounded-md p-1 transition"
+            onClick={onToggleCollapse}
+            type="button"
           >
             <Menu size={24} strokeWidth={3} />
           </button>
@@ -235,89 +219,65 @@ function SidebarContent({
       </div>
 
       <nav className="mt-8 grid" aria-label="Main navigation">
-        {variant === "user"
-          ? userItems.map((item) => (
-              <NavigationLink
-                key={item.label}
-                active={item.label === activeItem}
-                collapsed={collapsed}
-                onNavigate={onClose}
-                {...item}
-              />
-            ))
-          : null}
+        {primaryItems.map((item) => (
+          <NavigationLink
+            active={item.label === activeItem}
+            collapsed={collapsed}
+            key={item.label}
+            onNavigate={onClose}
+            {...item}
+          />
+        ))}
 
-        {variant === "admin" ? (
-          <>
-            {primaryItems.map((item) => (
-              <NavigationLink
-                key={item.label}
-                active={item.label === activeItem}
-                collapsed={collapsed}
-                onNavigate={onClose}
-                {...item}
-              />
-            ))}
+        <NavigationGroup
+          activeItem={activeItem}
+          collapsed={collapsed}
+          icon="services"
+          label="Services"
+          onNavigate={onClose}
+        >
+          {[{ href: "/services/pilates", label: "Pilates" }]}
+        </NavigationGroup>
 
-            <NavigationGroup
-              activeItem={activeItem}
-              collapsed={collapsed}
-              icon="services"
-              label="Services"
-              onNavigate={onClose}
-            >
-              {[{ href: "/services/pilates", label: "Pilates" }]}
-            </NavigationGroup>
+        <NavigationLink
+          active={activeItem === "Staff"}
+          collapsed={collapsed}
+          href="/staff"
+          icon="staff"
+          label="Staff"
+          onNavigate={onClose}
+        />
 
-            <NavigationLink
-              active={activeItem === "Staff"}
-              collapsed={collapsed}
-              href="/staff"
-              icon="staff"
-              label="Staff"
-              onNavigate={onClose}
-            />
+        <NavigationLink
+          active={activeItem === "Wallet"}
+          collapsed={collapsed}
+          href="/wallet"
+          icon="wallet"
+          label="Wallet"
+          onNavigate={onClose}
+        />
 
-            <NavigationLink
-              active={activeItem === "Wallet"}
-              collapsed={collapsed}
-              href="/wallet"
-              icon="wallet"
-              label="Wallet"
-              onNavigate={onClose}
-            />
-
-            {managementItems.map((item) => (
-              <NavigationLink
-                key={item.label}
-                active={item.label === activeItem}
-                collapsed={collapsed}
-                onNavigate={onClose}
-                {...item}
-              />
-            ))}
-          </>
-        ) : null}
+        {managementItems.map((item) => (
+          <NavigationLink
+            active={item.label === activeItem}
+            collapsed={collapsed}
+            key={item.label}
+            onNavigate={onClose}
+            {...item}
+          />
+        ))}
       </nav>
     </>
   );
 }
 
-export function Sidebar({
-  activeItem = "Dashboard",
-  variant = "admin",
-}: {
-  activeItem?: string;
-  variant?: "admin" | "user";
-}) {
+export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
   const width = collapsed ? "md:w-[72px]" : "md:w-[300px]";
 
   useEffect(() => {
     const openMobileSidebar = () => setMobileOpen(true);
-
     window.addEventListener(MOBILE_SIDEBAR_EVENT, openMobileSidebar);
 
     return () => {
@@ -327,17 +287,15 @@ export function Sidebar({
 
   return (
     <>
-      {/* Mobile overlay */}
-      {mobileOpen && (
+      {mobileOpen ? (
         <button
-          type="button"
           aria-label="Close sidebar overlay"
-          onClick={() => setMobileOpen(false)}
           className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setMobileOpen(false)}
+          type="button"
         />
-      )}
+      ) : null}
 
-      {/* Mobile sidebar */}
       <aside
         className={`fixed bottom-0 left-0 top-0 z-50 flex w-[280px] shrink-0 flex-col bg-foreground py-4 text-black shadow-xl transition-transform duration-300 md:hidden ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
@@ -348,11 +306,9 @@ export function Sidebar({
           collapsed={false}
           isMobile
           onClose={() => setMobileOpen(false)}
-          variant={variant}
         />
       </aside>
 
-      {/* Desktop sidebar */}
       <aside
         className={`relative z-20 hidden shrink-0 flex-col bg-foreground py-4 text-black transition-[width] duration-300 md:fixed md:bottom-0 md:left-0 md:top-20 md:flex md:overflow-y-auto ${width}`}
       >
@@ -360,7 +316,6 @@ export function Sidebar({
           activeItem={activeItem}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((value) => !value)}
-          variant={variant}
         />
       </aside>
 

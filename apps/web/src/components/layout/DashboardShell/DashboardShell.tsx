@@ -17,18 +17,17 @@ const pageDetails: Record<string, { activeItem: string; title: string }> = {
   "/wallet": { activeItem: "Wallet", title: "Wallet" },
 };
 
-export function DashboardShell({ children, role }: { children: React.ReactNode; role: string }) {
+export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const details = pathname.startsWith("/services/pilates/")
     ? pageDetails["/services/pilates"]
     : pageDetails[pathname] ?? pageDetails["/dashboard"];
-  const variant = role === "admin" || role === "super_admin" ? "admin" : "user";
 
   return (
     <div className="min-h-screen bg-background-primary">
       <TopBar title={details.title} />
       <div className="md:flex">
-        <Sidebar activeItem={details.activeItem} variant={variant} />
+        <Sidebar activeItem={details.activeItem} />
         <div className="min-w-0 flex-1">
           <PageHeader homeHref="/dashboard" title={details.title} />
           <main className="p-4 lg:p-6">{children}</main>

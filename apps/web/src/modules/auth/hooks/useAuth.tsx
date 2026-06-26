@@ -24,41 +24,28 @@ import {
   getCachedAvatarUrl,
   getCachedPasswordResetEmail,
   getDashboardPath,
-  getCachedVerificationEmail,
   hasCachedAuthSession,
-  isEmailVerificationRequiredError,
   type AuthUser,
   type ForgotPasswordResult,
   type LoginPayload,
   type LoginResult,
   type ResetPasswordPayload,
   type ResetPasswordResult,
-  type ResendVerificationResult,
-  type SignUpPayload,
-  type SignUpResult,
-  type VerifyEmailResult,
   type VerifyResetOtpResult,
 } from "@/modules/auth";
 
 type AuthContextValue = {
   user: AuthUser | null;
   avatarUrl: string | null;
-  pendingVerificationEmail: string | null;
   passwordResetEmail: string | null;
   isAuthenticated: boolean;
   isChecking: boolean;
   isLoggingIn: boolean;
-  isSigningUp: boolean;
-  isVerifyingEmail: boolean;
-  isResendingVerification: boolean;
   isRequestingPasswordReset: boolean;
   isVerifyingResetOtp: boolean;
   isResettingPassword: boolean;
   error: string | null;
   login: (payload: LoginPayload) => Promise<LoginResult>;
-  signUp: (payload: SignUpPayload) => Promise<SignUpResult>;
-  verifyEmail: (otp: string) => Promise<VerifyEmailResult>;
-  resendVerificationOtp: () => Promise<ResendVerificationResult>;
   forgotPassword: (email: string) => Promise<ForgotPasswordResult>;
   verifyResetOtp: (otp: string) => Promise<VerifyResetOtpResult>;
   resetPassword: (
@@ -90,17 +77,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const pathname = usePathname();
   const [user, setUserState] = useState<AuthUser | null>(null);
   const [avatarUrl, setAvatarUrlState] = useState<string | null>(null);
-  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<
-    string | null
-  >(null);
   const [passwordResetEmail, setPasswordResetEmail] = useState<string | null>(
     null,
   );
   const [isChecking, setIsChecking] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isSigningUp, setIsSigningUp] = useState(false);
-  const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
-  const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [isRequestingPasswordReset, setIsRequestingPasswordReset] =
     useState(false);
   const [isVerifyingResetOtp, setIsVerifyingResetOtp] = useState(false);
@@ -303,13 +284,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         void refreshAvatar();
         return result;
       } catch (err: unknown) {
-        if (isEmailVerificationRequiredError(err)) {
-          setPendingVerificationEmail(getCachedVerificationEmail());
-          setError(null);
-        } else {
-          setError(getErrorMessage(err, "Login failed."));
-        }
-
+        setError(getErrorMessage(err, "Login failed."));
         throw err;
       } finally {
         setIsLoggingIn(false);
@@ -317,59 +292,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     },
     [enforceRateLimit, getErrorMessage, refreshAvatar, setCurrentUser, setError],
   );
-
-  const signUp = useCallback(
-    async (payload: SignUpPayload) => {
-      enforceRateLimit();
-      setIsSigningUp(true);
-      setError(null);
-
-      try {
-        const result = await authClient.signUp(payload);
-        setPendingVerificationEmail(getCachedVerificationEmail());
-        return result;
-      } catch (err: unknown) {
-        setError(getErrorMessage(err, "Account creation failed."));
-        throw err;
-      } finally {
-        setIsSigningUp(false);
-      }
-    },
-    [enforceRateLimit, getErrorMessage, setError],
-  );
-
-  const verifyEmail = useCallback(
-    async (otp: string) => {
-      setIsVerifyingEmail(true);
-      setError(null);
-
-      try {
-        const result = await authClient.verifyEmail(otp);
-        setPendingVerificationEmail(null);
-        return result;
-      } catch (err: unknown) {
-        setError(getErrorMessage(err, "Email verification failed."));
-        throw err;
-      } finally {
-        setIsVerifyingEmail(false);
-      }
-    },
-    [getErrorMessage, setError],
-  );
-
-  const resendVerificationOtp = useCallback(async () => {
-    setIsResendingVerification(true);
-    setError(null);
-
-    try {
-      return await authClient.resendVerificationOtp();
-    } catch (err: unknown) {
-      setError(getErrorMessage(err, "Could not resend verification code."));
-      throw err;
-    } finally {
-      setIsResendingVerification(false);
-    }
-  }, [getErrorMessage, setError]);
 
   const forgotPassword = useCallback(
     async (email: string) => {
@@ -449,22 +371,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     () => ({
       user,
       avatarUrl,
-      pendingVerificationEmail,
       passwordResetEmail,
       isAuthenticated,
       isChecking,
       isLoggingIn,
-      isSigningUp,
-      isVerifyingEmail,
-      isResendingVerification,
       isRequestingPasswordReset,
       isVerifyingResetOtp,
       isResettingPassword,
       error,
       login,
-      signUp,
-      verifyEmail,
-      resendVerificationOtp,
       forgotPassword,
       verifyResetOtp,
       resetPassword,
@@ -479,22 +394,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     [
       user,
       avatarUrl,
-      pendingVerificationEmail,
       passwordResetEmail,
       isAuthenticated,
       isChecking,
       isLoggingIn,
-      isSigningUp,
-      isVerifyingEmail,
-      isResendingVerification,
       isRequestingPasswordReset,
       isVerifyingResetOtp,
       isResettingPassword,
       error,
       login,
-      signUp,
-      verifyEmail,
-      resendVerificationOtp,
       forgotPassword,
       verifyResetOtp,
       resetPassword,

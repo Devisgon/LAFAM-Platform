@@ -60,32 +60,6 @@ export type LoginResult = {
   session: AuthSession;
 };
 
-export type SignUpPayload = {
-  email: string;
-  phone?: string | null;
-  full_name: string;
-  password: string;
-  confirm_password: string;
-  timezone?: string | null;
-  device_id?: string | null;
-  device_name?: string | null;
-};
-
-export type SignUpResult = {
-  user: AuthUser;
-  email_verification_required: boolean;
-};
-
-export type VerifyEmailResult = {
-  user: AuthUser;
-  verified: true;
-};
-
-export type ResendVerificationResult = {
-  email: string;
-  sent: true;
-};
-
 export type ForgotPasswordResult = {
   email: string;
   reset_otp_sent: true;
@@ -143,7 +117,6 @@ export class AuthClientError extends Error {
   }
 }
 
-const EMAIL_NOT_VERIFIED_ERROR_CODE = "EMAIL_NOT_VERIFIED";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 if (!API_BASE_URL) {
@@ -157,7 +130,6 @@ const AUTH_COOKIE_NAMES = {
   sessionId: "lafam_session_id",
 } as const;
 
-const PENDING_VERIFICATION_EMAIL_KEY = "lafam_pending_verification_email";
 const PASSWORD_RESET_EMAIL_KEY = "lafam_password_reset_email";
 const PASSWORD_RESET_TOKEN_KEY = "lafam_password_reset_token";
 const AUTH_DISPLAY_USER_KEY = "lafam_current_user";
@@ -388,27 +360,6 @@ export function clearCachedAuthProfile(): void {
   clearCachedAvatarUrl();
 }
 
-export function cachePendingVerificationEmail(email: string): void {
-  if (!isBrowser()) return;
-
-  window.sessionStorage.setItem(
-    PENDING_VERIFICATION_EMAIL_KEY,
-    normalizeEmail(email),
-  );
-}
-
-export function getCachedVerificationEmail(): string | null {
-  if (!isBrowser()) return null;
-
-  return window.sessionStorage.getItem(PENDING_VERIFICATION_EMAIL_KEY);
-}
-
-export function clearCachedVerificationEmail(): void {
-  if (!isBrowser()) return;
-
-  window.sessionStorage.removeItem(PENDING_VERIFICATION_EMAIL_KEY);
-}
-
 function cachePasswordResetEmail(email: string): void {
   if (!isBrowser()) return;
 
@@ -457,25 +408,36 @@ async function readJsonSafe(response: Response): Promise<unknown> {
   }
 }
 
-function getApiErrorCode(payload: unknown): string | null {
-  const error = (payload as { error?: unknown } | null)?.error;
+function readApiErrorMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
 
-  if (error && typeof error === "object") {
-    const code = (error as { code?: unknown }).code;
-    return typeof code === "string" ? code : null;
+  const error = (payload as { error?: unknown }).error;
+
+  if (!error || typeof error !== "object") return null;
+
+  const details = (error as { details?: unknown }).details;
+
+  if (details && typeof details === "object") {
+    const validationErrors = (details as { validationErrors?: unknown })
+      .validationErrors;
+
+    if (Array.isArray(validationErrors)) {
+      const firstError = validationErrors.find(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
+      );
+
+      if (firstError) {
+        return firstError;
+      }
+    }
   }
 
-  return null;
-}
+  const message = (error as { message?: unknown }).message;
 
-export function isEmailVerificationRequiredError(error: unknown): boolean {
-  if (!(error instanceof AuthClientError)) return false;
-
-  const code = getApiErrorCode(error.payload);
-
-  if (code === EMAIL_NOT_VERIFIED_ERROR_CODE) return true;
-
-  return error.message.toLowerCase().includes("verify your email");
+  return typeof message === "string" && message.trim().length > 0
+    ? message
+    : null;
 }
 
 export function getDashboardPath(role?: string | null): string {
@@ -504,17 +466,15 @@ function canRoleAccessPath(
   const isAdmin = role === "super_admin" || role === "admin";
 
   if (!role) return false;
-  if (
-    isRouteMatch(path, "/calendar") ||
-    isRouteMatch(path, "/staff") ||
-    isRouteMatch(path, "/users")
-  ) return isAdmin;
-  return (
+  return isAdmin && (
     isRouteMatch(path, "/dashboard") ||
     isRouteMatch(path, "/bookings") ||
+    isRouteMatch(path, "/calendar") ||
     isRouteMatch(path, "/payments") ||
     isRouteMatch(path, "/services/pilates") ||
     isRouteMatch(path, "/settings") ||
+    isRouteMatch(path, "/staff") ||
+    isRouteMatch(path, "/users") ||
     isRouteMatch(path, "/wallet")
   );
 }
@@ -660,7 +620,7 @@ export async function authFetch<T>(
   if (!response.ok) {
     const safeError = toAppError(undefined, response.status);
     throw new AuthClientError(
-      safeError.message,
+      readApiErrorMessage(payload) ?? safeError.message,
       response.status,
       payload,
     );
@@ -758,12 +718,12 @@ export const authClient = {
     return response.data;
   },
 
-  async signUp(payload: SignUpPayload): Promise<SignUpResult> {
+  async login(payload: LoginPayload): Promise<LoginResult> {
     const deviceInfo = getBrowserDeviceInfo();
     const email = normalizeEmail(payload.email);
 
-    const response = await authFetch<ApiResponse<SignUpResult>>(
-      "/auth/sign-up",
+    const response = await authFetch<ApiResponse<LoginApiData>>(
+      "/auth/login",
       {
         method: "POST",
         body: JSON.stringify({
@@ -774,84 +734,6 @@ export const authClient = {
       },
       false,
     );
-
-    cachePendingVerificationEmail(email);
-    return response.data;
-  },
-
-  async verifyEmail(otp: string): Promise<VerifyEmailResult> {
-    const email = getCachedVerificationEmail();
-
-    if (!email) {
-      throw new AuthClientError(
-        "Your verification email is missing. Please create your account again.",
-        400,
-        null,
-      );
-    }
-
-    const response = await authFetch<ApiResponse<VerifyEmailResult>>(
-      "/verify-email",
-      {
-        method: "POST",
-        body: JSON.stringify({ email, otp }),
-      },
-      false,
-    );
-
-    clearCachedVerificationEmail();
-    return response.data;
-  },
-
-  async resendVerificationOtp(): Promise<ResendVerificationResult> {
-    const email = getCachedVerificationEmail();
-
-    if (!email) {
-      throw new AuthClientError(
-        "Your verification email is missing. Please create your account again.",
-        400,
-        null,
-      );
-    }
-
-    const response = await authFetch<ApiResponse<ResendVerificationResult>>(
-      "/auth/resend-verification-otp",
-      {
-        method: "POST",
-        body: JSON.stringify({ email }),
-      },
-      false,
-    );
-
-    return response.data;
-  },
-
-  async login(payload: LoginPayload): Promise<LoginResult> {
-    const deviceInfo = getBrowserDeviceInfo();
-    const email = normalizeEmail(payload.email);
-
-    let response: ApiResponse<LoginApiData>;
-
-    try {
-      response = await authFetch<ApiResponse<LoginApiData>>(
-        "/auth/login",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            ...deviceInfo,
-            ...payload,
-            email,
-          }),
-        },
-        false,
-      );
-    } catch (error: unknown) {
-      if (isEmailVerificationRequiredError(error)) {
-        cachePendingVerificationEmail(email);
-      }
-
-      throw error;
-    }
 
     const cookiesSet = setAuthCookies({
       access_token: response.data.access_token,

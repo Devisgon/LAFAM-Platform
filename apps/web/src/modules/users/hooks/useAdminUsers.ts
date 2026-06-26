@@ -49,6 +49,16 @@ export function useAdminUsers(filters: AdminUserFilters) {
     return () => window.clearTimeout(load);
   }, [loadUsers]);
 
+  useEffect(() => {
+    const reloadUsers = () => {
+      void loadUsers().catch(() => undefined);
+    };
+
+    window.addEventListener("lafam:users:changed", reloadUsers);
+
+    return () => window.removeEventListener("lafam:users:changed", reloadUsers);
+  }, [loadUsers]);
+
   const mutate = useCallback(
     async (
       action: "deactivate" | "reactivate",

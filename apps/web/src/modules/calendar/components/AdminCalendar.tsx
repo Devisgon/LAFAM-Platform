@@ -237,7 +237,7 @@ export function AdminCalendar() {
   const eventsByDate = useMemo(() => {
     const grouped = new Map<string, AdminBookingCalendarEvent[]>();
 
-    events.forEach((event) => {
+    events.forEach((event: AdminBookingCalendarEvent) => {
       const list = grouped.get(event.date) ?? [];
       list.push(event);
       grouped.set(event.date, list);

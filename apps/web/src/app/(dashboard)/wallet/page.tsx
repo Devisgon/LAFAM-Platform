@@ -1,3 +1,5 @@
-import { AdminWalletManager, UserWalletScreen } from "@/modules/wallet";
-import { getServerSession, isAdminRole } from "@/lib/auth/session";
-export default async function WalletPage() { const session = await getServerSession(); return isAdminRole(session?.role) ? <AdminWalletManager /> : <UserWalletScreen />; }
+import { AdminWalletManager } from "@/modules/wallet";
+
+export default function WalletPage() {
+  return <AdminWalletManager />;
+}

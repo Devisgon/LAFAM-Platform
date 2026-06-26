@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AdminCustomerManager } from "@/modules/customers";
 import { AdminUserManager } from "@/modules/users";
 import { ProfileSettings } from "./ProfileSettings";
 
@@ -40,18 +41,15 @@ export function AdminSettings() {
       </aside>
 
       <section
-        className={
-          view === "profile"
-            ? "min-w-0"
-            : "min-w-0 rounded-xl border border-background-secondary bg-card-bg-primary p-5 shadow-sm lg:p-6"
-        }
+        className="min-w-0"
       >
         {view === "profile" ? (
           <ProfileSettings />
         ) : view === "users" ? (
-          <>
+          <div className="grid gap-6">
+            <AdminCustomerManager />
             <AdminUserManager />
-          </>
+          </div>
         ) : (
           <></>
         )}

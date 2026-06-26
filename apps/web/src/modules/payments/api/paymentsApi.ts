@@ -1,5 +1,4 @@
 import { type ApiResponse, authFetch } from "@/modules/auth";
-import { ENDPOINTS } from "@/lib/api/endpoints";
 
 export type PaymentCurrency = "KWD";
 export type PaymentTargetType = "booking" | "private_booking" | "wallet_top_up";
@@ -163,91 +162,6 @@ export type RefundPaymentPayload = {
   refund_amount?: number;
 };
 
-export type CustomerCheckoutPaymentPayload = {
-  booking_id?: string;
-  idempotency_key?: string;
-  payment_method: PaymentMethod;
-  private_booking_id?: string;
-  target_type: PaymentTargetType;
-};
-
-export type CustomerPaymentSortField =
-  | "created_at"
-  | "updated_at"
-  | "final_amount"
-  | "paid_at";
-
-export type CustomerPaymentTransactionSortField = "created_at" | "processed_at";
-
-export type CustomerPaymentFilters = {
-  from_date?: string;
-  limit: number;
-  offset: number;
-  sort_by: CustomerPaymentSortField;
-  sort_direction: PaymentSortDirection;
-  status?: PaymentStatus;
-  target_type?: PaymentTargetType;
-  to_date?: string;
-};
-
-export type CustomerPaymentTransactionFilters = {
-  limit: number;
-  offset: number;
-  sort_by: CustomerPaymentTransactionSortField;
-  sort_direction: PaymentSortDirection;
-  transaction_status?: PaymentTransactionStatus;
-  transaction_type?: PaymentTransactionType;
-};
-
-export type CustomerWalletAccount = {
-  available_balance: number;
-  created_at: string;
-  currency: PaymentCurrency;
-  id: string;
-  pending_balance: number;
-  realtime_version: number;
-  status: string;
-  updated_at: string;
-  user_id: string;
-};
-
-export type CustomerPaymentReceipt = {
-  amount: number;
-  currency: PaymentCurrency;
-  discount_amount: number;
-  final_amount: number;
-  paid_at: string | null;
-  payment_id: string;
-  payment_method: PaymentMethod;
-  payment_number: string;
-  payment_provider: PaymentProvider;
-  receipt_number: string | null;
-  target_type: PaymentTargetType;
-  user_id: string;
-};
-
-export type CustomerCheckoutPaymentResult = {
-  payment: PaymentSummary;
-  redirect_url: string | null;
-  requires_redirect: boolean;
-  wallet_account?: CustomerWalletAccount | null;
-};
-
-export type CustomerVerifyPaymentResult = {
-  payment: PaymentSummary;
-  receipt?: CustomerPaymentReceipt | null;
-};
-
-export type CustomerPaymentDetail = PaymentSummary &
-  Partial<Omit<PaymentDetail, keyof PaymentSummary>> & {
-    receipt?: CustomerPaymentReceipt | null;
-  };
-
-export type CustomerPaymentListResult =
-  PaymentPaginatedResult<PaymentSummary>;
-export type CustomerPaymentTransactionListResult =
-  PaymentPaginatedResult<PaymentTransactionSummary>;
-
 type PaymentListResponse = {
   payments: AdminPaymentListResult;
 };
@@ -263,18 +177,6 @@ type PaymentRefundResponse = {
 type ExpireUnpaidResponse = {
   expired_payments: PaymentSummary[];
 };
-
-type CustomerCheckoutPaymentResponse = CustomerCheckoutPaymentResult;
-type CustomerPaymentDetailResponse = {
-  payment: CustomerPaymentDetail;
-};
-type CustomerPaymentListResponse = {
-  payments: CustomerPaymentListResult;
-};
-type CustomerPaymentTransactionListResponse = {
-  transactions: CustomerPaymentTransactionListResult;
-};
-type CustomerVerifyPaymentResponse = CustomerVerifyPaymentResult;
 
 function appendOptionalParams(
   params: URLSearchParams,
@@ -312,42 +214,6 @@ function buildPaymentListQuery(filters: AdminPaymentFilters): string {
 
 function buildPaymentTransactionQuery(
   filters: AdminPaymentTransactionFilters,
-): string {
-  const params = new URLSearchParams({
-    limit: String(filters.limit),
-    offset: String(filters.offset),
-    sort_by: filters.sort_by,
-    sort_direction: filters.sort_direction,
-  });
-
-  appendOptionalParams(params, [
-    ["transaction_type", filters.transaction_type],
-    ["transaction_status", filters.transaction_status],
-  ]);
-
-  return params.toString();
-}
-
-function buildCustomerPaymentListQuery(filters: CustomerPaymentFilters): string {
-  const params = new URLSearchParams({
-    limit: String(filters.limit),
-    offset: String(filters.offset),
-    sort_by: filters.sort_by,
-    sort_direction: filters.sort_direction,
-  });
-
-  appendOptionalParams(params, [
-    ["target_type", filters.target_type],
-    ["status", filters.status],
-    ["from_date", filters.from_date],
-    ["to_date", filters.to_date],
-  ]);
-
-  return params.toString();
-}
-
-function buildCustomerPaymentTransactionQuery(
-  filters: CustomerPaymentTransactionFilters,
 ): string {
   const params = new URLSearchParams({
     limit: String(filters.limit),
@@ -419,59 +285,5 @@ export const adminPaymentsClient = {
     );
 
     return response.data.payment;
-  },
-};
-
-export const customerPaymentsClient = {
-  async checkout(
-    payload: CustomerCheckoutPaymentPayload,
-  ): Promise<CustomerCheckoutPaymentResult> {
-    const response = await authFetch<ApiResponse<CustomerCheckoutPaymentResponse>>(
-      ENDPOINTS.CUSTOMER_PAYMENTS.CHECKOUT,
-      { method: "POST", body: JSON.stringify(payload) },
-    );
-
-    return response.data;
-  },
-
-  async get(paymentId: string): Promise<CustomerPaymentDetail> {
-    const response = await authFetch<ApiResponse<CustomerPaymentDetailResponse>>(
-      ENDPOINTS.CUSTOMER_PAYMENTS.DETAIL(paymentId),
-      { method: "GET" },
-    );
-
-    return response.data.payment;
-  },
-
-  async list(filters: CustomerPaymentFilters): Promise<CustomerPaymentListResult> {
-    const response = await authFetch<ApiResponse<CustomerPaymentListResponse>>(
-      `${ENDPOINTS.CUSTOMER_PAYMENTS.LIST}?${buildCustomerPaymentListQuery(filters)}`,
-      { method: "GET" },
-    );
-
-    return response.data.payments;
-  },
-
-  async listTransactions(
-    paymentId: string,
-    filters: CustomerPaymentTransactionFilters,
-  ): Promise<CustomerPaymentTransactionListResult> {
-    const response = await authFetch<
-      ApiResponse<CustomerPaymentTransactionListResponse>
-    >(
-      `${ENDPOINTS.CUSTOMER_PAYMENTS.TRANSACTIONS(paymentId)}?${buildCustomerPaymentTransactionQuery(filters)}`,
-      { method: "GET" },
-    );
-
-    return response.data.transactions;
-  },
-
-  async verify(paymentId: string): Promise<CustomerVerifyPaymentResult> {
-    const response = await authFetch<ApiResponse<CustomerVerifyPaymentResponse>>(
-      ENDPOINTS.CUSTOMER_PAYMENTS.VERIFY(paymentId),
-      { method: "POST" },
-    );
-
-    return response.data;
   },
 };
