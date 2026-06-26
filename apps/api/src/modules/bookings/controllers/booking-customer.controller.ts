@@ -4,7 +4,9 @@
  *
  * Role:
  * - Exposes protected customer Booking Module endpoints.
- * - Allows authenticated customers to create Pilates bookings.
+ * - Allows authenticated customers to create single Pilates bookings.
+ * - Allows authenticated customers to create bulk Pilates booking orders.
+ * - Allows authenticated customers to read their own booking orders.
  * - Allows authenticated customers to list and read their own bookings.
  * - Allows authenticated customers to cancel and reschedule their own bookings.
  * - Allows authenticated customers to list and cancel their own waitlist entries.
@@ -16,6 +18,7 @@
  * - Controllers must not trust user_id from request body or query params.
  * - BookingCustomerService must receive the authenticated app user id from Auth context.
  * - Controllers must stay thin and delegate business logic to services.
+ * - Controllers must not calculate booking capacity, payment state, or order totals.
  * - Controllers must not log raw access tokens, refresh tokens, passwords, OTPs, or token hashes.
  */
 
@@ -47,6 +50,7 @@ import { BookingCustomerService } from '../application/booking-customer.service'
 import { PrivateBookingAvailabilityService } from '../application/private-booking-availability.service';
 import {
   BOOKING_CUSTOMER_ROUTE_PREFIX,
+  BOOKING_ORDER_ID_PARAM_NAME,
   PRIVATE_BOOKING_ID_PARAM_NAME,
   PRIVATE_BOOKING_TRAINER_ID_PARAM_NAME,
 } from '../constants/booking.constants';
@@ -56,21 +60,24 @@ import {
 } from '../dto/booking-param.dto';
 import { CancelBookingDto } from '../dto/cancel-booking.dto';
 import { CreateBookingDto } from '../dto/create-booking.dto';
-import { ListBookingsQueryDto } from '../dto/list-bookings-query.dto';
-import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
+import { CreateBulkBookingDto } from '../dto/create-bulk-booking.dto';
 import { CreatePrivateBookingDto } from '../dto/create-private-booking.dto';
+import { ListBookingsQueryDto } from '../dto/list-bookings-query.dto';
 import { ListPrivateBookingsQueryDto } from '../dto/list-private-bookings-query.dto';
 import { PrivateAvailabilityQueryDto } from '../dto/private-availability-query.dto';
 import {
   PrivateBookingParamDto,
   PrivateBookingTrainerParamDto,
 } from '../dto/private-booking-param.dto';
+import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
 import { ReschedulePrivateBookingDto } from '../dto/reschedule-private-booking.dto';
 import type {
+  BookingBulkCreateResult,
   BookingCancelResult,
   BookingCreateResult,
   BookingDetail,
   BookingListResult,
+  BookingOrderDetail,
   BookingRescheduleResult,
   BookingWaitlistListItem,
   BookingWaitlistListResult,
@@ -121,6 +128,24 @@ export class BookingCustomerController {
     return createApiSuccessResponse({
       status: HttpStatus.CREATED,
       message: 'Booking request processed successfully.',
+      data,
+    });
+  }
+
+  @Post('bulk')
+  @HttpCode(HttpStatus.CREATED)
+  async createBulkBooking(
+    @CurrentAuth() auth: AuthInternalContext | undefined,
+    @Body() body: CreateBulkBookingDto,
+  ): Promise<ApiSuccessResponse<BookingBulkCreateResult>> {
+    const data = await this.bookingCustomerService.createBulkBooking(
+      resolveAuthenticatedCustomerId(auth),
+      body,
+    );
+
+    return createApiSuccessResponse({
+      status: HttpStatus.CREATED,
+      message: 'Bulk booking order created successfully.',
       data,
     });
   }
@@ -284,6 +309,23 @@ export class BookingCustomerController {
     return createApiSuccessResponse({
       status: HttpStatus.OK,
       message: 'Waitlist entry cancelled successfully.',
+      data,
+    });
+  }
+
+  @Get(`orders/:${BOOKING_ORDER_ID_PARAM_NAME}`)
+  async getBookingOrderById(
+    @CurrentAuth() auth: AuthInternalContext | undefined,
+    @Param(BOOKING_ORDER_ID_PARAM_NAME) bookingOrderId: string,
+  ): Promise<ApiSuccessResponse<BookingOrderDetail>> {
+    const data = await this.bookingCustomerService.getBookingOrderById(
+      resolveAuthenticatedCustomerId(auth),
+      bookingOrderId,
+    );
+
+    return createApiSuccessResponse({
+      status: HttpStatus.OK,
+      message: 'Booking order retrieved successfully.',
       data,
     });
   }

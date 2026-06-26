@@ -4,7 +4,7 @@
  *
  * Role:
  * - Defines Customer Module route prefixes, validation limits, customer auth-status filters,
- *   admin management roles, pagination defaults, metadata keys, and safe lookup fields.
+ *   admin/staff/trainer management roles, pagination defaults, metadata keys, and safe lookup fields.
  * - Keeps customer DTOs, repositories, services, controllers, and Swagger aligned.
  *
  * Important:
@@ -27,7 +27,9 @@ import {
 import {
   AUTH_ADMIN_ROLE,
   AUTH_CUSTOMER_ROLE,
+  AUTH_STAFF_ROLE,
   AUTH_SUPER_ADMIN_ROLE,
+  AUTH_TRAINER_ROLE,
   type AuthUserRole,
 } from '../../auth/constants/auth-role.constants';
 
@@ -42,12 +44,14 @@ export const CUSTOMER_APP_ROLE = AUTH_CUSTOMER_ROLE satisfies CustomerAppRole;
 
 export type CustomerAdminManagementRole = Extract<
   AuthUserRole,
-  'admin' | 'super_admin'
+  'admin' | 'super_admin' | 'staff' | 'trainer'
 >;
 
 export const CUSTOMER_ADMIN_MANAGEMENT_ROLES = [
   AUTH_ADMIN_ROLE,
   AUTH_SUPER_ADMIN_ROLE,
+  AUTH_STAFF_ROLE,
+  AUTH_TRAINER_ROLE,
 ] as const satisfies readonly CustomerAdminManagementRole[];
 
 export const CUSTOMER_AUTH_STATUSES = [

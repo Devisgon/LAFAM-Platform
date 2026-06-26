@@ -28,6 +28,9 @@ import type {
   BookingCalendarSortField,
   BookingDomainEventName,
   BookingHistoryAction,
+  BookingOrderItemStatus,
+  BookingOrderRpcActionResult,
+  BookingOrderStatus,
   BookingPaymentConfirmationAllowedStatus,
   BookingPaymentConfirmingStatus,
   BookingPaymentExpirableStatus,
@@ -54,14 +57,19 @@ import type {
   AppUserRow,
   BookingDomainEventRow,
   BookingHistoryRow,
+  BookingOrderItemRow,
+  BookingOrderRow,
   BookingRow,
   BookingWaitlistRow,
   CancelPilatesBookingAtomicRpcRow,
   CancelPrivateTrainerBookingAtomicRpcRow,
+  ConfirmBookingOrderPaidAtomicRpcRow,
+  CreateBookingOrderAtomicRpcRow,
   CreatePilatesBookingAtomicRpcRow,
   CreatePrivateTrainerBookingAtomicRpcRow,
   DatabaseJsonObject,
   ExpireBookingHoldsAtomicRpcRow,
+  ExpireBookingOrderAtomicRpcRow,
   ExpirePrivateTrainerBookingHoldsAtomicRpcRow,
   PilatesClassRow,
   PilatesClassScheduleRow,
@@ -73,6 +81,9 @@ import type {
 } from '../../../database/database.types';
 
 export type BookingId = string;
+export type BookingOrderId = string;
+export type BookingOrderNumber = string;
+export type BookingOrderItemId = string;
 export type BookingNumber = string;
 export type BookingWaitlistId = string;
 export type BookingScheduleId = string;
@@ -186,7 +197,10 @@ export interface BookingAvailabilitySnapshot {
   readonly schedule_realtime_version: number;
 }
 
-export type BookingPaymentTargetKind = 'booking' | 'private_booking';
+export type BookingPaymentTargetKind =
+  | 'booking'
+  | 'private_booking'
+  | 'booking_order';
 
 export type BookingPaymentMethodSnapshot = string;
 
@@ -211,6 +225,7 @@ export interface BookingPaymentSummary {
   readonly target_kind: BookingPaymentTargetKind;
   readonly booking_id: BookingId | null;
   readonly private_booking_id: PrivateBookingId | null;
+  readonly booking_order_id: BookingOrderId | null;
   readonly amount: number;
   readonly discount_amount: number;
   readonly final_amount: number;
@@ -251,6 +266,7 @@ export interface BookingPaymentStatusTransitionContext {
   readonly target_kind: BookingPaymentTargetKind;
   readonly booking_id: BookingId | null;
   readonly private_booking_id: PrivateBookingId | null;
+  readonly booking_order_id: BookingOrderId | null;
   readonly from_booking_status: BookingStatus | null;
   readonly to_booking_status: BookingStatus | null;
   readonly from_payment_status: BookingPaymentStatus | null;
@@ -349,6 +365,7 @@ export interface BookingSafeBooking {
   readonly schedule_id: string;
   readonly class_id: string;
   readonly trainer_staff_profile_id: string | null;
+  readonly booking_order_id: BookingOrderId | null;
   readonly status: BookingStatus;
   readonly source: BookingSource;
   readonly payment_status: BookingPaymentStatus;
@@ -431,6 +448,58 @@ export interface BookingWaitlistListItem extends BookingWaitlistEntry {
   readonly trainer: BookingTrainerSnapshot | null;
 }
 
+export interface BookingOrderItemSummary {
+  readonly id: BookingOrderItemId;
+  readonly booking_order_id: BookingOrderId;
+  readonly booking_id: BookingId;
+  readonly schedule_id: BookingScheduleId;
+  readonly class_id: BookingClassId;
+  readonly trainer_staff_profile_id: BookingStaffProfileId | null;
+  readonly price_amount: number;
+  readonly currency: BookingCurrencyCode;
+  readonly status: BookingOrderItemStatus;
+  readonly created_at: BookingIsoDateTimeString;
+  readonly booking?: BookingListItem | null;
+  readonly class?: BookingClassSnapshot | null;
+  readonly schedule?: BookingScheduleSnapshot | null;
+  readonly trainer?: BookingTrainerSnapshot | null;
+}
+
+export interface BookingOrderSummary {
+  readonly id: BookingOrderId;
+  readonly order_number: BookingOrderNumber;
+  readonly customer_user_id: BookingUserId;
+  readonly status: BookingOrderStatus;
+  readonly payment_status: BookingPaymentStatus;
+  readonly payment_required: boolean;
+  readonly total_amount: number;
+  readonly currency: BookingCurrencyCode;
+  readonly booking_count: number;
+  readonly checkout_required: boolean;
+  readonly idempotency_key: BookingIdempotencyKey | null;
+  readonly created_by_user_id: string | null;
+  readonly created_by_admin_id: string | null;
+  readonly created_by_staff_profile_id: BookingStaffProfileId | null;
+  readonly created_by_role: string | null;
+  readonly admin_notes: string | null;
+  readonly metadata: DatabaseJsonObject;
+  readonly expires_at: BookingIsoDateTimeString;
+  readonly paid_at: BookingIsoDateTimeString | null;
+  readonly expired_at: BookingIsoDateTimeString | null;
+  readonly cancelled_at: BookingIsoDateTimeString | null;
+  readonly refunded_at: BookingIsoDateTimeString | null;
+  readonly created_at: BookingIsoDateTimeString;
+  readonly updated_at: BookingIsoDateTimeString;
+  readonly realtime_version: number;
+  readonly payment_state?: BookingPaymentStateSnapshot | null;
+  readonly latest_payment?: BookingPaymentSummary | null;
+  readonly customer?: BookingSafeUserSnapshot | null;
+}
+
+export interface BookingOrderDetail extends BookingOrderSummary {
+  readonly items: readonly BookingOrderItemSummary[];
+}
+
 export interface BookingCreateResult {
   readonly result: Extract<
     BookingRpcActionResult,
@@ -441,6 +510,17 @@ export interface BookingCreateResult {
   readonly payment_state?: BookingPaymentStateSnapshot | null;
   readonly checkout_required?: boolean;
   readonly availability: BookingAvailabilitySnapshot;
+}
+
+export interface BookingBulkCreateResult {
+  readonly result: BookingOrderRpcActionResult;
+  readonly booking_order: BookingOrderSummary;
+  readonly items: readonly BookingOrderItemSummary[];
+  readonly checkout_required: boolean;
+}
+
+export interface BookingOrderLookupResult {
+  readonly booking_order: BookingOrderDetail;
 }
 
 export interface BookingCancelResult {
@@ -498,6 +578,13 @@ export interface PrivateBookingListResult {
 
 export interface BookingListResult {
   readonly bookings: readonly BookingListItem[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface BookingOrderListResult {
+  readonly booking_orders: readonly BookingOrderSummary[];
   readonly total: number;
   readonly limit: number;
   readonly offset: number;
@@ -580,6 +667,24 @@ export interface BookingCreatePayload {
   readonly idempotency_key: string | null;
   readonly created_by_admin_id: string | null;
   readonly source: BookingSource;
+}
+
+export interface BookingBulkCreatePayload {
+  readonly customer_user_id: BookingUserId;
+  readonly schedule_ids: readonly BookingScheduleId[];
+  readonly idempotency_key: BookingIdempotencyKey | null;
+  readonly created_by_user_id: string | null;
+  readonly created_by_admin_id: string | null;
+  readonly created_by_staff_profile_id: BookingStaffProfileId | null;
+  readonly created_by_role: AuthUserRole;
+  readonly source: BookingSource;
+  readonly admin_notes: string | null;
+  readonly metadata: DatabaseJsonObject;
+}
+
+export interface BookingOrderLookupPayload {
+  readonly booking_order_id: BookingOrderId;
+  readonly customer_user_id: BookingUserId | null;
 }
 
 export interface BookingCancelPayload {
@@ -673,6 +778,29 @@ export interface BookingPaymentRefundPayload extends BookingPaymentUpdateBasePay
   readonly refunded_amount: number;
 }
 
+export interface BookingOrderPaymentConfirmPayload extends BookingPaymentUpdateBasePayload {
+  readonly booking_order_id: BookingOrderId;
+  readonly payment_status: Extract<BookingPaymentStatus, 'paid'>;
+}
+
+export interface BookingOrderPaymentFailPayload extends BookingPaymentUpdateBasePayload {
+  readonly booking_order_id: BookingOrderId;
+  readonly payment_status: Extract<BookingPaymentStatus, 'failed'>;
+  readonly failure_code: string | null;
+  readonly failure_message: string | null;
+}
+
+export interface BookingOrderPaymentExpirePayload extends BookingPaymentUpdateBasePayload {
+  readonly booking_order_id: BookingOrderId;
+  readonly payment_status: Extract<BookingPaymentStatus, 'expired'>;
+}
+
+export interface BookingOrderPaymentRefundPayload extends BookingPaymentUpdateBasePayload {
+  readonly booking_order_id: BookingOrderId;
+  readonly payment_status: Extract<BookingPaymentStatus, 'refunded'>;
+  readonly refunded_amount: number;
+}
+
 export interface PrivateBookingPaymentConfirmPayload extends BookingPaymentUpdateBasePayload {
   readonly private_booking_id: PrivateBookingId;
   readonly payment_status: Extract<BookingPaymentStatus, 'paid'>;
@@ -698,6 +826,7 @@ export interface PrivateBookingPaymentRefundPayload extends BookingPaymentUpdate
 
 export interface BookingCustomerListFilters {
   readonly user_id: string;
+  readonly booking_order_id: BookingOrderId | null;
   readonly status: BookingStatus | null;
   readonly from_date: BookingIsoDateString | null;
   readonly to_date: BookingIsoDateString | null;
@@ -715,6 +844,7 @@ export interface BookingAdminListFilters {
   readonly class_id: string | null;
   readonly trainer_staff_profile_id: string | null;
   readonly user_id: string | null;
+  readonly booking_order_id: BookingOrderId | null;
   readonly from_date: BookingIsoDateString | null;
   readonly to_date: BookingIsoDateString | null;
   readonly limit: number;
@@ -764,6 +894,46 @@ export interface BookingAdminWaitlistFilters {
   readonly offset: number;
 }
 
+export type BookingManagementScopeKind = 'full' | 'trainer_scoped';
+
+export interface BookingManagementScope {
+  readonly scope_kind: BookingManagementScopeKind;
+  readonly actor_user_id: string;
+  readonly actor_role: AuthUserRole;
+  readonly trainer_staff_profile_id: BookingStaffProfileId | null;
+}
+
+export interface BookingFullManagementScope extends BookingManagementScope {
+  readonly scope_kind: 'full';
+  readonly trainer_staff_profile_id: null;
+}
+
+export interface BookingTrainerScopedManagementScope extends BookingManagementScope {
+  readonly scope_kind: 'trainer_scoped';
+  readonly trainer_staff_profile_id: BookingStaffProfileId;
+}
+
+export type ResolvedBookingManagementScope =
+  | BookingFullManagementScope
+  | BookingTrainerScopedManagementScope;
+
+export interface BookingScheduleScopeSnapshot {
+  readonly schedule_id: BookingScheduleId;
+  readonly trainer_staff_profile_id: BookingStaffProfileId | null;
+}
+
+export interface BookingScopeCheckTarget {
+  readonly booking_id: BookingId | null;
+  readonly schedule_id: BookingScheduleId | null;
+  readonly trainer_staff_profile_id: BookingStaffProfileId | null;
+}
+
+export interface BookingWaitlistScopeCheckTarget {
+  readonly waitlist_id: BookingWaitlistId | null;
+  readonly schedule_id: BookingScheduleId | null;
+  readonly trainer_staff_profile_id: BookingStaffProfileId | null;
+}
+
 export interface BookingOverridePayload {
   readonly booking_id: string;
   readonly target_status: BookingStatus;
@@ -784,6 +954,8 @@ export interface BookingDomainEventPayload {
   readonly booking_id: string | null;
   readonly waitlist_id: string | null;
   readonly private_booking_id?: string | null;
+  readonly booking_order_id?: BookingOrderId | null;
+  readonly payment_id?: BookingPaymentId | null;
   readonly payload: DatabaseJsonObject;
 }
 
@@ -793,6 +965,8 @@ export interface BookingRealtimeEventEnvelope {
   readonly booking_id: string | null;
   readonly waitlist_id: string | null;
   readonly private_booking_id?: string | null;
+  readonly booking_order_id?: BookingOrderId | null;
+  readonly payment_id?: BookingPaymentId | null;
   readonly payload: DatabaseJsonObject;
   readonly created_at: BookingIsoDateTimeString;
 }
@@ -841,6 +1015,46 @@ export interface BookingExpiredEventPayload {
   readonly user_id: string;
   readonly schedule_id: string;
   readonly class_id: string;
+}
+export interface BookingOrderCreatedEventPayload {
+  readonly booking_order_id: BookingOrderId;
+  readonly order_number: BookingOrderNumber;
+  readonly customer_user_id: BookingUserId;
+  readonly booking_count: number;
+  readonly total_amount: number;
+  readonly currency: BookingCurrencyCode;
+}
+
+export interface BookingOrderItemCreatedEventPayload {
+  readonly booking_order_id: BookingOrderId;
+  readonly booking_id: BookingId;
+  readonly schedule_id: BookingScheduleId;
+  readonly status: BookingStatus;
+  readonly payment_status: BookingPaymentStatus;
+}
+
+export interface BookingOrderPaidEventPayload {
+  readonly booking_order_id: BookingOrderId;
+  readonly payment_id: BookingPaymentId | null;
+  readonly confirmed_booking_count: number;
+}
+
+export interface BookingOrderItemConfirmedEventPayload {
+  readonly booking_order_id: BookingOrderId;
+  readonly booking_id: BookingId;
+  readonly payment_id: BookingPaymentId | null;
+}
+
+export interface BookingOrderExpiredEventPayload {
+  readonly booking_order_id: BookingOrderId;
+  readonly payment_id: BookingPaymentId | null;
+  readonly expired_booking_count: number;
+}
+
+export interface BookingOrderItemExpiredEventPayload {
+  readonly booking_order_id: BookingOrderId;
+  readonly booking_id: BookingId;
+  readonly payment_id: BookingPaymentId | null;
 }
 
 export interface BookingWaitlistJoinedEventPayload {
@@ -915,8 +1129,10 @@ export interface BookingHydratedPaymentRow {
   readonly id: BookingPaymentId;
   readonly payment_number: BookingPaymentNumber;
   readonly receipt_number: BookingReceiptNumber | null;
+  readonly target_type: BookingPaymentTargetKind;
   readonly booking_id: BookingId | null;
   readonly private_booking_id: PrivateBookingId | null;
+  readonly booking_order_id: BookingOrderId | null;
   readonly amount: number;
   readonly discount_amount: number;
   readonly final_amount: number;
@@ -940,6 +1156,8 @@ export type BookingHydratedRow = BookingRow & {
   readonly app_users?: AppUserRow | null;
   readonly pilates_classes?: PilatesClassRow | null;
   readonly pilates_class_schedules?: PilatesClassScheduleRow | null;
+  readonly booking_orders?: BookingOrderRow | null;
+  readonly booking_order_items?: readonly BookingOrderItemRow[] | null;
   readonly payments?: readonly BookingHydratedPaymentRow[] | null;
   readonly staff_profiles?: {
     readonly id: string;
@@ -974,6 +1192,31 @@ export type PrivateBookingHydratedRow = PrivateTrainerBookingRow & {
     readonly app_users?: AppUserRow | null;
   } | null;
 };
+export type BookingOrderItemHydratedRow = BookingOrderItemRow & {
+  readonly bookings?: BookingHydratedRow | null;
+  readonly pilates_classes?: PilatesClassRow | null;
+  readonly pilates_class_schedules?: PilatesClassScheduleRow | null;
+  readonly staff_profiles?: {
+    readonly id: string;
+    readonly app_user_id: string;
+    readonly display_name: string;
+    readonly post_title: string;
+    readonly app_users?: AppUserRow | null;
+  } | null;
+};
+
+export type BookingOrderHydratedRow = BookingOrderRow & {
+  readonly app_users?: AppUserRow | null;
+  readonly booking_order_items?: readonly BookingOrderItemHydratedRow[] | null;
+  readonly payments?: readonly BookingHydratedPaymentRow[] | null;
+  readonly staff_profiles?: {
+    readonly id: string;
+    readonly app_user_id: string;
+    readonly display_name: string;
+    readonly post_title: string;
+    readonly app_users?: AppUserRow | null;
+  } | null;
+};
 
 export type BookingHistoryHydratedRow = BookingHistoryRow;
 
@@ -989,6 +1232,12 @@ export type BookingRescheduleAtomicRpcRow =
   ReschedulePilatesBookingAtomicRpcRow;
 
 export type BookingExpireHoldsRpcRow = ExpireBookingHoldsAtomicRpcRow;
+export type BookingOrderCreateAtomicRpcRow = CreateBookingOrderAtomicRpcRow;
+
+export type BookingOrderConfirmPaidAtomicRpcRow =
+  ConfirmBookingOrderPaidAtomicRpcRow;
+
+export type BookingOrderExpireAtomicRpcRow = ExpireBookingOrderAtomicRpcRow;
 
 export type PrivateBookingCreateAtomicRpcRow =
   CreatePrivateTrainerBookingAtomicRpcRow;
@@ -1003,6 +1252,9 @@ export type PrivateBookingExpireHoldsRpcRow =
   ExpirePrivateTrainerBookingHoldsAtomicRpcRow;
 
 export type BookingDomainEventRecord = BookingDomainEventRow;
+export type BookingOrderRecord = BookingOrderRow;
+
+export type BookingOrderItemRecord = BookingOrderItemRow;
 
 export type PrivateBookingRecord = PrivateTrainerBookingRow;
 
@@ -1022,6 +1274,17 @@ export interface BookingRepositoryRescheduleAtomicResult {
 
 export interface BookingRepositoryExpireHoldsResult {
   readonly expired: readonly BookingExpireHoldsRpcRow[];
+}
+export interface BookingRepositoryCreateOrderAtomicResult {
+  readonly rpc: BookingOrderCreateAtomicRpcRow;
+}
+
+export interface BookingRepositoryConfirmOrderPaidResult {
+  readonly rpc: BookingOrderConfirmPaidAtomicRpcRow;
+}
+
+export interface BookingRepositoryExpireOrderResult {
+  readonly rpc: BookingOrderExpireAtomicRpcRow;
 }
 
 export interface PrivateBookingRepositoryCreateAtomicResult {
@@ -1062,6 +1325,19 @@ export interface BookingRepositoryWaitlistListLookup {
 export interface BookingRepositoryAvailabilityLookup {
   readonly availability: BookingAvailabilityRpcRow | null;
 }
+export interface BookingRepositoryOrderLookup {
+  readonly booking_order: BookingOrderHydratedRow | null;
+}
+
+export interface BookingRepositoryOrderItemListLookup {
+  readonly rows: readonly BookingOrderItemHydratedRow[];
+  readonly total: number;
+}
+
+export interface BookingRepositoryOrderListLookup {
+  readonly rows: readonly BookingOrderHydratedRow[];
+  readonly total: number;
+}
 
 export interface BookingRepositoryPayableBookingLookup {
   readonly booking: BookingHydratedRow | null;
@@ -1074,6 +1350,10 @@ export interface PrivateBookingRepositoryPayableBookingLookup {
   readonly price: BookingPriceSnapshot | null;
   readonly latest_payment: BookingHydratedPaymentRow | null;
 }
+export interface BookingRepositoryPayableOrderLookup {
+  readonly booking_order: BookingOrderHydratedRow | null;
+  readonly latest_payment: BookingHydratedPaymentRow | null;
+}
 
 export interface BookingRepositoryPaymentStateLookup {
   readonly booking: BookingHydratedRow | null;
@@ -1084,6 +1364,10 @@ export interface PrivateBookingRepositoryPaymentStateLookup {
   readonly private_booking: PrivateBookingHydratedRow | null;
   readonly latest_payment: BookingHydratedPaymentRow | null;
 }
+export interface BookingOrderRepositoryPaymentStateLookup {
+  readonly booking_order: BookingOrderHydratedRow | null;
+  readonly latest_payment: BookingHydratedPaymentRow | null;
+}
 
 export interface BookingRepositoryPaymentStateUpdateResult {
   readonly booking: BookingHydratedRow;
@@ -1092,6 +1376,11 @@ export interface BookingRepositoryPaymentStateUpdateResult {
 
 export interface PrivateBookingRepositoryPaymentStateUpdateResult {
   readonly private_booking: PrivateBookingHydratedRow;
+  readonly payment_state: BookingPaymentStateSnapshot;
+}
+
+export interface BookingOrderRepositoryPaymentStateUpdateResult {
+  readonly booking_order: BookingOrderHydratedRow;
   readonly payment_state: BookingPaymentStateSnapshot;
 }
 

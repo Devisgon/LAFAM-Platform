@@ -4,14 +4,14 @@
  *
  * Role:
  * - Exposes protected admin Customer Module endpoints.
- * - Allows admins/super-admins to create, list, lookup, read, update,
- *   deactivate, reactivate, and soft-delete customer records.
+ * - Allows admins, super-admins, staff, and trainers to create, list, lookup,
+ *   read, update, deactivate, reactivate, and soft-delete customer records.
  * - Keeps controller logic thin and delegates business rules to CustomerAdminService.
  *
  * Important:
  * - AuthGuard resolves the Bearer token and attaches Auth context.
  * - ActiveSessionGuard rejects revoked, expired, deleted, deactivated, and invalid guest sessions.
- * - RolesGuard enforces route-level admin/super-admin access.
+ * - RolesGuard enforces route-level admin/staff/trainer customer-management access.
  * - CustomerAdminService performs Customer Module business validation.
  * - Controllers must not log raw access tokens, refresh tokens, passwords, OTPs, token hashes, or Civil ID values.
  */
@@ -37,7 +37,9 @@ import {
 } from '../../../common/responses/api-response';
 import {
   AUTH_ADMIN_ROLE,
+  AUTH_STAFF_ROLE,
   AUTH_SUPER_ADMIN_ROLE,
+  AUTH_TRAINER_ROLE,
 } from '../../auth/constants/auth-role.constants';
 import { CurrentAuth } from '../../auth/decorators/current-user.decorator';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -74,7 +76,12 @@ function resolveAuthContext(
 
 @Controller(CUSTOMER_ADMIN_ROUTE_PREFIX)
 @UseGuards(AuthGuard, ActiveSessionGuard, RolesGuard)
-@Roles(AUTH_ADMIN_ROLE, AUTH_SUPER_ADMIN_ROLE)
+@Roles(
+  AUTH_ADMIN_ROLE,
+  AUTH_SUPER_ADMIN_ROLE,
+  AUTH_STAFF_ROLE,
+  AUTH_TRAINER_ROLE,
+)
 export class CustomerAdminController {
   constructor(private readonly customerAdminService: CustomerAdminService) {}
 

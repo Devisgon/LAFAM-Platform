@@ -7,6 +7,7 @@
  * - Provides admin payment detail with transactions and discounts.
  * - Provides admin payment transaction listing.
  * - Orchestrates admin refunds.
+ * - Preserves booking-order payment identity in admin payment summaries.
  * - Keeps refund eligibility inside PaymentLifecyclePolicy.
  * - Keeps external refund provider calls behind PaymentGatewayService.
  * - Keeps final refund mutation inside refund_payment_atomic.
@@ -17,6 +18,7 @@
  * - This service does not directly mutate wallet balances.
  * - This service does not fake provider refund success.
  * - Full refunds are supported by the current atomic refund RPC.
+ * - Booking-order refunds remain full-order only in this phase.
  * - Partial refunds are rejected until the atomic refund RPC and database contract explicitly support them.
  */
 
@@ -150,6 +152,7 @@ function mapPaymentToSummary(payment: PaymentRecord): PaymentSummary {
     target_type: payment.target_type,
     booking_id: payment.booking_id,
     private_booking_id: payment.private_booking_id,
+    booking_order_id: payment.booking_order_id,
     amount: payment.amount,
     discount_amount: payment.discount_amount,
     final_amount: payment.final_amount,

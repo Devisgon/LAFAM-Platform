@@ -121,11 +121,13 @@ export type PaymentNonGatewayProvider =
 export const PAYMENT_TARGET_TYPE_BOOKING = 'booking' as const;
 export const PAYMENT_TARGET_TYPE_PRIVATE_BOOKING = 'private_booking' as const;
 export const PAYMENT_TARGET_TYPE_WALLET_TOP_UP = 'wallet_top_up' as const;
+export const PAYMENT_TARGET_TYPE_BOOKING_ORDER = 'booking_order' as const;
 
 export const PAYMENT_TARGET_TYPES = [
   PAYMENT_TARGET_TYPE_BOOKING,
   PAYMENT_TARGET_TYPE_PRIVATE_BOOKING,
   PAYMENT_TARGET_TYPE_WALLET_TOP_UP,
+  PAYMENT_TARGET_TYPE_BOOKING_ORDER,
 ] as const;
 
 export type PaymentTargetType = (typeof PAYMENT_TARGET_TYPES)[number];
@@ -133,10 +135,26 @@ export type PaymentTargetType = (typeof PAYMENT_TARGET_TYPES)[number];
 export const PAYMENT_BOOKING_TARGET_TYPES = [
   PAYMENT_TARGET_TYPE_BOOKING,
   PAYMENT_TARGET_TYPE_PRIVATE_BOOKING,
+  PAYMENT_TARGET_TYPE_BOOKING_ORDER,
 ] as const;
 
 export type PaymentBookingTargetType =
   (typeof PAYMENT_BOOKING_TARGET_TYPES)[number];
+
+export const PAYMENT_SINGLE_BOOKING_TARGET_TYPES = [
+  PAYMENT_TARGET_TYPE_BOOKING,
+  PAYMENT_TARGET_TYPE_PRIVATE_BOOKING,
+] as const;
+
+export type PaymentSingleBookingTargetType =
+  (typeof PAYMENT_SINGLE_BOOKING_TARGET_TYPES)[number];
+
+export const PAYMENT_ORDER_TARGET_TYPES = [
+  PAYMENT_TARGET_TYPE_BOOKING_ORDER,
+] as const;
+
+export type PaymentOrderTargetType =
+  (typeof PAYMENT_ORDER_TARGET_TYPES)[number];
 
 /* -------------------------------------------------------------------------- */
 /* Payment statuses                                                            */
@@ -289,6 +307,8 @@ export type WalletAccountStatus = (typeof WALLET_ACCOUNT_STATUSES)[number];
 export const WALLET_LEDGER_ENTRY_TYPE_WALLET_TOP_UP = 'wallet_top_up' as const;
 export const WALLET_LEDGER_ENTRY_TYPE_BOOKING_PAYMENT =
   'booking_payment' as const;
+export const WALLET_LEDGER_ENTRY_TYPE_BOOKING_ORDER_PAYMENT =
+  WALLET_LEDGER_ENTRY_TYPE_BOOKING_PAYMENT;
 export const WALLET_LEDGER_ENTRY_TYPE_PRIVATE_BOOKING_PAYMENT =
   'private_booking_payment' as const;
 export const WALLET_LEDGER_ENTRY_TYPE_REFUND_CREDIT = 'refund_credit' as const;
@@ -412,6 +432,26 @@ export const PROMO_CODE_PERCENTAGE_MAX = 100;
 export const PROMO_CODE_REDEMPTION_MIN = 1;
 
 export const PAYMENT_METADATA_MAX_TOP_LEVEL_KEYS = 50;
+export const PAYMENT_METADATA_KEY_BOOKING_ID = 'booking_id' as const;
+export const PAYMENT_METADATA_KEY_PRIVATE_BOOKING_ID =
+  'private_booking_id' as const;
+export const PAYMENT_METADATA_KEY_BOOKING_ORDER_ID =
+  'booking_order_id' as const;
+export const PAYMENT_METADATA_KEY_PAYMENT_ID = 'payment_id' as const;
+export const PAYMENT_METADATA_KEY_PAYMENT_NUMBER = 'payment_number' as const;
+export const PAYMENT_METADATA_KEY_RECEIPT_NUMBER = 'receipt_number' as const;
+
+export const PAYMENT_SAFE_METADATA_TARGET_KEYS = [
+  PAYMENT_METADATA_KEY_BOOKING_ID,
+  PAYMENT_METADATA_KEY_PRIVATE_BOOKING_ID,
+  PAYMENT_METADATA_KEY_BOOKING_ORDER_ID,
+  PAYMENT_METADATA_KEY_PAYMENT_ID,
+  PAYMENT_METADATA_KEY_PAYMENT_NUMBER,
+  PAYMENT_METADATA_KEY_RECEIPT_NUMBER,
+] as const;
+
+export type PaymentSafeMetadataTargetKey =
+  (typeof PAYMENT_SAFE_METADATA_TARGET_KEYS)[number];
 export const PAYMENT_PROVIDER_PAYLOAD_MAX_BYTES = 64 * 1024;
 
 /* -------------------------------------------------------------------------- */
@@ -581,6 +621,7 @@ export const PAYMENT_SAFE_LOG_CONTEXT_KEYS = [
   'payment_number',
   'booking_id',
   'private_booking_id',
+  'booking_order_id',
   'user_id',
   'admin_user_id',
   'provider',
@@ -617,6 +658,12 @@ const PAYMENT_TARGET_TYPE_SET = new Set<PaymentTargetType>(
 
 const PAYMENT_BOOKING_TARGET_TYPE_SET = new Set<PaymentBookingTargetType>(
   PAYMENT_BOOKING_TARGET_TYPES,
+);
+const PAYMENT_SINGLE_BOOKING_TARGET_TYPE_SET =
+  new Set<PaymentSingleBookingTargetType>(PAYMENT_SINGLE_BOOKING_TARGET_TYPES);
+
+const PAYMENT_ORDER_TARGET_TYPE_SET = new Set<PaymentOrderTargetType>(
+  PAYMENT_ORDER_TARGET_TYPES,
 );
 
 const PAYMENT_STATUS_SET = new Set<PaymentStatus>(PAYMENT_STATUSES);
@@ -715,6 +762,25 @@ export function isPaymentBookingTargetType(
   value: string,
 ): value is PaymentBookingTargetType {
   return PAYMENT_BOOKING_TARGET_TYPE_SET.has(value as PaymentBookingTargetType);
+}
+export function isPaymentSingleBookingTargetType(
+  value: string,
+): value is PaymentSingleBookingTargetType {
+  return PAYMENT_SINGLE_BOOKING_TARGET_TYPE_SET.has(
+    value as PaymentSingleBookingTargetType,
+  );
+}
+
+export function isPaymentOrderTargetType(
+  value: string,
+): value is PaymentOrderTargetType {
+  return PAYMENT_ORDER_TARGET_TYPE_SET.has(value as PaymentOrderTargetType);
+}
+
+export function isPaymentBookingOrderTargetType(
+  value: string,
+): value is typeof PAYMENT_TARGET_TYPE_BOOKING_ORDER {
+  return value === PAYMENT_TARGET_TYPE_BOOKING_ORDER;
 }
 
 export function isPaymentStatus(value: string): value is PaymentStatus {

@@ -37,7 +37,7 @@ tags:
   - name: Auth - Context
     description: Authenticated frontend bootstrapping context endpoint
   - name: Customers - Admin
-    description: Protected admin customer management endpoints
+    description: Protected customer management endpoints for admin, super_admin, staff, and trainer roles.
   - name: Staff - Admin
     description: Protected admin staff and trainer management endpoints
   - name: Pilates - Public
@@ -45,11 +45,11 @@ tags:
   - name: Pilates - Admin
     description: Protected admin Pilates class and schedule management endpoints
   - name: Bookings - Customer
-    description: Protected customer Pilates booking, private trainer booking, availability, and waitlist endpoints
+    description: Protected customer Pilates booking, bulk booking order, private trainer booking, availability, and waitlist endpoints.
   - name: Bookings - Admin
-    description: Protected admin booking, private trainer booking, calendar, override, and waitlist management endpoints
+    description: Protected admin/staff/trainer booking endpoints. Admin, super_admin, and staff have full booking scope. Trainer booking access is service-scoped to schedules assigned to the authenticated trainer.
   - name: Payments - Customer
-    description: Protected customer checkout, payment history, payment detail, transaction, and verification endpoints
+    description: Protected customer checkout, booking-order checkout, payment history, payment detail, transaction, and verification endpoints.
   - name: Payments - Public
     description: Public KNET/provider callback and webhook endpoints called by hosted payment providers
   - name: Payments - Admin
@@ -2685,6 +2685,155 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /bookings/bulk:
+    post:
+      summary: Create customer bulk Pilates booking order
+      description: Creates one backend-owned booking order for multiple Pilates schedules. The backend validates all selected schedules, rejects full schedules, creates pending-payment bookings, and returns one order for checkout. The request must not include payment_required, payment_status, status, price, or currency.
+      operationId: bookingCustomerCreateBulkBooking
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBulkBookingRequest'
+            examples:
+              customerBulkBooking:
+                summary: Customer bulk booking order
+                value:
+                  schedule_ids:
+                    - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    - 4fa85f64-5717-4562-b3fc-2c963f66afa7
+                  idempotency_key: customer-cart-20260701-001
+      responses:
+        '201':
+          description: Bulk booking order created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingBulkCreateSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /bookings/orders/{bookingOrderId}:
+    get:
+      summary: Get customer booking order
+      description: Returns one booking order owned by the authenticated customer.
+      operationId: bookingCustomerGetBookingOrderById
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingOrderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Booking order id.
+      responses:
+        '200':
+          description: Booking order retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingOrderDetailSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/bookings/bulk:
+    post:
+      summary: Create admin/staff/trainer bulk Pilates booking order
+      description: Creates one backend-owned booking order for a selected customer. Admin, super_admin, and staff can create orders for any schedule. Trainers can create orders only for schedules assigned to their trainer staff profile. The request must not include payment_required, payment_status, status, price, currency, or created_by fields.
+      operationId: bookingAdminCreateBulkBooking
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAdminBulkBookingRequest'
+            examples:
+              adminBulkBooking:
+                summary: Admin/staff bulk booking order
+                value:
+                  customer_user_id: 5fa85f64-5717-4562-b3fc-2c963f66afa8
+                  schedule_ids:
+                    - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    - 4fa85f64-5717-4562-b3fc-2c963f66afa7
+                  idempotency_key: admin-cart-20260701-001
+                  admin_notes: Booked at front desk.
+      responses:
+        '201':
+          description: Bulk booking order created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingBulkCreateSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/bookings/orders/{bookingOrderId}:
+    get:
+      summary: Get admin/staff/trainer booking order
+      description: Returns one booking order. Admin, super_admin, and staff have full access. Trainers can read only booking orders whose schedules are assigned to their trainer staff profile.
+      operationId: bookingAdminGetBookingOrderById
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingOrderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Booking order id.
+      responses:
+        '200':
+          description: Booking order retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingOrderDetailSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /bookings/{bookingId}:
     get:
@@ -3457,7 +3606,7 @@ paths:
   /payments/checkout:
     post:
       summary: Create customer checkout payment
-      description: Creates a backend-owned payment intent for booking, private trainer booking, or wallet top-up. KNET/card return a hosted redirect URL. Wallet payment uses internal wallet debit and never trusts frontend amount.
+      description: Creates a backend-owned payment intent for booking, private trainer booking, booking order, or wallet top-up. KNET/card return a hosted redirect URL. Wallet payment uses internal wallet debit and never trusts frontend amount.
       operationId: paymentCustomerCreateCheckout
       tags:
         - Payments - Customer
@@ -3484,13 +3633,27 @@ paths:
                   private_booking_id: 4fa85f64-5717-4562-b3fc-2c963f66afa7
                   payment_method: card
                   idempotency_key: private-checkout-001
-              walletBooking:
-                summary: Wallet booking payment
+              knetBookingOrder:
+                summary: KNET booking-order payment
                 value:
-                  target_type: booking
-                  booking_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  target_type: booking_order
+                  booking_order_id: 5fa85f64-5717-4562-b3fc-2c963f66afa8
+                  payment_method: knet
+                  idempotency_key: booking-order-checkout-001
+              walletBookingOrder:
+                summary: Wallet booking-order payment
+                value:
+                  target_type: booking_order
+                  booking_order_id: 5fa85f64-5717-4562-b3fc-2c963f66afa8
                   payment_method: wallet
-                  idempotency_key: wallet-booking-001
+                  idempotency_key: wallet-booking-order-001
+              walletTopUp:
+                summary: Wallet top-up
+                value:
+                  target_type: wallet_top_up
+                  wallet_top_up_amount: 25
+                  payment_method: knet
+                  idempotency_key: wallet-top-up-001
       responses:
         '201':
           description: Checkout payment created successfully.
@@ -3510,7 +3673,6 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/RateLimited'
-
   /payments:
     get:
       summary: List customer payments
@@ -8255,7 +8417,7 @@ components:
           example: '2026-06-20'
         start_time:
           type: string
-          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
           example: '11:00'
         duration_minutes:
           type: integer
@@ -8269,14 +8431,11 @@ components:
           maxLength: 120
           default: LAFAM Pilates Studio
           example: LAFAM Pilates Studio
-        payment_required:
-          type: boolean
-          default: true
-          description: Payment-required private bookings start as pending_payment and require checkout before confirmation.
         idempotency_key:
           type: string
           maxLength: 160
           example: private-booking-20260620-1100
+      additionalProperties: false
 
     ReschedulePrivateBookingRequest:
       type: object
@@ -8327,15 +8486,12 @@ components:
           type: string
           format: uuid
           description: Pilates schedule id.
-        payment_required:
-          type: boolean
-          default: true
-          description: Optional controlled payment flag. Payment-required bookings start as pending_payment and require checkout before confirmation.
         idempotency_key:
           type: string
           maxLength: 160
           description: Optional retry/double-click protection key.
           example: customer-click-20260612-001
+      additionalProperties: false
 
     CancelBookingRequest:
       type: object
@@ -8724,6 +8880,7 @@ components:
         - target_kind
         - booking_id
         - private_booking_id
+        - booking_order_id
         - amount
         - discount_amount
         - final_amount
@@ -8756,12 +8913,17 @@ components:
           enum:
             - booking
             - private_booking
+            - booking_order
           example: booking
         booking_id:
           type: string
           format: uuid
           nullable: true
         private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        booking_order_id:
           type: string
           format: uuid
           nullable: true
@@ -8891,6 +9053,7 @@ components:
         - schedule_id
         - class_id
         - trainer_staff_profile_id
+        - booking_order_id
         - status
         - source
         - payment_status
@@ -8929,6 +9092,11 @@ components:
           type: string
           format: uuid
           nullable: true
+        booking_order_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Present when this booking belongs to a bulk booking order.
         status:
           $ref: '#/components/schemas/BookingStatus'
         source:
@@ -9919,8 +10087,9 @@ components:
       enum:
         - booking
         - private_booking
+        - booking_order
         - wallet_top_up
-      example: booking
+      example: booking_order
 
     PaymentMethod:
       type: string
@@ -10097,18 +10266,23 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: Required when target_type is booking.
+          description: Required only when target_type is booking. Forbidden for booking_order, private_booking, and wallet_top_up.
         private_booking_id:
           type: string
           format: uuid
           nullable: true
-          description: Required when target_type is private_booking.
+          description: Required only when target_type is private_booking. Forbidden for booking, booking_order, and wallet_top_up.
+        booking_order_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Required only when target_type is booking_order. Forbidden for booking, private_booking, and wallet_top_up.
         wallet_top_up_amount:
           type: number
           minimum: 1
           maximum: 10000
           nullable: true
-          description: Required when target_type is wallet_top_up.
+          description: Required only when target_type is wallet_top_up. Forbidden for booking, private_booking, and booking_order.
           example: 25
         payment_method:
           $ref: '#/components/schemas/PaymentMethod'
@@ -10131,6 +10305,7 @@ components:
           example: checkout-20260618-001
         metadata:
           $ref: '#/components/schemas/PaymentMetadata'
+      additionalProperties: false
 
     WalletTopUpRequest:
       type: object
@@ -10235,6 +10410,7 @@ components:
         - target_type
         - booking_id
         - private_booking_id
+        - booking_order_id
         - amount
         - discount_amount
         - final_amount
@@ -10274,6 +10450,10 @@ components:
           format: uuid
           nullable: true
         private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        booking_order_id:
           type: string
           format: uuid
           nullable: true
@@ -10466,6 +10646,9 @@ components:
         - receipt_number
         - user_id
         - target_type
+        - booking_id
+        - private_booking_id
+        - booking_order_id
         - amount
         - discount_amount
         - final_amount
@@ -10486,6 +10669,18 @@ components:
           format: uuid
         target_type:
           $ref: '#/components/schemas/PaymentTargetType'
+        booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        booking_order_id:
+          type: string
+          format: uuid
+          nullable: true
         amount:
           type: number
         discount_amount:
@@ -10705,6 +10900,7 @@ components:
         - payment_id
         - booking_id
         - private_booking_id
+        - booking_order_id
         - entry_type
         - entry_status
         - amount
@@ -10732,6 +10928,10 @@ components:
           format: uuid
           nullable: true
         private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        booking_order_id:
           type: string
           format: uuid
           nullable: true
@@ -11500,6 +11700,324 @@ components:
             wallet_summary: null
             calendar_events: null
             generated_at: '2026-06-19T10:52:40.000Z'
+    CreateBulkBookingRequest:
+      type: object
+      required:
+        - schedule_ids
+      properties:
+        schedule_ids:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+          description: Pilates schedule ids selected for one all-or-nothing bulk booking order.
+        idempotency_key:
+          type: string
+          maxLength: 160
+          nullable: true
+          example: customer-cart-20260701-001
+      additionalProperties: false
+
+    CreateAdminBulkBookingRequest:
+      type: object
+      required:
+        - customer_user_id
+        - schedule_ids
+      properties:
+        customer_user_id:
+          type: string
+          format: uuid
+          description: Customer app user id for whom the order is created.
+        schedule_ids:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+          description: Pilates schedule ids selected for one all-or-nothing bulk booking order.
+        idempotency_key:
+          type: string
+          maxLength: 160
+          nullable: true
+          example: admin-cart-20260701-001
+        admin_notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+          example: Booked at front desk.
+      additionalProperties: false
+
+    BookingOrderCreateActionResult:
+      type: string
+      enum:
+        - created_order
+        - existing_order
+      example: created_order
+
+    BookingOrderStatus:
+      type: string
+      enum:
+        - pending_payment
+        - paid
+        - expired
+        - cancelled
+        - refunded
+      example: pending_payment
+
+    BookingOrderItemStatus:
+      type: string
+      enum:
+        - pending_payment
+        - confirmed
+        - expired
+        - cancelled
+        - refunded
+      example: pending_payment
+
+    BookingOrderSummary:
+      type: object
+      required:
+        - id
+        - order_number
+        - customer_user_id
+        - status
+        - payment_status
+        - payment_required
+        - total_amount
+        - currency
+        - booking_count
+        - checkout_required
+        - idempotency_key
+        - created_by_user_id
+        - created_by_admin_id
+        - created_by_staff_profile_id
+        - created_by_role
+        - admin_notes
+        - metadata
+        - expires_at
+        - paid_at
+        - expired_at
+        - cancelled_at
+        - refunded_at
+        - created_at
+        - updated_at
+        - realtime_version
+      properties:
+        id:
+          type: string
+          format: uuid
+        order_number:
+          type: string
+          example: LAFAM-ORDER-20260701-ABC12345
+        customer_user_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/BookingOrderStatus'
+        payment_status:
+          $ref: '#/components/schemas/BookingPaymentStatus'
+        payment_required:
+          type: boolean
+          example: true
+        total_amount:
+          type: number
+          example: 30
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+        booking_count:
+          type: integer
+          minimum: 1
+          example: 2
+        checkout_required:
+          type: boolean
+          example: true
+        idempotency_key:
+          type: string
+          nullable: true
+        created_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_by_admin_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_by_staff_profile_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_by_role:
+          type: string
+          nullable: true
+          example: customer
+        admin_notes:
+          type: string
+          nullable: true
+        metadata:
+          $ref: '#/components/schemas/PaymentMetadata'
+        expires_at:
+          type: string
+          format: date-time
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+        expired_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        refunded_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        realtime_version:
+          type: integer
+          format: int64
+          minimum: 1
+        payment_state:
+          allOf:
+            - $ref: '#/components/schemas/BookingPaymentStateSnapshot'
+          nullable: true
+        latest_payment:
+          allOf:
+            - $ref: '#/components/schemas/BookingPaymentSummary'
+          nullable: true
+        customer:
+          allOf:
+            - $ref: '#/components/schemas/BookingSafeUserSnapshot'
+          nullable: true
+
+    BookingOrderItemSummary:
+      type: object
+      required:
+        - id
+        - booking_order_id
+        - booking_id
+        - schedule_id
+        - class_id
+        - trainer_staff_profile_id
+        - price_amount
+        - currency
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        booking_order_id:
+          type: string
+          format: uuid
+        booking_id:
+          type: string
+          format: uuid
+        schedule_id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+          nullable: true
+        price_amount:
+          type: number
+          example: 15
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+        status:
+          $ref: '#/components/schemas/BookingOrderItemStatus'
+        created_at:
+          type: string
+          format: date-time
+        booking:
+          allOf:
+            - $ref: '#/components/schemas/BookingListItem'
+          nullable: true
+        class:
+          allOf:
+            - $ref: '#/components/schemas/BookingClassSnapshot'
+          nullable: true
+        schedule:
+          allOf:
+            - $ref: '#/components/schemas/BookingScheduleSnapshot'
+          nullable: true
+        trainer:
+          allOf:
+            - $ref: '#/components/schemas/BookingTrainerSnapshot'
+          nullable: true
+
+    BookingOrderDetail:
+      allOf:
+        - $ref: '#/components/schemas/BookingOrderSummary'
+        - type: object
+          required:
+            - items
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/BookingOrderItemSummary'
+
+    BookingBulkCreateData:
+      type: object
+      required:
+        - result
+        - booking_order
+        - items
+        - checkout_required
+      properties:
+        result:
+          $ref: '#/components/schemas/BookingOrderCreateActionResult'
+        booking_order:
+          $ref: '#/components/schemas/BookingOrderSummary'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookingOrderItemSummary'
+        checkout_required:
+          type: boolean
+          example: true
+
+    BookingBulkCreateSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BookingBulkCreateData'
+
+    BookingOrderDetailData:
+      type: object
+      required:
+        - booking_order
+      properties:
+        booking_order:
+          $ref: '#/components/schemas/BookingOrderDetail'
+
+    BookingOrderDetailSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BookingOrderDetail'
+
   securitySchemes:
     BearerAuth:
       type: http

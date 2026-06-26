@@ -8,15 +8,17 @@
  * - Delegates trusted amount calculation to PaymentPricingService.
  * - Delegates hosted provider work to PaymentGatewayService.
  * - Delegates wallet mutation to atomic wallet RPC through WalletRepository.
+ * - Supports single booking, private booking, booking-order, and wallet top-up checkout flows.
  * - Writes payment transaction audit rows around checkout operations.
  *
  * Important:
  * - Frontend amount is never trusted.
- * - This service does not calculate class/private booking prices itself.
+ * - This service does not calculate class/private/order booking prices itself.
  * - This service does not verify callbacks/webhooks.
  * - This service does not mutate wallet balances directly.
  * - This service does not directly confirm bookings.
  * - Payment/wallet/database RPCs own final atomic state mutation.
+ * - Booking-order wallet checkout must debit once for the whole order.
  */
 
 import { Inject, Injectable } from '@nestjs/common';
@@ -36,6 +38,7 @@ import {
   PAYMENT_STATUS_PENDING,
   PAYMENT_STATUS_REQUIRES_REDIRECT,
   PAYMENT_TARGET_TYPE_BOOKING,
+  PAYMENT_TARGET_TYPE_BOOKING_ORDER,
   PAYMENT_TARGET_TYPE_PRIVATE_BOOKING,
   PAYMENT_TARGET_TYPE_WALLET_TOP_UP,
   PAYMENT_TRANSACTION_STATUS_FAILED,
@@ -45,6 +48,7 @@ import {
   PAYMENT_TRANSACTION_TYPE_PROVIDER_RESPONSE,
   PAYMENT_TRANSACTION_TYPE_WALLET_DEBIT,
   PAYMENT_WALLET_TOP_UP_INTENT_TTL_MINUTES,
+  WALLET_LEDGER_ENTRY_TYPE_BOOKING_ORDER_PAYMENT,
   WALLET_LEDGER_ENTRY_TYPE_BOOKING_PAYMENT,
   WALLET_LEDGER_ENTRY_TYPE_PRIVATE_BOOKING_PAYMENT,
   isPaymentExternalGatewayProvider,
@@ -179,8 +183,12 @@ function resolveDebitLedgerEntryTypeForCheckoutTarget(
     return WALLET_LEDGER_ENTRY_TYPE_PRIVATE_BOOKING_PAYMENT;
   }
 
+  if (targetType === PAYMENT_TARGET_TYPE_BOOKING_ORDER) {
+    return WALLET_LEDGER_ENTRY_TYPE_BOOKING_ORDER_PAYMENT;
+  }
+
   throw AppError.invalidRequest(
-    'Wallet checkout can only debit wallet for booking or private booking targets.',
+    'Wallet checkout can only debit wallet for booking, private booking, or booking order targets.',
     {
       target_type: targetType,
     },
@@ -208,11 +216,16 @@ function buildCheckoutMetadata(input: {
       target_type: input.originalInput.target_type,
       booking_id: input.originalInput.booking_id ?? null,
       private_booking_id: input.originalInput.private_booking_id ?? null,
+      booking_order_id: input.originalInput.booking_order_id ?? null,
       payment_method: input.originalInput.payment_method,
       idempotency_key: input.originalInput.idempotency_key ?? null,
       promo_code: input.originalInput.promo_code ?? null,
     },
     pricing: {
+      target_type: input.pricing.target.target_type,
+      booking_id: input.pricing.target.booking_id,
+      private_booking_id: input.pricing.target.private_booking_id,
+      booking_order_id: input.pricing.target.booking_order_id,
       amount: input.pricing.amount,
       discount_amount: input.pricing.discount_amount,
       final_amount: input.pricing.final_amount,
@@ -232,6 +245,7 @@ function buildHostedPaymentRequestPayload(
     target_type: command.target.target_type,
     booking_id: command.target.booking_id,
     private_booking_id: command.target.private_booking_id,
+    booking_order_id: command.target.booking_order_id,
     amount: command.final_amount,
     currency: command.currency,
     payment_method: command.payment_method,
@@ -255,6 +269,33 @@ function buildProviderResponsePayload(
   };
 }
 
+function buildWalletDebitMetadata(input: {
+  readonly checkout_stage: string;
+  readonly payment: PaymentRecord;
+}): DatabaseJsonObject {
+  return {
+    checkout_stage: input.checkout_stage,
+    payment_id: input.payment.id,
+    payment_number: input.payment.payment_number,
+    target_type: input.payment.target_type,
+    booking_id: input.payment.booking_id,
+    private_booking_id: input.payment.private_booking_id,
+    booking_order_id: input.payment.booking_order_id,
+  };
+}
+
+function resolveWalletDebitDescription(payment: PaymentRecord): string {
+  if (payment.target_type === PAYMENT_TARGET_TYPE_BOOKING_ORDER) {
+    return 'Wallet payment for booking order checkout.';
+  }
+
+  if (payment.target_type === PAYMENT_TARGET_TYPE_PRIVATE_BOOKING) {
+    return 'Wallet payment for private booking checkout.';
+  }
+
+  return 'Wallet payment for booking checkout.';
+}
+
 @Injectable()
 export class PaymentCheckoutService {
   constructor(
@@ -275,6 +316,7 @@ export class PaymentCheckoutService {
       target_type: input.target_type,
       booking_id: input.booking_id,
       private_booking_id: input.private_booking_id,
+      booking_order_id: input.booking_order_id,
       wallet_top_up_amount: input.wallet_top_up_amount,
       currency: input.currency,
       promo_code: input.promo_code,
@@ -429,6 +471,7 @@ export class PaymentCheckoutService {
           target_type: input.payment.target_type,
           booking_id: input.payment.booking_id,
           private_booking_id: input.payment.private_booking_id,
+          booking_order_id: input.payment.booking_order_id,
           callback_url: currentPaymentConfig.redirect.knetCallbackUrl,
           webhook_url: currentPaymentConfig.redirect.knetWebhookUrl,
           frontend_success_url:
@@ -500,6 +543,7 @@ export class PaymentCheckoutService {
     const entryType = resolveDebitLedgerEntryTypeForCheckoutTarget(
       payment.target_type,
     );
+    const description = resolveWalletDebitDescription(payment);
 
     WalletLedgerPolicy.assertDebitInput({
       user_id: payment.user_id,
@@ -509,29 +553,64 @@ export class PaymentCheckoutService {
       entry_type: entryType,
       booking_id: payment.booking_id,
       private_booking_id: payment.private_booking_id,
-      description: 'Wallet payment for booking checkout.',
-      metadata: {
+      booking_order_id: payment.booking_order_id,
+      description,
+      metadata: buildWalletDebitMetadata({
         checkout_stage: 'wallet_debit_validation',
-        payment_id: payment.id,
-        payment_number: payment.payment_number,
-        target_type: payment.target_type,
-        booking_id: payment.booking_id,
-        private_booking_id: payment.private_booking_id,
-      },
+        payment,
+      }),
     });
+
+    if (payment.target_type === PAYMENT_TARGET_TYPE_BOOKING_ORDER) {
+      const walletDebit =
+        await this.walletRepository.debitWalletForBookingOrderAtomic({
+          payment_id: payment.id,
+          description,
+          metadata: buildWalletDebitMetadata({
+            checkout_stage: 'wallet_debit',
+            payment,
+          }),
+        });
+
+      await this.createPaymentTransaction({
+        payment_id: payment.id,
+        transaction_type: PAYMENT_TRANSACTION_TYPE_WALLET_DEBIT,
+        transaction_status: PAYMENT_TRANSACTION_STATUS_SUCCEEDED,
+        provider: PAYMENT_PROVIDER_WALLET,
+        gateway_response: {
+          wallet_account_id: walletDebit.wallet_account_id,
+          wallet_ledger_entry_id: walletDebit.ledger_entry_id,
+          available_balance: walletDebit.available_balance,
+          booking_id: null,
+          private_booking_id: null,
+          booking_order_id: walletDebit.booking_order_id,
+        },
+        metadata: {
+          checkout_stage: 'wallet_debit',
+        },
+      });
+
+      const updatedPayment = await this.getPaymentOrThrow(payment.id);
+
+      return {
+        payment: updatedPayment,
+        status: updatedPayment.status,
+        requires_redirect: false,
+        wallet_account_id: walletDebit.wallet_account_id,
+        wallet_ledger_entry_id: walletDebit.ledger_entry_id,
+        available_balance: walletDebit.available_balance,
+        booking_order_id: walletDebit.booking_order_id,
+      };
+    }
 
     const walletDebit = await this.walletRepository.debitWalletForBookingAtomic(
       {
         payment_id: payment.id,
-        description: 'Wallet payment for booking checkout.',
-        metadata: {
+        description,
+        metadata: buildWalletDebitMetadata({
           checkout_stage: 'wallet_debit',
-          payment_id: payment.id,
-          payment_number: payment.payment_number,
-          target_type: payment.target_type,
-          booking_id: payment.booking_id,
-          private_booking_id: payment.private_booking_id,
-        },
+          payment,
+        }),
       },
     );
 
@@ -546,6 +625,7 @@ export class PaymentCheckoutService {
         available_balance: walletDebit.available_balance,
         booking_id: walletDebit.booking_id,
         private_booking_id: walletDebit.private_booking_id,
+        booking_order_id: null,
       },
       metadata: {
         checkout_stage: 'wallet_debit',
@@ -561,6 +641,7 @@ export class PaymentCheckoutService {
       wallet_account_id: walletDebit.wallet_account_id,
       wallet_ledger_entry_id: walletDebit.ledger_entry_id,
       available_balance: walletDebit.available_balance,
+      booking_order_id: updatedPayment.booking_order_id,
     };
   }
 
@@ -600,6 +681,7 @@ export class PaymentCheckoutService {
       wallet_account_id: ledgerEntry.wallet_account_id,
       wallet_ledger_entry_id: ledgerEntry.id,
       available_balance: wallet.available_balance,
+      booking_order_id: payment.booking_order_id,
     };
   }
 
@@ -645,6 +727,7 @@ export class PaymentCheckoutService {
         target_type: command.target.target_type,
         booking_id: command.target.booking_id,
         private_booking_id: command.target.private_booking_id,
+        booking_order_id: command.target.booking_order_id,
         amount: command.amount,
         discount_amount: command.discount_amount,
         final_amount: command.final_amount,
@@ -676,6 +759,7 @@ export class PaymentCheckoutService {
         target_type: paymentIntent.target_type,
         booking_id: paymentIntent.booking_id,
         private_booking_id: paymentIntent.private_booking_id,
+        booking_order_id: paymentIntent.booking_order_id,
         final_amount: paymentIntent.final_amount,
         currency: paymentIntent.currency,
       },

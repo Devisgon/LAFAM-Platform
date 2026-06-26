@@ -18,7 +18,7 @@
  * - Paid status is protected from failed/cancelled events arriving later.
  * - This service does not calculate prices.
  * - This service does not debit/credit wallet directly.
- * - mark_payment_paid_atomic handles booking confirmation and wallet top-up credit.
+ * - mark_payment_paid_atomic handles booking confirmation, booking-order confirmation, and wallet top-up credit.
  */
 
 import { Injectable } from '@nestjs/common';
@@ -167,6 +167,25 @@ function buildPaymentRedirectUrl(input: {
       'payment_number',
       input.payment.payment_number,
     );
+    redirectUrl.searchParams.set('target_type', input.payment.target_type);
+
+    if (hasText(input.payment.booking_id)) {
+      redirectUrl.searchParams.set('booking_id', input.payment.booking_id);
+    }
+
+    if (hasText(input.payment.private_booking_id)) {
+      redirectUrl.searchParams.set(
+        'private_booking_id',
+        input.payment.private_booking_id,
+      );
+    }
+
+    if (hasText(input.payment.booking_order_id)) {
+      redirectUrl.searchParams.set(
+        'booking_order_id',
+        input.payment.booking_order_id,
+      );
+    }
   }
 
   if (input.status) {
@@ -211,13 +230,29 @@ function resolveFrontendRedirectUrl(input: {
   });
 }
 
+function buildPaymentTargetAuditPayload(
+  payment: PaymentRecord,
+): DatabaseJsonObject {
+  return {
+    payment_id: payment.id,
+    payment_number: payment.payment_number,
+    user_id: payment.user_id,
+    target_type: payment.target_type,
+    booking_id: payment.booking_id,
+    private_booking_id: payment.private_booking_id,
+    booking_order_id: payment.booking_order_id,
+  };
+}
+
 function buildProviderVerificationPayload(input: {
+  readonly payment: PaymentRecord;
   readonly source: PaymentVerificationApplicationInput['source'];
   readonly result: PaymentGatewayVerifyPaymentResult;
   readonly raw_payload: DatabaseJsonObject;
 }): DatabaseJsonObject {
   return {
     source: input.source,
+    target: buildPaymentTargetAuditPayload(input.payment),
     provider: input.result.provider,
     provider_reference: input.result.provider_reference,
     gateway_payment_id: input.result.gateway_payment_id,
@@ -292,6 +327,7 @@ export class PaymentCallbackService {
       provider_reference: references.provider_reference,
       gateway_request: input.raw_query,
       gateway_response: {
+        target: buildPaymentTargetAuditPayload(payment),
         payment_id: references.payment_id,
         provider_reference: references.provider_reference,
         gateway_payment_id: references.gateway_payment_id,
@@ -430,6 +466,7 @@ export class PaymentCallbackService {
         },
       },
       gateway_response: {
+        target: buildPaymentTargetAuditPayload(payment),
         event_id: event.event_id,
         event_type: event.event_type,
         provider_reference: event.provider_reference,
@@ -454,6 +491,7 @@ export class PaymentCallbackService {
         provider: event.provider,
         provider_reference: event.provider_reference,
         gateway_response: {
+          target: buildPaymentTargetAuditPayload(payment),
           reason: 'provider_mismatch',
           payment_provider: payment.payment_provider,
           webhook_provider: event.provider,
@@ -516,6 +554,7 @@ export class PaymentCallbackService {
       provider: event.provider,
       provider_reference: event.provider_reference,
       gateway_response: {
+        target: buildPaymentTargetAuditPayload(payment),
         event_id: event.event_id,
         event_type: event.event_type,
         provider_status: event.status,
@@ -551,6 +590,7 @@ export class PaymentCallbackService {
         provider_reference: payment.gateway_reference,
         gateway_response: {
           source: input.source,
+          target: buildPaymentTargetAuditPayload(payment),
           reason: PAYMENT_EVENT_ALREADY_SETTLED_CODE,
           current_status: payment.status,
         },
@@ -589,6 +629,7 @@ export class PaymentCallbackService {
           input.references.provider_reference ?? payment.gateway_reference,
         gateway_request: {
           source: input.source,
+          target: buildPaymentTargetAuditPayload(payment),
           payment_id: payment.id,
           provider_reference: input.references.provider_reference ?? null,
           gateway_payment_id: input.references.gateway_payment_id ?? null,
@@ -596,6 +637,7 @@ export class PaymentCallbackService {
         },
         gateway_response: {
           source: input.source,
+          target: buildPaymentTargetAuditPayload(payment),
           verification_failed: true,
         },
         failure_code: PAYMENT_VERIFICATION_FAILED_CODE,
@@ -627,12 +669,14 @@ export class PaymentCallbackService {
       provider_reference: verification.provider_reference,
       gateway_request: {
         source: input.source,
+        target: buildPaymentTargetAuditPayload(payment),
         payment_id: payment.id,
         provider_reference: input.references.provider_reference ?? null,
         gateway_payment_id: input.references.gateway_payment_id ?? null,
         gateway_invoice_id: input.references.gateway_invoice_id ?? null,
       },
       gateway_response: buildProviderVerificationPayload({
+        payment,
         source: input.source,
         result: verification,
         raw_payload: input.raw_payload,
@@ -666,6 +710,7 @@ export class PaymentCallbackService {
         provider_reference: verification.provider_reference,
         gateway_response: {
           source: input.source,
+          target: buildPaymentTargetAuditPayload(payment),
           provider_status: verification.status,
           current_status: payment.status,
           next_status: decision.next_status,
@@ -725,6 +770,7 @@ export class PaymentCallbackService {
           input.verification.gateway_invoice_id ??
           input.payment.gateway_invoice_id,
         gateway_response: buildProviderVerificationPayload({
+          payment: input.payment,
           source: input.source,
           result: input.verification,
           raw_payload: input.raw_payload,
@@ -753,6 +799,7 @@ export class PaymentCallbackService {
         failure_code: input.verification.failure_code,
         failure_message: input.verification.failure_message,
         gateway_response: buildProviderVerificationPayload({
+          payment: input.payment,
           source: input.source,
           result: input.verification,
           raw_payload: input.raw_payload,
@@ -782,6 +829,7 @@ export class PaymentCallbackService {
           input.verification.failure_code ??
           'Payment was cancelled by provider.',
         gateway_response: buildProviderVerificationPayload({
+          payment: input.payment,
           source: input.source,
           result: input.verification,
           raw_payload: input.raw_payload,
@@ -892,6 +940,7 @@ export class PaymentCallbackService {
       provider_reference: input.verification.provider_reference,
       gateway_response: {
         source: input.source,
+        target: buildPaymentTargetAuditPayload(input.payment),
         previous_status: input.previous_status,
         next_status: input.next_status,
         provider_status: input.verification.status,

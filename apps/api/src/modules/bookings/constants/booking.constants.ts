@@ -24,13 +24,18 @@
 import {
   AUTH_ADMIN_ROLE,
   AUTH_CUSTOMER_ROLE,
+  AUTH_STAFF_ROLE,
   AUTH_SUPER_ADMIN_ROLE,
+  AUTH_TRAINER_ROLE,
   type AuthUserRole,
 } from '../../auth/constants/auth-role.constants';
 
 export const BOOKINGS_MODULE_NAME = 'bookings' as const;
 
 export const BOOKING_CUSTOMER_ROUTE_PREFIX = 'bookings' as const;
+export const BOOKING_CUSTOMER_BULK_ROUTE_PREFIX = 'bookings/bulk' as const;
+
+export const BOOKING_CUSTOMER_ORDER_ROUTE_PREFIX = 'bookings/orders' as const;
 
 export const BOOKING_CUSTOMER_WAITLIST_ROUTE_PREFIX =
   'bookings/waitlist' as const;
@@ -42,6 +47,10 @@ export const BOOKING_CUSTOMER_PRIVATE_AVAILABILITY_ROUTE_PREFIX =
   'bookings/private-trainer/availability' as const;
 
 export const BOOKING_ADMIN_ROUTE_PREFIX = 'admin/bookings' as const;
+export const BOOKING_ADMIN_BULK_ROUTE_PREFIX = 'admin/bookings/bulk' as const;
+
+export const BOOKING_ADMIN_ORDER_ROUTE_PREFIX =
+  'admin/bookings/orders' as const;
 
 export const BOOKING_ADMIN_WAITLIST_ROUTE_PREFIX =
   'admin/bookings/waitlist' as const;
@@ -87,6 +96,65 @@ export const BOOKING_STATUS_EXPIRED = 'expired' satisfies BookingStatus;
 export const BOOKING_STATUS_RESCHEDULED = 'rescheduled' satisfies BookingStatus;
 
 export const BOOKING_STATUS_DELETED = 'deleted' satisfies BookingStatus;
+export const BOOKING_ORDER_STATUSES = [
+  'pending_payment',
+  'paid',
+  'expired',
+  'cancelled',
+  'refunded',
+] as const;
+
+export type BookingOrderStatus = (typeof BOOKING_ORDER_STATUSES)[number];
+
+export const BOOKING_ORDER_STATUS_PENDING_PAYMENT =
+  'pending_payment' satisfies BookingOrderStatus;
+
+export const BOOKING_ORDER_STATUS_PAID = 'paid' satisfies BookingOrderStatus;
+
+export const BOOKING_ORDER_STATUS_EXPIRED =
+  'expired' satisfies BookingOrderStatus;
+
+export const BOOKING_ORDER_STATUS_CANCELLED =
+  'cancelled' satisfies BookingOrderStatus;
+
+export const BOOKING_ORDER_STATUS_REFUNDED =
+  'refunded' satisfies BookingOrderStatus;
+
+export const BOOKING_ORDER_PAYABLE_STATUSES = [
+  BOOKING_ORDER_STATUS_PENDING_PAYMENT,
+] as const satisfies readonly BookingOrderStatus[];
+
+export const BOOKING_ORDER_TERMINAL_STATUSES = [
+  BOOKING_ORDER_STATUS_PAID,
+  BOOKING_ORDER_STATUS_EXPIRED,
+  BOOKING_ORDER_STATUS_CANCELLED,
+  BOOKING_ORDER_STATUS_REFUNDED,
+] as const satisfies readonly BookingOrderStatus[];
+export const BOOKING_ORDER_ITEM_STATUSES = [
+  'pending_payment',
+  'confirmed',
+  'expired',
+  'cancelled',
+  'refunded',
+] as const;
+
+export type BookingOrderItemStatus =
+  (typeof BOOKING_ORDER_ITEM_STATUSES)[number];
+
+export const BOOKING_ORDER_ITEM_STATUS_PENDING_PAYMENT =
+  'pending_payment' satisfies BookingOrderItemStatus;
+
+export const BOOKING_ORDER_ITEM_STATUS_CONFIRMED =
+  'confirmed' satisfies BookingOrderItemStatus;
+
+export const BOOKING_ORDER_ITEM_STATUS_EXPIRED =
+  'expired' satisfies BookingOrderItemStatus;
+
+export const BOOKING_ORDER_ITEM_STATUS_CANCELLED =
+  'cancelled' satisfies BookingOrderItemStatus;
+
+export const BOOKING_ORDER_ITEM_STATUS_REFUNDED =
+  'refunded' satisfies BookingOrderItemStatus;
 
 export const BOOKING_ACTIVE_STATUSES = [
   BOOKING_STATUS_PENDING_PAYMENT,
@@ -490,6 +558,19 @@ export const BOOKING_RPC_ACTION_TARGET_WAITLISTED =
 
 export const BOOKING_RPC_ACTION_RESCHEDULED =
   'rescheduled' satisfies BookingRpcActionResult;
+export const BOOKING_ORDER_RPC_ACTION_RESULTS = [
+  'created_order',
+  'existing_order',
+] as const;
+
+export type BookingOrderRpcActionResult =
+  (typeof BOOKING_ORDER_RPC_ACTION_RESULTS)[number];
+
+export const BOOKING_ORDER_RPC_ACTION_CREATED_ORDER =
+  'created_order' satisfies BookingOrderRpcActionResult;
+
+export const BOOKING_ORDER_RPC_ACTION_EXISTING_ORDER =
+  'existing_order' satisfies BookingOrderRpcActionResult;
 
 export const PRIVATE_BOOKING_RPC_ACTION_RESULTS = [
   'existing_private_booking',
@@ -518,6 +599,15 @@ export const BOOKING_DOMAIN_EVENTS = [
   'booking.cancelled',
   'booking.rescheduled',
   'booking.expired',
+  'booking.payment_confirmed',
+  'booking.payment_expired',
+  'booking_order.created',
+  'booking_order.item_created',
+  'booking_order.paid',
+  'booking_order.item_confirmed',
+  'booking_order.expired',
+  'booking_order.item_expired',
+  'bulk_booking.created',
   'waitlist.joined',
   'waitlist.promoted',
   'availability.changed',
@@ -527,6 +617,8 @@ export const BOOKING_DOMAIN_EVENTS = [
   'private_booking.expired',
   'private_booking.completed',
   'private_booking.no_show',
+  'private_booking.payment_confirmed',
+  'private_booking.payment_expired',
 ] as const;
 
 export type BookingDomainEventName = (typeof BOOKING_DOMAIN_EVENTS)[number];
@@ -542,6 +634,32 @@ export const BOOKING_EVENT_RESCHEDULED =
 
 export const BOOKING_EVENT_EXPIRED =
   'booking.expired' satisfies BookingDomainEventName;
+export const BOOKING_EVENT_PAYMENT_CONFIRMED =
+  'booking.payment_confirmed' satisfies BookingDomainEventName;
+
+export const BOOKING_EVENT_PAYMENT_EXPIRED =
+  'booking.payment_expired' satisfies BookingDomainEventName;
+
+export const BOOKING_EVENT_ORDER_CREATED =
+  'booking_order.created' satisfies BookingDomainEventName;
+
+export const BOOKING_EVENT_ORDER_ITEM_CREATED =
+  'booking_order.item_created' satisfies BookingDomainEventName;
+
+export const BOOKING_EVENT_ORDER_PAID =
+  'booking_order.paid' satisfies BookingDomainEventName;
+
+export const BOOKING_EVENT_ORDER_ITEM_CONFIRMED =
+  'booking_order.item_confirmed' satisfies BookingDomainEventName;
+
+export const BOOKING_EVENT_ORDER_EXPIRED =
+  'booking_order.expired' satisfies BookingDomainEventName;
+
+export const BOOKING_EVENT_ORDER_ITEM_EXPIRED =
+  'booking_order.item_expired' satisfies BookingDomainEventName;
+
+export const BOOKING_EVENT_BULK_BOOKING_CREATED =
+  'bulk_booking.created' satisfies BookingDomainEventName;
 
 export const BOOKING_EVENT_WAITLIST_JOINED =
   'waitlist.joined' satisfies BookingDomainEventName;
@@ -569,6 +687,11 @@ export const BOOKING_EVENT_PRIVATE_BOOKING_COMPLETED =
 
 export const BOOKING_EVENT_PRIVATE_BOOKING_NO_SHOW =
   'private_booking.no_show' satisfies BookingDomainEventName;
+export const BOOKING_EVENT_PRIVATE_BOOKING_PAYMENT_CONFIRMED =
+  'private_booking.payment_confirmed' satisfies BookingDomainEventName;
+
+export const BOOKING_EVENT_PRIVATE_BOOKING_PAYMENT_EXPIRED =
+  'private_booking.payment_expired' satisfies BookingDomainEventName;
 
 export const BOOKING_CALENDAR_EVENT_TYPES = [
   'pilates_schedule',
@@ -601,6 +724,31 @@ export const BOOKING_ADMIN_ACCESS_ROLES = [
   AUTH_SUPER_ADMIN_ROLE,
 ] as const satisfies readonly AuthUserRole[];
 
+export const BOOKING_STAFF_ADMIN_ACCESS_ROLES = [
+  AUTH_ADMIN_ROLE,
+  AUTH_SUPER_ADMIN_ROLE,
+  AUTH_STAFF_ROLE,
+] as const satisfies readonly AuthUserRole[];
+
+export const BOOKING_TRAINER_SCOPED_ACCESS_ROLES = [
+  AUTH_TRAINER_ROLE,
+] as const satisfies readonly AuthUserRole[];
+
+export const BOOKING_ADMIN_AND_STAFF_ACCESS_ROLES = [
+  ...BOOKING_STAFF_ADMIN_ACCESS_ROLES,
+  ...BOOKING_TRAINER_SCOPED_ACCESS_ROLES,
+] as const satisfies readonly AuthUserRole[];
+
+export const BOOKING_FULL_MANAGEMENT_ROLES = [
+  AUTH_ADMIN_ROLE,
+  AUTH_SUPER_ADMIN_ROLE,
+  AUTH_STAFF_ROLE,
+] as const satisfies readonly AuthUserRole[];
+
+export const BOOKING_SCOPED_MANAGEMENT_ROLES = [
+  AUTH_TRAINER_ROLE,
+] as const satisfies readonly AuthUserRole[];
+
 export const BOOKING_DEFAULT_LIMIT = 20 as const;
 export const BOOKING_MAX_LIMIT = 100 as const;
 export const BOOKING_DEFAULT_OFFSET = 0 as const;
@@ -620,10 +768,28 @@ export const PRIVATE_BOOKING_ADMIN_DEFAULT_OFFSET = 0 as const;
 export const BOOKING_IDEMPOTENCY_KEY_MAX_LENGTH = 160 as const;
 export const BOOKING_CANCEL_REASON_MAX_LENGTH = 1000 as const;
 export const BOOKING_ADMIN_NOTES_MAX_LENGTH = 2000 as const;
+export const BOOKING_BULK_MIN_SCHEDULE_COUNT = 1 as const;
+export const BOOKING_BULK_MAX_SCHEDULE_COUNT = 20 as const;
+
+export const BOOKING_ORDER_NUMBER_MAX_LENGTH = 100 as const;
+export const BOOKING_ORDER_CREATED_BY_ROLE_MAX_LENGTH = 80 as const;
+export const BOOKING_ORDER_ADMIN_NOTES_MAX_LENGTH =
+  BOOKING_ADMIN_NOTES_MAX_LENGTH;
+
+export const BOOKING_PAYMENT_HOLD_TTL_MINUTES = 15 as const;
+export const BOOKING_ORDER_PAYMENT_HOLD_TTL_MINUTES =
+  BOOKING_PAYMENT_HOLD_TTL_MINUTES;
+
+export const BOOKING_ORDER_DEFAULT_CURRENCY = 'KWD' as const;
+export const BOOKING_ORDER_ALLOWED_CURRENCIES = [
+  BOOKING_ORDER_DEFAULT_CURRENCY,
+] as const;
+
+export const BOOKING_ORDER_PRICE_AMOUNT_MIN = 0.001 as const;
+export const BOOKING_ORDER_PRICE_DECIMAL_PLACES = 3 as const;
 export const BOOKING_HISTORY_NOTES_MAX_LENGTH = 2000 as const;
 export const BOOKING_ACTOR_ROLE_MAX_LENGTH = 80 as const;
 
-export const BOOKING_PAYMENT_HOLD_TTL_MINUTES = 15 as const;
 export const BOOKING_PAYMENT_HOLD_EXPIRING_SOON_THRESHOLD_MINUTES = 5 as const;
 
 export const BOOKING_DEFAULT_PAYMENT_REQUIRED = true as const;
@@ -671,6 +837,7 @@ export const BOOKING_ADMIN_CALENDAR_DEFAULT_INCLUDE_PRIVATE_BOOKINGS =
 export const BOOKING_UUID_VERSION = '4' as const;
 
 export const BOOKING_ID_PARAM_NAME = 'bookingId' as const;
+export const BOOKING_ORDER_ID_PARAM_NAME = 'bookingOrderId' as const;
 export const BOOKING_WAITLIST_ID_PARAM_NAME = 'waitlistId' as const;
 export const BOOKING_SCHEDULE_ID_PARAM_NAME = 'scheduleId' as const;
 export const PRIVATE_BOOKING_ID_PARAM_NAME = 'privateBookingId' as const;
@@ -731,6 +898,33 @@ export const BOOKING_CALENDAR_DEFAULT_SORT_DIRECTION =
 
 export function isBookingStatus(value: string): value is BookingStatus {
   return BOOKING_STATUSES.includes(value as BookingStatus);
+}
+export function isBookingOrderStatus(
+  value: string,
+): value is BookingOrderStatus {
+  return BOOKING_ORDER_STATUSES.includes(value as BookingOrderStatus);
+}
+
+export function isBookingOrderPayableStatus(
+  value: string,
+): value is (typeof BOOKING_ORDER_PAYABLE_STATUSES)[number] {
+  return BOOKING_ORDER_PAYABLE_STATUSES.includes(
+    value as (typeof BOOKING_ORDER_PAYABLE_STATUSES)[number],
+  );
+}
+
+export function isBookingOrderTerminalStatus(
+  value: string,
+): value is (typeof BOOKING_ORDER_TERMINAL_STATUSES)[number] {
+  return BOOKING_ORDER_TERMINAL_STATUSES.includes(
+    value as (typeof BOOKING_ORDER_TERMINAL_STATUSES)[number],
+  );
+}
+
+export function isBookingOrderItemStatus(
+  value: string,
+): value is BookingOrderItemStatus {
+  return BOOKING_ORDER_ITEM_STATUSES.includes(value as BookingOrderItemStatus);
 }
 
 export function isBookingActiveStatus(
@@ -919,6 +1113,13 @@ export function isBookingRpcActionResult(
   value: string,
 ): value is BookingRpcActionResult {
   return BOOKING_RPC_ACTION_RESULTS.includes(value as BookingRpcActionResult);
+}
+export function isBookingOrderRpcActionResult(
+  value: string,
+): value is BookingOrderRpcActionResult {
+  return BOOKING_ORDER_RPC_ACTION_RESULTS.includes(
+    value as BookingOrderRpcActionResult,
+  );
 }
 
 export function isPrivateBookingRpcActionResult(

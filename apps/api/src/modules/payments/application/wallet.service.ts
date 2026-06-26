@@ -7,6 +7,7 @@
  * - Provides customer wallet ledger history.
  * - Starts wallet top-up checkout through PaymentCheckoutService.
  * - Provides admin wallet listing/detail helpers.
+ * - Preserves booking-order wallet ledger/payment identity in wallet responses.
  * - Rejects unsafe admin wallet adjustment until an atomic database RPC exists.
  *
  * Important:
@@ -15,6 +16,7 @@
  * - Wallet debit/credit mutation must stay inside atomic PostgreSQL RPCs.
  * - Customer wallet reads enforce ownership.
  * - Guest users cannot use wallet features.
+ * - Booking-order wallet debits are handled by the checkout/wallet RPC path.
  * - Admin adjustment is deliberately blocked because the current database
  *   contract does not expose an atomic admin wallet adjustment RPC.
  */
@@ -132,6 +134,7 @@ function mapWalletLedgerEntryToSummary(
     payment_id: ledgerEntry.payment_id,
     booking_id: ledgerEntry.booking_id,
     private_booking_id: ledgerEntry.private_booking_id,
+    booking_order_id: ledgerEntry.booking_order_id,
     entry_type: WalletLedgerPolicy.assertLedgerEntryType(
       ledgerEntry.entry_type,
     ),
@@ -156,6 +159,7 @@ function mapPaymentToSummary(payment: PaymentRecord): PaymentSummary {
     target_type: payment.target_type,
     booking_id: payment.booking_id,
     private_booking_id: payment.private_booking_id,
+    booking_order_id: payment.booking_order_id,
     amount: payment.amount,
     discount_amount: payment.discount_amount,
     final_amount: payment.final_amount,

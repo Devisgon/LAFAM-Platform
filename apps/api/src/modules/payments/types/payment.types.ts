@@ -22,6 +22,7 @@ import type {
   CreditWalletAtomicRpcRow,
   DatabaseJsonObject,
   DebitWalletForBookingAtomicRpcRow,
+  DebitWalletForBookingOrderAtomicRpcRow,
   ExpirePaymentIntentsAtomicRpcRow,
   MarkPaymentCancelledAtomicRpcRow,
   MarkPaymentFailedAtomicRpcRow,
@@ -107,6 +108,8 @@ export type MarkPaymentCancelledAtomicResult = MarkPaymentCancelledAtomicRpcRow;
 export type ExpirePaymentIntentsAtomicResult = ExpirePaymentIntentsAtomicRpcRow;
 export type DebitWalletForBookingAtomicResult =
   DebitWalletForBookingAtomicRpcRow;
+export type DebitWalletForBookingOrderAtomicResult =
+  DebitWalletForBookingOrderAtomicRpcRow;
 export type CreditWalletAtomicResult = CreditWalletAtomicRpcRow;
 export type RefundPaymentAtomicResult = RefundPaymentAtomicRpcRow;
 
@@ -137,12 +140,14 @@ export interface PaymentTargetReference {
   readonly target_type: PaymentTargetType;
   readonly booking_id?: string | null;
   readonly private_booking_id?: string | null;
+  readonly booking_order_id?: string | null;
 }
 
 export interface PaymentResolvedTargetReference {
   readonly target_type: PaymentTargetType;
   readonly booking_id: string | null;
   readonly private_booking_id: string | null;
+  readonly booking_order_id: string | null;
 }
 
 export interface PaymentAmountSnapshot {
@@ -157,6 +162,7 @@ export interface PaymentPriceResolutionInput {
   readonly target_type: PaymentTargetType;
   readonly booking_id?: string | null;
   readonly private_booking_id?: string | null;
+  readonly booking_order_id?: string | null;
   readonly wallet_top_up_amount?: number;
   readonly currency?: PaymentCurrency;
   readonly promo_code?: string;
@@ -182,6 +188,7 @@ export interface CreateCheckoutPaymentInput {
   readonly target_type: PaymentTargetType;
   readonly booking_id?: string | null;
   readonly private_booking_id?: string | null;
+  readonly booking_order_id?: string | null;
   readonly wallet_top_up_amount?: number;
   readonly payment_method: PaymentMethod;
   readonly idempotency_key?: string | null;
@@ -223,6 +230,7 @@ export interface PaymentCheckoutWalletResult {
   readonly wallet_account_id: string;
   readonly wallet_ledger_entry_id: string;
   readonly available_balance: number;
+  readonly booking_order_id: string | null;
 }
 
 export type PaymentCheckoutResult =
@@ -244,6 +252,7 @@ export interface PaymentGatewayCreateHostedPaymentInput {
   readonly target_type: PaymentTargetType;
   readonly booking_id: string | null;
   readonly private_booking_id: string | null;
+  readonly booking_order_id: string | null;
   readonly callback_url: string;
   readonly webhook_url: string;
   readonly frontend_success_url: string;
@@ -420,6 +429,7 @@ export interface PaymentListQuery {
   readonly target_type?: PaymentTargetType;
   readonly booking_id?: string;
   readonly private_booking_id?: string;
+  readonly booking_order_id?: string;
   readonly payment_method?: PaymentMethod;
   readonly payment_provider?: PaymentProvider;
   readonly status?: PaymentStatus;
@@ -434,6 +444,7 @@ export interface PaymentListQuery {
 export interface CustomerPaymentListQuery {
   readonly user_id: string;
   readonly target_type?: PaymentTargetType;
+  readonly booking_order_id?: string;
   readonly status?: PaymentStatus;
   readonly from_date?: string;
   readonly to_date?: string;
@@ -489,6 +500,7 @@ export interface PaymentSummary {
   readonly target_type: PaymentTargetType;
   readonly booking_id: string | null;
   readonly private_booking_id: string | null;
+  readonly booking_order_id: string | null;
   readonly amount: number;
   readonly discount_amount: number;
   readonly final_amount: number;
@@ -551,6 +563,9 @@ export interface PaymentReceiptSummary {
   readonly receipt_number: string;
   readonly user_id: string;
   readonly target_type: PaymentTargetType;
+  readonly booking_id: string | null;
+  readonly private_booking_id: string | null;
+  readonly booking_order_id: string | null;
   readonly amount: number;
   readonly discount_amount: number;
   readonly final_amount: number;
@@ -583,6 +598,7 @@ export interface WalletLedgerEntrySummary {
   readonly payment_id: string | null;
   readonly booking_id: string | null;
   readonly private_booking_id: string | null;
+  readonly booking_order_id: string | null;
   readonly entry_type: WalletLedgerEntryType;
   readonly entry_status: WalletLedgerEntryStatus;
   readonly amount: number;
@@ -620,6 +636,7 @@ export interface WalletDebitInput {
   readonly entry_type: WalletDebitEntryType;
   readonly booking_id?: string | null;
   readonly private_booking_id?: string | null;
+  readonly booking_order_id?: string | null;
   readonly description?: string | null;
   readonly metadata?: DatabaseJsonObject;
 }
@@ -705,6 +722,7 @@ export interface PaymentSafeLogContext {
   readonly payment_number?: string;
   readonly booking_id?: string;
   readonly private_booking_id?: string;
+  readonly booking_order_id?: string;
   readonly user_id?: string;
   readonly admin_user_id?: string;
   readonly provider?: PaymentProvider;

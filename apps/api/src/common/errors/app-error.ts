@@ -145,6 +145,17 @@ export type AppErrorCode =
   | 'BOOKING_ALREADY_COMPLETED'
   | 'BOOKING_INVALID_STATUS_TRANSITION'
   | 'BOOKING_PAYMENT_REQUIRED'
+  | 'BOOKING_ORDER_NOT_FOUND'
+  | 'BOOKING_ORDER_EXPIRED'
+  | 'BOOKING_ORDER_ALREADY_PAID'
+  | 'BOOKING_ORDER_NOT_PAYABLE'
+  | 'BOOKING_ORDER_PAYMENT_MISMATCH'
+  | 'BULK_BOOKING_EMPTY_SCHEDULES'
+  | 'BULK_BOOKING_DUPLICATE_SCHEDULES'
+  | 'BULK_BOOKING_SCHEDULE_UNAVAILABLE'
+  | 'BULK_BOOKING_FULL_SCHEDULE_REJECTED'
+  | 'TRAINER_STAFF_PROFILE_NOT_FOUND'
+  | 'TRAINER_SCHEDULE_SCOPE_DENIED'
   | 'BOOKING_WAITLIST_NOT_FOUND'
   | 'BOOKING_WAITLIST_PROMOTION_FAILED'
   | 'BOOKING_CONFLICT_RETRY_REQUIRED'
@@ -1498,6 +1509,126 @@ export class AppError extends Error {
   ): AppError {
     return AppError.createConflictError(
       'BOOKING_PAYMENT_REQUIRED',
+      publicMessage,
+      details,
+    );
+  }
+  static bookingOrderNotFound(
+    publicMessage = 'The requested booking order was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'BOOKING_ORDER_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingOrderExpired(
+    publicMessage = 'This booking order has expired.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_ORDER_EXPIRED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingOrderAlreadyPaid(
+    publicMessage = 'This booking order has already been paid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_ORDER_ALREADY_PAID',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingOrderNotPayable(
+    publicMessage = 'This booking order is not payable.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_ORDER_NOT_PAYABLE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingOrderPaymentMismatch(
+    publicMessage = 'The payment does not match the booking order.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_ORDER_PAYMENT_MISMATCH',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bulkBookingEmptySchedules(
+    publicMessage = 'At least one schedule must be selected for bulk booking.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'BULK_BOOKING_EMPTY_SCHEDULES',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bulkBookingDuplicateSchedules(
+    publicMessage = 'Duplicate schedules are not allowed in one bulk booking request.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'BULK_BOOKING_DUPLICATE_SCHEDULES',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bulkBookingScheduleUnavailable(
+    publicMessage = 'One or more selected schedules are not available for booking.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BULK_BOOKING_SCHEDULE_UNAVAILABLE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bulkBookingFullScheduleRejected(
+    publicMessage = 'Bulk booking only supports schedules with available seats.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BULK_BOOKING_FULL_SCHEDULE_REJECTED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static trainerStaffProfileNotFound(
+    publicMessage = 'The trainer staff profile was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'TRAINER_STAFF_PROFILE_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static trainerScheduleScopeDenied(
+    publicMessage = 'Trainer access is limited to bookings for their own schedules.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createAuthorizationError(
+      'TRAINER_SCHEDULE_SCOPE_DENIED',
       publicMessage,
       details,
     );
