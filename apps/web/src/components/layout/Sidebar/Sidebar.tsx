@@ -8,6 +8,7 @@ import {
   CreditCard,
   Dumbbell,
   Gauge,
+  LockKeyhole,
   Menu,
   Settings,
   UserRound,
@@ -16,6 +17,11 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import {
+  type AdminRouteKey,
+  hasAdminRouteAccess,
+} from "@/lib/auth/admin-access";
+import type { AuthContextData } from "@/lib/auth/auth-context";
 
 type IconName =
   | "bookings"
@@ -29,12 +35,14 @@ type IconName =
   | "wallet";
 
 type NavItem = {
+  accessRoute: AdminRouteKey;
   href: string;
   icon: IconName;
   label: string;
 };
 
 type NavigationChild = {
+  accessRoute: AdminRouteKey;
   href: string;
   label: string;
 };
@@ -54,15 +62,14 @@ const icons: Record<IconName, LucideIcon> = {
 };
 
 const primaryItems: NavItem[] = [
-  { href: "/dashboard", icon: "dashboard", label: "Dashboard" },
-  { href: "/bookings", icon: "bookings", label: "Bookings" },
-  { href: "/calendar", icon: "calendar", label: "Calendar" },
+  { accessRoute: "/dashboard", href: "/dashboard", icon: "dashboard", label: "Dashboard" },
+  { accessRoute: "/bookings", href: "/bookings", icon: "bookings", label: "Bookings" },
+  { accessRoute: "/calendar", href: "/calendar", icon: "calendar", label: "Calendar" },
 ];
 
 const managementItems: NavItem[] = [
-  { href: "/users", icon: "staff", label: "Users" },
-  { href: "/payments", icon: "payments", label: "Payments" },
-  { href: "/settings", icon: "settings", label: "Settings" },
+  { accessRoute: "/payments", href: "/payments", icon: "payments", label: "Payments" },
+  { accessRoute: "/settings", href: "/settings", icon: "settings", label: "Settings" },
 ];
 
 function Icon({ name }: { name: IconName }) {
@@ -74,6 +81,7 @@ function Icon({ name }: { name: IconName }) {
 function NavigationLink({
   active = false,
   collapsed,
+  disabled = false,
   href,
   icon,
   label,
@@ -81,18 +89,43 @@ function NavigationLink({
 }: {
   active?: boolean;
   collapsed: boolean;
+  disabled?: boolean;
   href: string;
   icon: IconName;
   label: string;
   onNavigate?: () => void;
 }) {
+  const className = `flex min-h-14 w-full items-center text-[14px] transition ${
+    collapsed ? "justify-center px-0" : "gap-4 px-5"
+  } ${
+    disabled
+      ? "cursor-not-allowed opacity-55"
+      : "hover:bg-black hover:text-white"
+  } ${active ? "bg-black text-white" : ""}`;
+
+  if (disabled) {
+    return (
+      <button
+        aria-disabled="true"
+        aria-label={`${label} locked`}
+        className={className}
+        title={`${label} locked`}
+        type="button"
+      >
+        <Icon name={icon} />
+        {!collapsed && <span className="flex-1 text-left">{label}</span>}
+        {!collapsed && (
+          <LockKeyhole aria-hidden="true" size={15} strokeWidth={2.5} />
+        )}
+      </button>
+    );
+  }
+
   return (
     <Link
       aria-current={active ? "page" : undefined}
       aria-label={label}
-      className={`flex min-h-14 w-full items-center text-[14px] transition hover:bg-black hover:text-white ${
-        collapsed ? "justify-center px-0" : "gap-4 px-5"
-      } ${active ? "bg-black text-white" : ""}`}
+      className={className}
       href={href}
       onClick={onNavigate}
       title={label}
@@ -110,6 +143,7 @@ function NavigationGroup({
   icon,
   label,
   onNavigate,
+  resolveAccess,
 }: {
   activeItem?: string;
   children: NavigationChild[];
@@ -117,14 +151,18 @@ function NavigationGroup({
   icon: IconName;
   label: string;
   onNavigate?: () => void;
+  resolveAccess: (route: AdminRouteKey) => boolean;
 }) {
   const [open, setOpen] = useState(true);
+  const firstChild = children[0];
+  const firstChildLocked = firstChild ? !resolveAccess(firstChild.accessRoute) : true;
 
   if (collapsed) {
     return (
       <NavigationLink
         collapsed={collapsed}
-        href={children[0]?.href || "#"}
+        disabled={firstChildLocked}
+        href={firstChild?.href || "#"}
         icon={icon}
         label={label}
         onNavigate={onNavigate}
@@ -158,17 +196,13 @@ function NavigationGroup({
       {open ? (
         <div className="w-full border-b border-black/20 bg-sidebar-header py-3 shadow-sm">
           {children.map((child) => (
-            <Link
-              aria-current={child.label === activeItem ? "page" : undefined}
-              className={`block w-full px-[72px] py-2 text-[16px] font-medium text-black transition hover:bg-black/10 ${
-                child.label === activeItem ? "bg-black/10" : ""
-              }`}
-              href={child.href}
+            <NavigationChildLink
+              active={child.label === activeItem}
+              child={child}
+              disabled={!resolveAccess(child.accessRoute)}
               key={child.label}
-              onClick={onNavigate}
-            >
-              {child.label}
-            </Link>
+              onNavigate={onNavigate}
+            />
           ))}
         </div>
       ) : null}
@@ -178,17 +212,22 @@ function NavigationGroup({
 
 function SidebarContent({
   activeItem,
+  authContext,
   collapsed,
   isMobile = false,
   onClose,
   onToggleCollapse,
 }: {
   activeItem: string;
+  authContext: AuthContextData;
   collapsed: boolean;
   isMobile?: boolean;
   onClose?: () => void;
   onToggleCollapse?: () => void;
 }) {
+  const resolveAccess = (route: AdminRouteKey) =>
+    hasAdminRouteAccess(authContext, route);
+
   return (
     <>
       <div
@@ -223,6 +262,7 @@ function SidebarContent({
           <NavigationLink
             active={item.label === activeItem}
             collapsed={collapsed}
+            disabled={!resolveAccess(item.accessRoute)}
             key={item.label}
             onNavigate={onClose}
             {...item}
@@ -235,13 +275,21 @@ function SidebarContent({
           icon="services"
           label="Services"
           onNavigate={onClose}
+          resolveAccess={resolveAccess}
         >
-          {[{ href: "/services/pilates", label: "Pilates" }]}
+          {[
+            {
+              accessRoute: "/services/pilates",
+              href: "/services/pilates",
+              label: "Pilates",
+            },
+          ]}
         </NavigationGroup>
 
         <NavigationLink
           active={activeItem === "Staff"}
           collapsed={collapsed}
+          disabled={!resolveAccess("/staff")}
           href="/staff"
           icon="staff"
           label="Staff"
@@ -251,6 +299,7 @@ function SidebarContent({
         <NavigationLink
           active={activeItem === "Wallet"}
           collapsed={collapsed}
+          disabled={!resolveAccess("/wallet")}
           href="/wallet"
           icon="wallet"
           label="Wallet"
@@ -261,6 +310,7 @@ function SidebarContent({
           <NavigationLink
             active={item.label === activeItem}
             collapsed={collapsed}
+            disabled={!resolveAccess(item.accessRoute)}
             key={item.label}
             onNavigate={onClose}
             {...item}
@@ -271,7 +321,56 @@ function SidebarContent({
   );
 }
 
-export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
+function NavigationChildLink({
+  active,
+  child,
+  disabled,
+  onNavigate,
+}: {
+  active: boolean;
+  child: NavigationChild;
+  disabled: boolean;
+  onNavigate?: () => void;
+}) {
+  const className = `flex w-full items-center gap-2 px-[72px] py-2 text-left text-[16px] font-medium text-black transition ${
+    disabled
+      ? "cursor-not-allowed opacity-55"
+      : "hover:bg-black/10"
+  } ${active ? "bg-black/10" : ""}`;
+
+  if (disabled) {
+    return (
+      <button
+        aria-disabled="true"
+        className={className}
+        title={`${child.label} locked`}
+        type="button"
+      >
+        <span className="flex-1">{child.label}</span>
+        <LockKeyhole aria-hidden="true" size={14} strokeWidth={2.5} />
+      </button>
+    );
+  }
+
+  return (
+    <Link
+      aria-current={active ? "page" : undefined}
+      className={className}
+      href={child.href}
+      onClick={onNavigate}
+    >
+      {child.label}
+    </Link>
+  );
+}
+
+export function Sidebar({
+  activeItem = "Dashboard",
+  authContext,
+}: {
+  activeItem?: string;
+  authContext: AuthContextData;
+}) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const width = collapsed ? "md:w-[72px]" : "md:w-[300px]";
@@ -303,6 +402,7 @@ export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
       >
         <SidebarContent
           activeItem={activeItem}
+          authContext={authContext}
           collapsed={false}
           isMobile
           onClose={() => setMobileOpen(false)}
@@ -314,6 +414,7 @@ export function Sidebar({ activeItem = "Dashboard" }: { activeItem?: string }) {
       >
         <SidebarContent
           activeItem={activeItem}
+          authContext={authContext}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((value) => !value)}
         />

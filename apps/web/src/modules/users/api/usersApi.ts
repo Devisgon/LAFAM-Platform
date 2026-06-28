@@ -12,6 +12,7 @@ export type AdminUserRole = AuthRole | "stylist";
 export type AdminUser = {
   id: string;
   auth_user_id: string;
+  customer_profile_id?: string | null;
   email: string | null;
   phone: string | null;
   full_name: string | null;

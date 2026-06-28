@@ -4,6 +4,7 @@ import {
   type FormEvent,
   type InputHTMLAttributes,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import { usePilates } from "@/modules/services/pilates";
@@ -11,8 +12,9 @@ import {
   type CreatePilatesClassPayload,
   type PilatesClassLevel,
   type PilatesClassStatus,
+  type PilatesSchedule,
 } from "@/modules/services/pilates";
-import { ClassCard } from "@/components/data-display/ClassCard";
+import { ClassCard, type ClassCardBookingSummary } from "@/components/data-display/ClassCard";
 import { LoadingState } from "@/components/data-display/LoadingState";
 import { Toast } from "@/components/ui/Toast";
 
@@ -41,6 +43,28 @@ function classPayload(form: HTMLFormElement): CreatePilatesClassPayload {
   };
 }
 
+function scheduleStartTimestamp(schedule: PilatesSchedule): number {
+  return new Date(
+    `${schedule.class_date}T${schedule.start_time.slice(0, 8)}`,
+  ).getTime();
+}
+
+function bookingSummary(schedule: PilatesSchedule): ClassCardBookingSummary {
+  return {
+    availableSeats: schedule.availability.available_seats,
+    bookedCount: schedule.availability.booked_count,
+    capacity: schedule.capacity,
+  };
+}
+
+function defaultBookingSummary(defaultCapacity: number): ClassCardBookingSummary {
+  return {
+    availableSeats: defaultCapacity,
+    bookedCount: 0,
+    capacity: defaultCapacity,
+  };
+}
+
 export function PilatesClassManager() {
   const api = usePilates();
   const [isCreateMode, setIsCreateMode] = useState(() =>
@@ -60,6 +84,24 @@ export function PilatesClassManager() {
     window.addEventListener("hashchange", syncCreateMode);
     return () => window.removeEventListener("hashchange", syncCreateMode);
   }, []);
+
+  const upcomingBookingByClassId = useMemo(() => {
+    const nextSchedules = new Map<string, PilatesSchedule>();
+
+    api.schedules.forEach((schedule) => {
+      if (schedule.status !== "scheduled") return;
+
+      const startsAt = scheduleStartTimestamp(schedule);
+      if (!Number.isFinite(startsAt)) return;
+
+      const current = nextSchedules.get(schedule.class_id);
+      if (!current || startsAt < scheduleStartTimestamp(current)) {
+        nextSchedules.set(schedule.class_id, schedule);
+      }
+    });
+
+    return nextSchedules;
+  }, [api.schedules]);
 
   const createClass = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -129,14 +171,23 @@ export function PilatesClassManager() {
                 No Pilates classes found. Create a new class to get started.
               </div>
             ) : (
-              api.classes.map((item) => (
-                <ClassCard
-                  actionHref={`/services/pilates/${item.id}`}
-                  actionLabel="Manage class"
-                  item={item}
-                  key={item.id}
-                />
-              ))
+              api.classes.map((item) => {
+                const upcomingSchedule = upcomingBookingByClassId.get(item.id);
+
+                return (
+                  <ClassCard
+                    actionHref={`/services/pilates/${item.id}`}
+                    actionLabel="Manage class"
+                    bookingSummary={
+                      upcomingSchedule
+                        ? bookingSummary(upcomingSchedule)
+                        : defaultBookingSummary(item.default_capacity)
+                    }
+                    item={item}
+                    key={item.id}
+                  />
+                );
+              })
             )}
           </div>
         </section>

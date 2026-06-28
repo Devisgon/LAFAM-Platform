@@ -441,6 +441,10 @@ function readApiErrorMessage(payload: unknown): string | null {
 }
 
 export function getDashboardPath(role?: string | null): string {
+  if (role === "staff" || role === "trainer" || role === "stylist") {
+    return "/bookings";
+  }
+
   if (role) return "/dashboard";
   return "/login";
 }
@@ -463,10 +467,15 @@ function canRoleAccessPath(
   role: string | null | undefined,
   path: string,
 ): boolean {
-  const isAdmin = role === "super_admin" || role === "admin";
+  const canEnterDashboardShell =
+    role === "super_admin" ||
+    role === "admin" ||
+    role === "staff" ||
+    role === "trainer" ||
+    role === "stylist";
 
   if (!role) return false;
-  return isAdmin && (
+  return canEnterDashboardShell && (
     isRouteMatch(path, "/dashboard") ||
     isRouteMatch(path, "/bookings") ||
     isRouteMatch(path, "/calendar") ||

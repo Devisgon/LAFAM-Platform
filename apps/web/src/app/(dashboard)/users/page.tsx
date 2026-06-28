@@ -1,4 +1,11 @@
-import { RoleGuard } from "@/components/guards";
+import { PermissionGuard } from "@/components/guards/PermissionGuard";
 import { AdminUserManager } from "@/modules/users";
-export default function UsersPage() { return <RoleGuard allowedRoles={["admin", "super_admin"]}><AdminUserManager /></RoleGuard>; }
+
+export default function UsersPage() {
+  return (
+    <PermissionGuard route="/users">
+      <AdminUserManager />
+    </PermissionGuard>
+  );
+}
 

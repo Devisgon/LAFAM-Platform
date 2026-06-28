@@ -1,6 +1,7 @@
 import { type ApiResponse, authFetch } from "@/modules/auth";
 
 export type CustomerAuthStatus =
+  | "guest_active"
   | "active"
   | "pending_email_verification"
   | "deactivated"
@@ -67,7 +68,7 @@ type CustomerMutationResult = {
 };
 
 function buildQuery(filters: CustomerFilters): string {
-  const params = new URLSearchParams({ limit: "200", offset: "0" });
+  const params = new URLSearchParams({ limit: "100", offset: "0" });
 
   if (filters.search?.trim()) {
     params.set("search", filters.search.trim());
@@ -101,6 +102,15 @@ export const adminCustomersClient = {
         method: "POST",
         body: JSON.stringify(payload),
       },
+    );
+
+    return response.data.customer;
+  },
+
+  async get(customerId: string): Promise<CustomerProfile> {
+    const response = await authFetch<ApiResponse<CustomerMutationResult>>(
+      `/admin/customers/${encodeURIComponent(customerId)}`,
+      { method: "GET" },
     );
 
     return response.data.customer;

@@ -20,7 +20,17 @@ export function useAdminUsers(filters: AdminUserFilters) {
 
   const reconcile = useCallback((updatedUser: AdminUser) => {
     setUsers((current) =>
-      current.map((user) => (user.id === updatedUser.id ? updatedUser : user)),
+      current.map((user) =>
+        user.id === updatedUser.id
+          ? {
+              ...updatedUser,
+              customer_profile_id:
+                updatedUser.customer_profile_id ??
+                user.customer_profile_id ??
+                null,
+            }
+          : user,
+      ),
     );
   }, []);
 

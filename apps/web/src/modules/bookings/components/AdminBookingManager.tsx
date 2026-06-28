@@ -78,6 +78,10 @@ function label(value: string): string {
     .replace(/^\w/, (letter) => letter.toUpperCase());
 }
 
+function sourceLabel(value?: string | null): string {
+  return value?.trim() ? label(value) : "Not recorded";
+}
+
 function statusTone(
   status: string,
 ): "neutral" | "info" | "success" | "warning" | "error" {
@@ -729,6 +733,7 @@ function BookingListPanel({ previousOnly }: { previousOnly: boolean }) {
               { key: "date", heading: "Date" },
               { key: "status", heading: "Status" },
               { key: "payment", heading: "Payment" },
+              { key: "source", heading: "Source" },
               { key: "price", heading: "Price" },
               { key: "action", heading: "Action" },
             ]}
@@ -869,6 +874,9 @@ function BookingRecordRow({
           {label(booking.payment_status)}
         </Badge>
       </td>
+      <td className="px-4 py-4 align-top text-sm font-semibold text-txt-primary">
+        {sourceLabel(booking.source)}
+      </td>
       <td className="px-4 py-4 align-top font-semibold text-txt-primary">
         {formatPrice(booking.price?.amount, booking.price?.currency)}
       </td>
@@ -935,6 +943,9 @@ function PrivateBookingRecordRow({
         <Badge tone={paymentTone(booking.payment_status)}>
           {label(booking.payment_status)}
         </Badge>
+      </td>
+      <td className="px-4 py-4 align-top text-sm font-semibold text-txt-primary">
+        {sourceLabel(booking.source)}
       </td>
       <td className="px-4 py-4 align-top font-semibold text-txt-primary">
         {formatPrice(booking.price?.amount, booking.price?.currency)}
@@ -1193,6 +1204,7 @@ function BookingDetailPanel({
           label="Price"
           value={formatPrice(booking.price?.amount, booking.price?.currency)}
         />
+        <DetailItem label="Source" value={sourceLabel(booking.source)} />
 
         <DetailItem
           label="Admin notes"
@@ -1553,6 +1565,7 @@ function PrivateBookingDetailPanel({
           label="Price"
           value={formatPrice(booking.price?.amount, booking.price?.currency)}
         />
+        <DetailItem label="Source" value={sourceLabel(booking.source)} />
         <DetailItem
           label="Admin notes"
           value={booking.admin_notes ?? "No admin notes"}

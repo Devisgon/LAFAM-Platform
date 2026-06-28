@@ -540,7 +540,9 @@ export class AuthUserRepository {
       throw mapDatabaseError(error);
     }
 
-    const users = (data ?? []).map(mapAppUserRowToAdminUserResponse);
+    const users = (data ?? []).map((user) =>
+      mapAppUserRowToAdminUserResponse(user),
+    );
 
     return {
       users,

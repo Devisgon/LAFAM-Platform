@@ -1513,7 +1513,7 @@ export class PilatesClassAdminService {
       end_time: firstTimeSlot.end_time,
       duration_minutes: firstTimeSlot.duration_minutes,
       capacity: generationInput.default_capacity,
-      uses_multiple_time_slots: true,
+      uses_multiple_time_slots: seriesTimeSlotInputs.length > 1,
       time_slot_count: seriesTimeSlotInputs.length,
       excluded_dates: [],
       status: PILATES_SCHEDULE_SERIES_STATUS_ACTIVE,

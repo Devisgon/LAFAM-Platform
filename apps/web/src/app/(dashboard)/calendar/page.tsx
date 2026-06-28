@@ -1,4 +1,10 @@
-import { RoleGuard } from "@/components/guards";
+import { PermissionGuard } from "@/components/guards/PermissionGuard";
 import { AdminCalendar } from "@/modules/calendar";
-export default function CalendarPage() { return <RoleGuard allowedRoles={["admin", "super_admin"]}><AdminCalendar /></RoleGuard>; }
 
+export default function CalendarPage() {
+  return (
+    <PermissionGuard route="/calendar">
+      <AdminCalendar />
+    </PermissionGuard>
+  );
+}
