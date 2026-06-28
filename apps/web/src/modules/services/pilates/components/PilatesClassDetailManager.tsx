@@ -6,6 +6,7 @@ import {
   type InputHTMLAttributes,
   type ReactNode,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import { usePilates } from "@/modules/services/pilates";
@@ -19,6 +20,7 @@ import {
   type PilatesScheduleStatus,
   type UpdatePilatesSchedulePayload,
 } from "@/modules/services/pilates";
+import type { StaffMember } from "@/modules/staff";
 import { Badge } from "@/components/ui/Badge";
 import { LoadingState } from "@/components/data-display/LoadingState";
 import { Toast } from "@/components/ui/Toast";
@@ -103,11 +105,80 @@ const weekDays = [
   { label: "Saturday", value: 6 },
 ] as const;
 
-function excludedDates(data: FormData): string[] {
-  return String(data.get("excluded_dates") ?? "")
-    .split(/[\n,]/)
-    .map((date) => date.trim())
-    .filter(Boolean);
+type TimeSlotOption = {
+  endTime: string;
+  label: string;
+  startTime: string;
+};
+
+function minutesFromTime(time: string): number {
+  const [hour, minute] = time.slice(0, 5).split(":").map(Number);
+
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) {
+    return Number.NaN;
+  }
+
+  return hour * 60 + minute;
+}
+
+function timeFromMinutes(totalMinutes: number): string {
+  const hour = Math.floor(totalMinutes / 60);
+  const minute = totalMinutes % 60;
+
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function dayFromDate(date: string): number | null {
+  const value = new Date(`${date}T00:00:00`);
+
+  if (Number.isNaN(value.getTime())) {
+    return null;
+  }
+
+  return value.getDay();
+}
+
+function trainerSlots(
+  trainer: StaffMember | undefined,
+  dayOfWeek: number | null,
+  durationMinutes: number,
+): TimeSlotOption[] {
+  if (!trainer || dayOfWeek === null || durationMinutes < 15) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+
+  return trainer.availability
+    .filter((rule) => rule.is_available && rule.day_of_week === dayOfWeek)
+    .flatMap((rule) => {
+      const start = minutesFromTime(rule.start_time);
+      const end = minutesFromTime(rule.end_time);
+
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+        return [];
+      }
+
+      const options: TimeSlotOption[] = [];
+
+      for (let cursor = start; cursor + durationMinutes <= end; cursor += durationMinutes) {
+        const startTime = timeFromMinutes(cursor);
+        const endTime = timeFromMinutes(cursor + durationMinutes);
+        const key = `${startTime}-${endTime}`;
+
+        if (!seen.has(key)) {
+          seen.add(key);
+          options.push({
+            endTime,
+            label: `${startTime} - ${endTime}`,
+            startTime,
+          });
+        }
+      }
+
+      return options;
+    })
+    .sort((a, b) => a.startTime.localeCompare(b.startTime));
 }
 
 function createSchedulePayloads(
@@ -129,56 +200,90 @@ function createSchedulePayloads(
       .getAll("days_of_week")
       .map((value) => Number(value))
       .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6);
+    const durationMinutes = Number(data.get("duration_minutes"));
 
-    return selectedDays.map((day) => {
+    if (selectedDays.length === 0) {
+      throw new Error("Select at least one trainer working day.");
+    }
+
+    const scheduleDays = selectedDays.map((day) => {
       const startTime = String(data.get(`weekly_start_time_${day}`));
-      const durationMinutes = Number(data.get(`weekly_duration_${day}`));
       const capacity = Number(data.get(`weekly_capacity_${day}`));
 
+      if (!startTime) {
+        throw new Error("Select a time slot for every selected day.");
+      }
+
       return {
-        ...common,
-        mode: "recurring",
-        start_date: String(data.get("start_date")),
-        end_date: String(data.get("end_date")),
-        start_time: startTime,
-        duration_minutes: durationMinutes,
-        capacity,
+        day_of_week: day,
         time_slots: [
           {
             start_time: startTime,
             duration_minutes: durationMinutes,
             capacity,
-            studio: common.studio,
           },
         ],
-        recurrence: {
-          frequency: "weekly",
-          days_of_week: [day],
-          excluded_dates: excludedDates(data),
-        },
       };
     });
+
+    return [
+      {
+        ...common,
+        start_date: String(data.get("start_date")),
+        end_date: String(data.get("end_date")),
+        default_capacity: Number(data.get("capacity")),
+        schedule_days: scheduleDays,
+      },
+    ];
+  }
+
+  const startTime = String(data.get("start_time"));
+  const classDate = String(data.get("class_date"));
+  const dayOfWeek = dayFromDate(classDate);
+
+  if (!startTime) {
+    throw new Error("Select a trainer time slot.");
+  }
+
+  if (dayOfWeek === null) {
+    throw new Error("Select a class date.");
   }
 
   return [
     {
       ...common,
-      mode: "single",
-      class_date: String(data.get("class_date")),
-      start_time: String(data.get("start_time")),
-      duration_minutes: Number(data.get("duration_minutes")),
-      capacity: Number(data.get("capacity")),
+      start_date: classDate,
+      end_date: classDate,
+      default_capacity: Number(data.get("capacity")),
+      schedule_days: [
+        {
+          day_of_week: dayOfWeek,
+          time_slots: [
+            {
+              start_time: startTime,
+              duration_minutes: Number(data.get("duration_minutes")),
+              capacity: Number(data.get("capacity")),
+            },
+          ],
+        },
+      ],
     },
   ];
 }
 
 function updateSchedulePayload(form: HTMLFormElement): UpdatePilatesSchedulePayload {
   const data = new FormData(form);
+  const startTime = String(data.get("start_time"));
+
+  if (!startTime) {
+    throw new Error("Select a trainer time slot.");
+  }
+
   return {
     trainer_staff_profile_id: String(data.get("trainer_staff_profile_id")),
     studio: String(data.get("studio")).trim(),
     class_date: String(data.get("class_date")),
-    start_time: String(data.get("start_time")),
+    start_time: startTime,
     duration_minutes: Number(data.get("duration_minutes")),
     capacity: Number(data.get("capacity")),
     price_amount: Number(data.get("price_amount")),
@@ -272,30 +377,38 @@ export function PilatesClassDetailManager({ classId }: { classId: string }) {
     event.preventDefault();
     const current = editingSchedule;
 
-    if (current) {
-      const payload = updateSchedulePayload(event.currentTarget);
+    try {
+      if (current) {
+        const payload = updateSchedulePayload(event.currentTarget);
+        void run(
+          () => api.updateSchedule(current.id, payload),
+          "Schedule updated",
+          "The class schedule was updated.",
+          () => {
+            setEditingSchedule(null);
+            setCreatingSchedule(false);
+          },
+        );
+        return;
+      }
+
+      const payloads = createSchedulePayloads(event.currentTarget, classId);
       void run(
-        () => api.updateSchedule(current.id, payload),
-        "Schedule updated",
-        "The class schedule was updated.",
+        () => api.createSchedules(payloads),
+        "Schedule created",
+        `${payloads.length} schedule series added to this class.`,
         () => {
           setEditingSchedule(null);
           setCreatingSchedule(false);
         },
       );
-      return;
+    } catch (error: unknown) {
+      setToast({
+        message: error instanceof Error ? error.message : "The schedule is incomplete.",
+        title: "Schedule not ready",
+        tone: "error",
+      });
     }
-
-    const payloads = createSchedulePayloads(event.currentTarget, classId);
-    void run(
-      () => api.createSchedules(payloads),
-      "Schedule created",
-      `${payloads.length} schedule series added to this class.`,
-      () => {
-        setEditingSchedule(null);
-        setCreatingSchedule(false);
-      },
-    );
   };
 
   const cancelSchedule = (item: PilatesSchedule) => {
@@ -348,25 +461,14 @@ export function PilatesClassDetailManager({ classId }: { classId: string }) {
         </Link>
       </nav>
 
-      <ClassDetailCard
-        detail={detail}
-        onCreateSchedule={() => setCreatingSchedule(true)}
-        onEdit={() => setEditingClass(true)}
-        schedules={schedules}
-        onCancelSchedule={cancelSchedule}
-        onCompleteSchedule={completeSchedule}
-        onDeleteSchedule={deleteSchedule}
-        onEditSchedule={setEditingSchedule}
-      />
-
-      {editingClass ? (
-        <InlineCard onClose={() => setEditingClass(false)} title={`Edit ${detail.title}`}>
-          <ClassEditForm detail={detail} isSaving={api.isMutating} onClose={() => setEditingClass(false)} onSubmit={updateClass} />
-        </InlineCard>
-      ) : null}
-
       {creatingSchedule || editingSchedule ? (
-        <InlineCard onClose={() => { setCreatingSchedule(false); setEditingSchedule(null); }} title={editingSchedule ? "Edit schedule" : `Schedule ${detail.title}`}>
+        <ScheduleScreen
+          onClose={() => {
+            setCreatingSchedule(false);
+            setEditingSchedule(null);
+          }}
+          title={editingSchedule ? "Edit schedule" : `Schedule ${detail.title}`}
+        >
           <ScheduleForm
             detail={detail}
             isSaving={api.isMutating}
@@ -375,8 +477,27 @@ export function PilatesClassDetailManager({ classId }: { classId: string }) {
             onSubmit={saveSchedule}
             trainers={api.trainers}
           />
-        </InlineCard>
-      ) : null}
+        </ScheduleScreen>
+      ) : (
+        <>
+          <ClassDetailCard
+            detail={detail}
+            onCreateSchedule={() => setCreatingSchedule(true)}
+            onEdit={() => setEditingClass(true)}
+            schedules={schedules}
+            onCancelSchedule={cancelSchedule}
+            onCompleteSchedule={completeSchedule}
+            onDeleteSchedule={deleteSchedule}
+            onEditSchedule={setEditingSchedule}
+          />
+
+          {editingClass ? (
+            <InlineCard onClose={() => setEditingClass(false)} title={`Edit ${detail.title}`}>
+              <ClassEditForm detail={detail} isSaving={api.isMutating} onClose={() => setEditingClass(false)} onSubmit={updateClass} />
+            </InlineCard>
+          ) : null}
+        </>
+      )}
 
       {toast ? (
         <div className="fixed bottom-4 right-4 z-[90]">
@@ -543,6 +664,31 @@ function ClassEditForm({
   );
 }
 
+function ScheduleScreen({
+  children,
+  onClose,
+  title,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+  title: string;
+}) {
+  return (
+    <section className="overflow-hidden rounded-md border border-background-secondary bg-card-bg-primary text-txt-primary shadow-sm">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-background-secondary bg-card-bg-primary px-5 py-5">
+        <div>
+          <p className="text-xs font-bold uppercase text-txt-secondary">Scheduling</p>
+          <h2 className="mt-1 text-2xl font-medium">{title}</h2>
+        </div>
+        <button className={buttonClass} onClick={onClose} type="button">
+          Back to class
+        </button>
+      </header>
+      {children}
+    </section>
+  );
+}
+
 function ScheduleForm({
   detail,
   isSaving,
@@ -556,12 +702,14 @@ function ScheduleForm({
   item?: PilatesSchedule;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  trainers: Array<{ id: string; display_name: string; staff_status: string }>;
+  trainers: StaffMember[];
 }) {
   const isEditing = Boolean(item);
   const [mode, setMode] = useState<"single" | "weekly">("single");
+  const [selectedTrainerId, setSelectedTrainerId] = useState(item?.trainer_staff_profile_id ?? "");
   const [selectedWeekDays, setSelectedWeekDays] = useState<number[]>([1, 3, 5]);
   const [startTime, setStartTime] = useState(item?.start_time?.slice(0, 5) ?? "10:00");
+  const [classDate, setClassDate] = useState(item?.class_date ?? "");
   const [durationMinutes, setDurationMinutes] = useState(item?.duration_minutes ?? detail.default_duration_minutes);
   const [capacity, setCapacity] = useState(item?.capacity ?? detail.default_capacity);
   const [priceAmount, setPriceAmount] = useState(item?.price_amount ?? detail.default_price_amount);
@@ -571,13 +719,19 @@ function ScheduleForm({
         day.value,
         {
           startTime: `${String(9 + index).padStart(2, "0")}:00`,
-          durationMinutes: detail.default_duration_minutes,
           capacity: detail.default_capacity,
         },
       ]),
-    ) as Record<number, { startTime: string; durationMinutes: number; capacity: number }>,
+    ) as Record<number, { startTime: string; capacity: number }>,
   );
-  const scheduleDate = item?.class_date ?? "";
+  const selectedTrainer = useMemo(
+    () => trainers.find((trainer) => trainer.id === selectedTrainerId),
+    [selectedTrainerId, trainers],
+  );
+  const singleSlots = useMemo(
+    () => trainerSlots(selectedTrainer, dayFromDate(classDate), durationMinutes),
+    [classDate, durationMinutes, selectedTrainer],
+  );
 
   const toggleWeekDay = (day: number) => {
     setSelectedWeekDays((current) =>
@@ -591,7 +745,7 @@ function ScheduleForm({
 
   const updateWeeklySlot = (
     day: number,
-    patch: Partial<{ startTime: string; durationMinutes: number; capacity: number }>,
+    patch: Partial<{ startTime: string; capacity: number }>,
   ) => {
     setWeeklySlots((current) => ({
       ...current,
@@ -629,10 +783,28 @@ function ScheduleForm({
         ) : null}
 
         <div className="mt-5 grid gap-5 md:grid-cols-2">
-          <label className="grid gap-1.5 text-xs font-bold md:col-span-2">Trainer<select className={fieldClass} defaultValue={item?.trainer_staff_profile_id ?? ""} disabled={isSaving} name="trainer_staff_profile_id" required><option value="">Select a trainer</option>{trainers.map((trainer) => <option key={trainer.id} value={trainer.id}>{trainer.display_name} ({label(trainer.staff_status)})</option>)}</select></label>
+          <label className="grid gap-1.5 text-xs font-bold md:col-span-2">
+            Trainer
+            <select
+              className={fieldClass}
+              disabled={isSaving}
+              name="trainer_staff_profile_id"
+              onChange={(event) => setSelectedTrainerId(event.target.value)}
+              required
+              value={selectedTrainerId}
+            >
+              <option value="">Select a trainer</option>
+              {trainers.map((trainer) => (
+                <option key={trainer.id} value={trainer.id}>
+                  {trainer.display_name} ({label(trainer.staff_status)})
+                </option>
+              ))}
+            </select>
+          </label>
           <FormInput defaultValue={item?.studio ?? "LAFAM Pilates Studio"} label="Studio" maxLength={120} name="studio" required />
+          <FormInput label="Duration (minutes)" max={240} min={15} name="duration_minutes" onChange={(event) => setDurationMinutes(Number(event.target.value))} required type="number" value={durationMinutes} />
           {isEditing || mode === "single" ? (
-            <FormInput defaultValue={scheduleDate} label="Class date" name="class_date" required type="date" />
+            <FormInput label="Class date" name="class_date" onChange={(event) => setClassDate(event.target.value)} required type="date" value={classDate} />
           ) : (
             <>
               <FormInput label="Start date" name="start_date" required type="date" />
@@ -641,11 +813,25 @@ function ScheduleForm({
           )}
           {isEditing || mode === "single" ? (
             <>
-              <FormInput label="Start time" name="start_time" onChange={(event) => setStartTime(event.target.value)} required type="time" value={startTime} />
-              <FormInput label="Duration (minutes)" max={240} min={15} name="duration_minutes" onChange={(event) => setDurationMinutes(Number(event.target.value))} required type="number" value={durationMinutes} />
+              <TimeSlotPicker
+                className="md:col-span-2"
+                disabled={isSaving}
+                emptyLabel={
+                  selectedTrainerId && classDate
+                    ? "No trainer availability fits this duration on the selected day."
+                    : "Select a trainer and class date to show available time slots."
+                }
+                name="start_time"
+                onChange={setStartTime}
+                options={singleSlots}
+                required
+                value={startTime}
+              />
               <FormInput label="Capacity" max={100} min={1} name="capacity" onChange={(event) => setCapacity(Number(event.target.value))} required type="number" value={capacity} />
             </>
-          ) : null}
+          ) : (
+            <FormInput label="Default capacity" max={100} min={1} name="capacity" onChange={(event) => setCapacity(Number(event.target.value))} required type="number" value={capacity} />
+          )}
           <FormInput label="Price (KWD)" min={0} name="price_amount" onChange={(event) => setPriceAmount(Number(event.target.value))} required step="0.001" type="number" value={priceAmount} />
           <FormInput defaultValue="KWD" disabled label="Currency" readOnly type="text" />
         </div>
@@ -654,24 +840,13 @@ function ScheduleForm({
           <WeeklyDayPlanner
             onToggleDay={toggleWeekDay}
             onUpdateSlot={updateWeeklySlot}
+            durationMinutes={durationMinutes}
             selectedWeekDays={selectedWeekDays}
             slots={weeklySlots}
+            trainer={selectedTrainer}
           />
         ) : null}
 
-        {!isEditing && mode === "weekly" ? (
-          <label className="mt-5 grid gap-1.5 text-xs font-bold">
-            Excluded dates
-            <textarea
-              className={`${fieldClass} min-h-20 resize-y`}
-              name="excluded_dates"
-              placeholder="2026-07-01, 2026-08-14"
-            />
-            <span className="font-normal text-txt-secondary">
-              Separate blackout dates with commas or new lines.
-            </span>
-          </label>
-        ) : null}
       </div>
 
       <ModalFooter
@@ -716,26 +891,90 @@ function ScheduleModeButton({
   );
 }
 
+function TimeSlotPicker({
+  className,
+  disabled,
+  emptyLabel,
+  name,
+  onChange,
+  options,
+  required,
+  value,
+}: {
+  className?: string;
+  disabled?: boolean;
+  emptyLabel: string;
+  name: string;
+  onChange: (value: string) => void;
+  options: TimeSlotOption[];
+  required?: boolean;
+  value: string;
+}) {
+  const selectedValue = options.some((option) => option.startTime === value)
+    ? value
+    : "";
+
+  return (
+    <fieldset className={`grid gap-2 text-xs font-bold ${className ?? ""}`}>
+      <legend>Time slot</legend>
+      {options.length > 0 ? (
+        <select
+          className={fieldClass}
+          disabled={disabled}
+          name={name}
+          onChange={(event) => onChange(event.target.value)}
+          required={required}
+          value={selectedValue}
+        >
+          <option value="">Select available time</option>
+          {options.map((option) => {
+            return (
+              <option
+                key={option.startTime}
+                value={option.startTime}
+              >
+                {option.label}
+              </option>
+            );
+          })}
+        </select>
+      ) : (
+        <p className="rounded-sm border border-dashed border-background-secondary bg-background px-3 py-3 text-xs font-semibold text-txt-secondary">
+          {emptyLabel}
+        </p>
+      )}
+      {required && options.length > 0 ? (
+        <span className="font-normal text-txt-secondary">
+          Select one available trainer time slot.
+        </span>
+      ) : null}
+    </fieldset>
+  );
+}
+
 function WeeklyDayPlanner({
+  durationMinutes,
   onToggleDay,
   onUpdateSlot,
   selectedWeekDays,
   slots,
+  trainer,
 }: {
+  durationMinutes: number;
   onToggleDay: (day: number) => void;
   onUpdateSlot: (
     day: number,
     patch: Partial<{
       startTime: string;
-      durationMinutes: number;
       capacity: number;
     }>,
   ) => void;
   selectedWeekDays: number[];
   slots: Record<
     number,
-    { startTime: string; durationMinutes: number; capacity: number }
+    { startTime: string; capacity: number }
   >;
+  trainer: StaffMember | undefined;
 }) {
   return (
     <section className="mt-6 overflow-hidden rounded-sm border border-background-secondary bg-card-bg-primary">
@@ -744,8 +983,8 @@ function WeeklyDayPlanner({
           Weekly day and time settings
         </h3>
         <p className="mt-1 text-xs text-txt-secondary">
-          Select the weekdays and set a different start time, duration, and
-          capacity for each day.
+          Select only the trainer working days, then choose one generated time
+          slot for each selected day.
         </p>
       </header>
       <div className="overflow-x-auto">
@@ -754,14 +993,15 @@ function WeeklyDayPlanner({
             <tr>
               <th className="px-4 py-3">Use</th>
               <th className="px-4 py-3">Day</th>
-              <th className="px-4 py-3">Start time</th>
-              <th className="px-4 py-3">Duration</th>
+              <th className="px-4 py-3">Time slot</th>
               <th className="px-4 py-3">Capacity</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-background-secondary">
             {weekDays.map((day) => {
-              const selected = selectedWeekDays.includes(day.value);
+              const daySlots = trainerSlots(trainer, day.value, durationMinutes);
+              const hasSlots = daySlots.length > 0;
+              const selected = selectedWeekDays.includes(day.value) && hasSlots;
               const slot = slots[day.value];
 
               return (
@@ -771,6 +1011,7 @@ function WeeklyDayPlanner({
                       aria-label={`Include ${day.label}`}
                       checked={selected}
                       className="size-5 accent-primary"
+                      disabled={!hasSlots}
                       name="days_of_week"
                       onChange={() => onToggleDay(day.value)}
                       type="checkbox"
@@ -779,29 +1020,18 @@ function WeeklyDayPlanner({
                   </td>
                   <td className="px-4 py-3 font-semibold text-txt-primary">{day.label}</td>
                   <td className="px-4 py-3">
-                    <input
-                      aria-label={`${day.label} start time`}
-                      className={fieldClass}
+                    <TimeSlotPicker
                       disabled={!selected}
+                      emptyLabel={
+                        trainer
+                          ? "No slot fits this duration."
+                          : "Select a trainer first."
+                      }
                       name={`weekly_start_time_${day.value}`}
-                      onChange={(event) => onUpdateSlot(day.value, { startTime: event.target.value })}
+                      onChange={(value) => onUpdateSlot(day.value, { startTime: value })}
+                      options={daySlots}
                       required={selected}
-                      type="time"
                       value={slot.startTime}
-                    />
-                  </td>
-                  <td className="px-4 py-3">
-                    <input
-                      aria-label={`${day.label} duration`}
-                      className={fieldClass}
-                      disabled={!selected}
-                      max={240}
-                      min={15}
-                      name={`weekly_duration_${day.value}`}
-                      onChange={(event) => onUpdateSlot(day.value, { durationMinutes: Number(event.target.value) })}
-                      required={selected}
-                      type="number"
-                      value={slot.durationMinutes}
                     />
                   </td>
                   <td className="px-4 py-3">

@@ -1,3 +1,10 @@
-import { RoleGuard } from "@/components/guards";
+import { PermissionGuard } from "@/components/guards/PermissionGuard";
 import { AdminPaymentManager } from "@/modules/payments";
-export default function PaymentsPage() { return <RoleGuard allowedRoles={["admin", "super_admin"]}><AdminPaymentManager /></RoleGuard>; }
+
+export default function PaymentsPage() {
+  return (
+    <PermissionGuard route="/payments">
+      <AdminPaymentManager />
+    </PermissionGuard>
+  );
+}

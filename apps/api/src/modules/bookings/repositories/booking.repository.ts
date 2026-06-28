@@ -43,6 +43,7 @@ import {
   BOOKING_DEFAULT_LIMIT,
   BOOKING_HISTORY_ACTION_ADMIN_OVERRIDE,
   BOOKING_MAX_LIMIT,
+  BOOKING_ORDER_PAYABLE_STATUSES,
   BOOKING_PAYMENT_PAYABLE_STATUSES,
   BOOKING_PAYMENT_STATUS_EXPIRED,
   BOOKING_STATUS_CANCELLED,
@@ -66,6 +67,7 @@ import type {
   BookingAdminListFilters,
   BookingAdminWaitlistFilters,
   BookingAvailabilityPayload,
+  BookingBulkCreatePayload,
   BookingCalendarFilters,
   BookingCancelAtomicRpcRow,
   BookingCancelPayload,
@@ -76,20 +78,31 @@ import type {
   BookingDomainEventRecord,
   BookingHydratedPaymentRow,
   BookingHydratedRow,
+  BookingOrderConfirmPaidAtomicRpcRow,
+  BookingOrderCreateAtomicRpcRow,
+  BookingOrderExpireAtomicRpcRow,
+  BookingOrderHydratedRow,
+  BookingOrderRepositoryPaymentStateLookup,
   BookingPriceSnapshot,
   BookingRepositoryAvailabilityLookup,
   BookingRepositoryBookingLookup,
   BookingRepositoryCancelAtomicResult,
+  BookingRepositoryConfirmOrderPaidResult,
   BookingRepositoryCreateAtomicResult,
+  BookingRepositoryCreateOrderAtomicResult,
   BookingRepositoryExpireHoldsResult,
+  BookingRepositoryExpireOrderResult,
   BookingRepositoryListLookup,
+  BookingRepositoryOrderLookup,
   BookingRepositoryPayableBookingLookup,
+  BookingRepositoryPayableOrderLookup,
   BookingRepositoryPaymentStateLookup,
   BookingRepositoryRescheduleAtomicResult,
   BookingRepositoryWaitlistListLookup,
   BookingRepositoryWaitlistLookup,
   BookingRescheduleAtomicRpcRow,
   BookingReschedulePayload,
+  BookingScheduleScopeSnapshot,
   BookingWaitlistFilters,
   BookingWaitlistHydratedRow,
   PrivateBookingCancelAtomicRpcRow,
@@ -158,6 +171,32 @@ const BOOKING_RELATIONS_SELECT = `
     completed_at,
     realtime_version
   ),
+  booking_orders!bookings_booking_order_id_fkey (
+    id,
+    order_number,
+    customer_user_id,
+    status,
+    payment_status,
+    payment_required,
+    total_amount,
+    currency,
+    booking_count,
+    idempotency_key,
+    created_by_user_id,
+    created_by_admin_id,
+    created_by_staff_profile_id,
+    created_by_role,
+    admin_notes,
+    metadata,
+    expires_at,
+    paid_at,
+    expired_at,
+    cancelled_at,
+    refunded_at,
+    created_at,
+    updated_at,
+    realtime_version
+  ),
   staff_profiles!bookings_trainer_staff_profile_id_fkey (
     id,
     app_user_id,
@@ -178,8 +217,10 @@ const BOOKING_RELATIONS_SELECT = `
     id,
     payment_number,
     receipt_number,
+    target_type,
     booking_id,
     private_booking_id,
+    booking_order_id,
     amount,
     discount_amount,
     final_amount,
@@ -272,12 +313,157 @@ const PRIVATE_BOOKING_RELATIONS_SELECT = `
       avatar_path
     )
   ),
-  payments!payments_private_booking_id_fkey (
+    payments!payments_private_booking_id_fkey (
     id,
     payment_number,
     receipt_number,
+    target_type,
     booking_id,
     private_booking_id,
+    booking_order_id,
+    amount,
+    discount_amount,
+    final_amount,
+    currency,
+    payment_method,
+    payment_provider,
+    status,
+    redirect_url,
+    paid_at,
+    failed_at,
+    cancelled_at,
+    expired_at,
+    refunded_at,
+    refunded_amount,
+    expires_at,
+    created_at,
+    updated_at
+  )
+`;
+const BOOKING_ORDER_RELATIONS_SELECT = `
+  *,
+  app_users!booking_orders_customer_user_id_fkey (
+    id,
+    email,
+    phone,
+    full_name,
+    role,
+    status,
+    is_guest,
+    avatar_path
+  ),
+  staff_profiles!booking_orders_created_by_staff_profile_id_fkey (
+    id,
+    app_user_id,
+    display_name,
+    post_title,
+    app_users!staff_profiles_app_user_id_fkey (
+      id,
+      email,
+      phone,
+      full_name,
+      role,
+      status,
+      is_guest,
+      avatar_path
+    )
+  ),
+  booking_order_items!booking_order_items_booking_order_id_fkey (
+    id,
+    booking_order_id,
+    booking_id,
+    schedule_id,
+    class_id,
+    trainer_staff_profile_id,
+    price_amount,
+    currency,
+    status,
+    created_at,
+    bookings!booking_order_items_booking_id_fkey (
+      id,
+      booking_number,
+      user_id,
+      schedule_id,
+      class_id,
+      trainer_staff_profile_id,
+      booking_order_id,
+      status,
+      source,
+      payment_status,
+      payment_required,
+      idempotency_key,
+      seat_hold_expires_at,
+      confirmed_at,
+      cancelled_at,
+      completed_at,
+      no_show_at,
+      rescheduled_from_booking_id,
+      created_by_user_id,
+      created_by_admin_id,
+      cancelled_by_user_id,
+      cancelled_by_admin_id,
+      cancellation_reason,
+      admin_notes,
+      created_at,
+      updated_at,
+      deleted_at,
+      realtime_version
+    ),
+    pilates_classes!booking_order_items_class_id_fkey (
+      id,
+      title,
+      description,
+      level,
+      status,
+      default_duration_minutes,
+      default_capacity,
+      default_price_amount,
+      currency,
+      image_path
+    ),
+    pilates_class_schedules!booking_order_items_schedule_id_fkey (
+      id,
+      class_id,
+      trainer_staff_profile_id,
+      studio,
+      class_date,
+      start_time,
+      end_time,
+      duration_minutes,
+      capacity,
+      price_amount,
+      currency,
+      status,
+      cancellation_reason,
+      cancelled_at,
+      completed_at,
+      realtime_version
+    ),
+    staff_profiles!booking_order_items_trainer_staff_profile_id_fkey (
+      id,
+      app_user_id,
+      display_name,
+      post_title,
+      app_users!staff_profiles_app_user_id_fkey (
+        id,
+        email,
+        phone,
+        full_name,
+        role,
+        status,
+        is_guest,
+        avatar_path
+      )
+    )
+  ),
+  payments!payments_booking_order_id_fkey (
+    id,
+    payment_number,
+    receipt_number,
+    target_type,
+    booking_id,
+    private_booking_id,
+    booking_order_id,
     amount,
     discount_amount,
     final_amount,
@@ -352,6 +538,14 @@ export interface FindBookingByIdForUserInput {
   readonly user_id: string;
   readonly include_deleted?: boolean;
 }
+export interface FindBookingOrderByIdInput {
+  readonly booking_order_id: string;
+}
+
+export interface FindBookingOrderByIdForUserInput {
+  readonly booking_order_id: string;
+  readonly user_id: string;
+}
 
 export interface FindPrivateBookingByIdInput {
   readonly private_booking_id: string;
@@ -390,6 +584,20 @@ export interface OverrideBookingStatusInput {
   readonly reason: string;
   readonly admin_notes: string | null;
   readonly changed_at: string;
+}
+export interface ConfirmBookingOrderPaidInput {
+  readonly booking_order_id: string;
+  readonly payment_id: string | null;
+}
+
+export interface ExpireBookingOrderInput {
+  readonly booking_order_id?: string | null;
+  readonly payment_id?: string | null;
+  readonly reason?: string | null;
+}
+
+export interface FindScheduleScopesByIdsInput {
+  readonly schedule_ids: readonly string[];
 }
 
 export interface ListPendingDomainEventsInput {
@@ -451,6 +659,117 @@ function mapBookingRpcError(error: unknown): AppError {
   }
 
   if (error.code === POSTGRES_RAISE_EXCEPTION_CODE) {
+    if (databaseMessageIncludes(error, 'booking order was not found')) {
+      return AppError.bookingOrderNotFound();
+    }
+
+    if (databaseMessageIncludes(error, 'booking order id is required')) {
+      return AppError.bookingOrderNotFound('Booking order id is required.');
+    }
+
+    if (
+      databaseMessageIncludes(error, 'at least one schedule id is required')
+    ) {
+      return AppError.bulkBookingEmptySchedules();
+    }
+
+    if (databaseMessageIncludes(error, 'schedule ids must be unique')) {
+      return AppError.bulkBookingDuplicateSchedules();
+    }
+
+    if (
+      databaseMessageIncludes(
+        error,
+        'one or more selected pilates schedules were not found',
+      )
+    ) {
+      return AppError.bulkBookingScheduleUnavailable(
+        'One or more selected Pilates schedules were not found.',
+      );
+    }
+
+    if (
+      databaseMessageIncludes(
+        error,
+        'one or more selected schedules are not bookable',
+      )
+    ) {
+      return AppError.bulkBookingScheduleUnavailable();
+    }
+
+    if (
+      databaseMessageIncludes(
+        error,
+        'one or more selected schedules belong to an inactive pilates class',
+      )
+    ) {
+      return AppError.bookingClassNotActive();
+    }
+
+    if (
+      databaseMessageIncludes(error, 'cannot bulk book a past pilates schedule')
+    ) {
+      return AppError.bookingScheduleInPast();
+    }
+
+    if (
+      databaseMessageIncludes(error, 'customer already has an active booking')
+    ) {
+      return AppError.bookingDuplicateActiveBooking();
+    }
+
+    if (
+      databaseMessageIncludes(
+        error,
+        'bulk booking only supports schedules with available seats',
+      )
+    ) {
+      return AppError.bulkBookingFullScheduleRejected();
+    }
+
+    if (databaseMessageIncludes(error, 'booking order has expired')) {
+      return AppError.bookingOrderExpired();
+    }
+
+    if (
+      databaseMessageIncludes(error, 'booking order is not pending payment') ||
+      databaseMessageIncludes(error, 'booking order is not payable') ||
+      databaseMessageIncludes(
+        error,
+        'only pending booking orders can be expired',
+      )
+    ) {
+      return AppError.bookingOrderNotPayable();
+    }
+
+    if (
+      databaseMessageIncludes(
+        error,
+        'booking order payment amount does not match',
+      ) ||
+      databaseMessageIncludes(
+        error,
+        'booking order payment currency does not match',
+      ) ||
+      databaseMessageIncludes(error, 'payment is not linked to a booking order')
+    ) {
+      return AppError.bookingOrderPaymentMismatch();
+    }
+
+    if (
+      databaseMessageIncludes(
+        error,
+        'one or more selected schedules do not have a valid payable price',
+      ) ||
+      databaseMessageIncludes(
+        error,
+        'booking order total amount must be greater than zero',
+      )
+    ) {
+      return AppError.bookingOrderNotPayable(
+        'One or more selected schedules do not have a valid payable price.',
+      );
+    }
     if (databaseMessageIncludes(error, 'schedule was not found')) {
       return AppError.bookingScheduleNotFound();
     }
@@ -951,6 +1270,84 @@ export class BookingRepository {
       ),
     };
   }
+  async createBookingOrderAtomic(
+    input: BookingBulkCreatePayload,
+  ): Promise<BookingRepositoryCreateOrderAtomicResult> {
+    const { data, error } = await this.adminClient.rpc(
+      'create_booking_order_atomic',
+      {
+        p_customer_user_id: input.customer_user_id,
+        p_schedule_ids: [...input.schedule_ids],
+        p_idempotency_key: input.idempotency_key,
+        p_created_by_user_id: input.created_by_user_id,
+        p_created_by_admin_id: input.created_by_admin_id,
+        p_created_by_staff_profile_id: input.created_by_staff_profile_id,
+        p_created_by_role: input.created_by_role,
+        p_source: input.source,
+        p_expires_at: null,
+        p_admin_notes: input.admin_notes,
+        p_metadata: input.metadata,
+      },
+    );
+
+    if (error) {
+      throw mapBookingRpcError(error);
+    }
+
+    return {
+      rpc: getRequiredRpcRow<BookingOrderCreateAtomicRpcRow>(
+        data,
+        'create_booking_order_atomic',
+      ),
+    };
+  }
+
+  async confirmBookingOrderPaidAtomic(
+    input: ConfirmBookingOrderPaidInput,
+  ): Promise<BookingRepositoryConfirmOrderPaidResult> {
+    const { data, error } = await this.adminClient.rpc(
+      'confirm_booking_order_paid_atomic',
+      {
+        p_booking_order_id: input.booking_order_id,
+        p_payment_id: input.payment_id,
+      },
+    );
+
+    if (error) {
+      throw mapBookingRpcError(error);
+    }
+
+    return {
+      rpc: getRequiredRpcRow<BookingOrderConfirmPaidAtomicRpcRow>(
+        data,
+        'confirm_booking_order_paid_atomic',
+      ),
+    };
+  }
+
+  async expireBookingOrderAtomic(
+    input: ExpireBookingOrderInput,
+  ): Promise<BookingRepositoryExpireOrderResult> {
+    const { data, error } = await this.adminClient.rpc(
+      'expire_booking_order_atomic',
+      {
+        p_booking_order_id: input.booking_order_id ?? null,
+        p_payment_id: input.payment_id ?? null,
+        p_reason: input.reason ?? null,
+      },
+    );
+
+    if (error) {
+      throw mapBookingRpcError(error);
+    }
+
+    return {
+      rpc: getRequiredRpcRow<BookingOrderExpireAtomicRpcRow>(
+        data,
+        'expire_booking_order_atomic',
+      ),
+    };
+  }
 
   async cancelBookingAtomic(
     input: BookingCancelPayload,
@@ -1201,6 +1598,30 @@ export class BookingRepository {
 
     return data === true;
   }
+  async findScheduleScopesByIds(
+    input: FindScheduleScopesByIdsInput,
+  ): Promise<readonly BookingScheduleScopeSnapshot[]> {
+    if (input.schedule_ids.length === 0) {
+      return [];
+    }
+
+    const uniqueScheduleIds = [...new Set(input.schedule_ids)];
+
+    const { data, error } = await this.adminClient
+      .from('pilates_class_schedules')
+      .select('id, trainer_staff_profile_id')
+      .in('id', uniqueScheduleIds)
+      .is('deleted_at', null);
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return (data ?? []).map((row) => ({
+      schedule_id: row.id,
+      trainer_staff_profile_id: row.trainer_staff_profile_id,
+    }));
+  }
 
   async findBookingById(
     input: FindBookingByIdInput,
@@ -1252,6 +1673,42 @@ export class BookingRepository {
     return {
       booking,
       history: booking ? await this.listBookingHistory(booking.id) : [],
+    };
+  }
+  async findBookingOrderById(
+    input: FindBookingOrderByIdInput,
+  ): Promise<BookingRepositoryOrderLookup> {
+    const { data, error } = await this.adminClient
+      .from('booking_orders')
+      .select(BOOKING_ORDER_RELATIONS_SELECT)
+      .eq('id', input.booking_order_id)
+      .maybeSingle();
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return {
+      booking_order: data as unknown as BookingOrderHydratedRow | null,
+    };
+  }
+
+  async findBookingOrderByIdForUser(
+    input: FindBookingOrderByIdForUserInput,
+  ): Promise<BookingRepositoryOrderLookup> {
+    const { data, error } = await this.adminClient
+      .from('booking_orders')
+      .select(BOOKING_ORDER_RELATIONS_SELECT)
+      .eq('id', input.booking_order_id)
+      .eq('customer_user_id', input.user_id)
+      .maybeSingle();
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return {
+      booking_order: data as unknown as BookingOrderHydratedRow | null,
     };
   }
 
@@ -1344,6 +1801,38 @@ export class BookingRepository {
       latest_payment: getLatestHydratedPayment(booking.payments),
     };
   }
+  async findPayableBookingOrderForUser(
+    input: FindBookingOrderByIdForUserInput,
+  ): Promise<BookingRepositoryPayableOrderLookup> {
+    const lookup = await this.findBookingOrderByIdForUser(input);
+    const bookingOrder = lookup.booking_order;
+
+    if (!bookingOrder) {
+      return {
+        booking_order: null,
+        latest_payment: null,
+      };
+    }
+
+    if (
+      !BOOKING_ORDER_PAYABLE_STATUSES.includes(
+        bookingOrder.status as (typeof BOOKING_ORDER_PAYABLE_STATUSES)[number],
+      ) ||
+      !BOOKING_PAYMENT_PAYABLE_STATUSES.includes(
+        bookingOrder.payment_status as (typeof BOOKING_PAYMENT_PAYABLE_STATUSES)[number],
+      )
+    ) {
+      return {
+        booking_order: bookingOrder,
+        latest_payment: getLatestHydratedPayment(bookingOrder.payments),
+      };
+    }
+
+    return {
+      booking_order: bookingOrder,
+      latest_payment: getLatestHydratedPayment(bookingOrder.payments),
+    };
+  }
 
   async findPrivatePayableBookingForUser(
     input: FindPrivateBookingByIdForUserInput,
@@ -1388,6 +1877,19 @@ export class BookingRepository {
       booking,
       latest_payment: booking
         ? getLatestHydratedPayment(booking.payments)
+        : null,
+    };
+  }
+  async findBookingOrderPaymentState(
+    input: FindBookingOrderByIdInput,
+  ): Promise<BookingOrderRepositoryPaymentStateLookup> {
+    const lookup = await this.findBookingOrderById(input);
+    const bookingOrder = lookup.booking_order;
+
+    return {
+      booking_order: bookingOrder,
+      latest_payment: bookingOrder
+        ? getLatestHydratedPayment(bookingOrder.payments)
         : null,
     };
   }
@@ -1441,6 +1943,9 @@ export class BookingRepository {
 
     if (filters.status) {
       query = query.eq('status', filters.status);
+    }
+    if (filters.booking_order_id) {
+      query = query.eq('booking_order_id', filters.booking_order_id);
     }
 
     if (scheduleIds !== null) {
@@ -1509,6 +2014,9 @@ export class BookingRepository {
 
     if (filters.status) {
       query = query.eq('status', filters.status);
+    }
+    if (filters.booking_order_id) {
+      query = query.eq('booking_order_id', filters.booking_order_id);
     }
 
     if (filters.payment_status) {
@@ -2097,6 +2605,8 @@ export class BookingRepository {
       booking_id: input.booking_id,
       waitlist_id: input.waitlist_id,
       private_booking_id: input.private_booking_id ?? null,
+      booking_order_id: input.booking_order_id ?? null,
+      payment_id: input.payment_id ?? null,
       payload: input.payload,
     };
 

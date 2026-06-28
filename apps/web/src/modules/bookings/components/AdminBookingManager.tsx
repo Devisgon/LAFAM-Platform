@@ -2,19 +2,28 @@
 
 import {
   type FormEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useEffect,
   useMemo,
   useState,
 } from "react";
-import { ChevronDown, RotateCcw } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, RotateCcw } from "lucide-react";
 import {
   useAdminBookings,
   useAdminPrivateBookings,
 } from "@/modules/bookings";
 import { useAdminUsers } from "@/modules/users";
-import { usePilates } from "@/modules/services/pilates";
+import {
+  type PilatesSchedule,
+  usePilates,
+} from "@/modules/services/pilates";
 import { useStaff } from "@/modules/staff";
+import {
+  adminCustomersClient,
+  type CreateCustomerPayload,
+  type CustomerProfile,
+} from "@/modules/customers";
 import {
   adminBookingsClient,
   type AdminBooking,
@@ -24,6 +33,7 @@ import {
   type AdminPrivateBookingFilters,
   type AdminBookingStatus,
   type AdminOverrideBookingPayload,
+  type AdminWaitlistEntry,
   type CreatePrivateTrainerBookingPayload,
   type PrivateTrainerBooking,
   type PrivateTrainerBookingDetail,
@@ -41,9 +51,13 @@ type ResultToast = {
 };
 
 type BookingMode = "class" | "private";
+type CreateBookingMode = "class" | "private";
+type CustomerBookingMode = "single" | "multiple";
 
 const fieldClass =
   "min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-4 text-base text-txt-primary outline-none transition placeholder:text-txt-secondary focus:border-primary";
+const BOOKING_PHONE_PATTERN = /^\+?[1-9]\d{6,15}$/u;
+const BOOKING_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 
 const pageSizeOptions = [10, 25, 50];
 
@@ -62,6 +76,10 @@ function label(value: string): string {
   return value
     .replaceAll("_", " ")
     .replace(/^\w/, (letter) => letter.toUpperCase());
+}
+
+function sourceLabel(value?: string | null): string {
+  return value?.trim() ? label(value) : "Not recorded";
 }
 
 function statusTone(
@@ -162,6 +180,110 @@ function buildIdempotencyKey(
   ].join("-");
 }
 
+function buildBulkBookingKey(input: {
+  customerUserId: string;
+  scheduleIds: string[];
+}): string {
+  return [
+    "admin-bulk",
+    input.customerUserId.slice(0, 8),
+    input.scheduleIds
+      .map((scheduleId) => scheduleId.slice(0, 8))
+      .join("-"),
+    Date.now().toString(36),
+  ].join("-");
+}
+
+function normalizeBookingText(value: FormDataEntryValue | null): string {
+  return String(value ?? "").trim();
+}
+
+function normalizeBookingPhone(value: string): string {
+  return value.trim().replace(/\s+/g, "");
+}
+
+function normalizeBookingCivilId(value: string): string {
+  return value.trim().replace(/[^\d -]/g, "");
+}
+
+function assertCreateCustomerInput(input: {
+  civilId: string;
+  email: string;
+  fullName: string;
+  password: string;
+  phone: string;
+}): void {
+  if (!input.fullName) {
+    throw new Error("Full name is required to create a customer user.");
+  }
+  if (!BOOKING_EMAIL_PATTERN.test(input.email)) {
+    throw new Error("Enter a valid email address for the customer user.");
+  }
+  if (!BOOKING_PHONE_PATTERN.test(input.phone)) {
+    throw new Error("Phone must be international format, like +923001234567.");
+  }
+  if (input.civilId.replace(/\D/g, "").length !== 12) {
+    throw new Error("Civil ID must contain exactly 12 digits.");
+  }
+  if (input.password.length < 8) {
+    throw new Error("Password must be at least 8 characters long.");
+  }
+  if (!/[a-z]/u.test(input.password)) {
+    throw new Error("Password must include at least one lowercase letter.");
+  }
+  if (!/[A-Z]/u.test(input.password)) {
+    throw new Error("Password must include at least one uppercase letter.");
+  }
+  if (!/[0-9]/u.test(input.password)) {
+    throw new Error("Password must include at least one number.");
+  }
+  if (!/[^A-Za-z0-9]/u.test(input.password)) {
+    throw new Error("Password must include at least one symbol.");
+  }
+  if (/\s/u.test(input.password)) {
+    throw new Error("Password must not contain spaces.");
+  }
+}
+
+function buildMissingCustomerPayload(
+  formData: FormData,
+  lookupPhone: string,
+  lookupCivilId: string,
+): CreateCustomerPayload {
+  const fullName = normalizeBookingText(formData.get("new_customer_full_name"));
+  const email = normalizeBookingText(formData.get("new_customer_email")).toLowerCase();
+  const phone = normalizeBookingPhone(lookupPhone);
+  const civilId = normalizeBookingCivilId(lookupCivilId);
+  const password = String(formData.get("new_customer_password") ?? "");
+  const confirmPassword = String(
+    formData.get("new_customer_confirm_password") ?? "",
+  );
+
+  if (password !== confirmPassword) {
+    throw new Error("Password and confirmation do not match.");
+  }
+
+  assertCreateCustomerInput({
+    civilId,
+    email,
+    fullName,
+    password,
+    phone,
+  });
+
+  return {
+    full_name: fullName,
+    email,
+    phone,
+    civil_id: civilId,
+    password,
+    confirm_password: confirmPassword,
+    timezone:
+      normalizeBookingText(formData.get("new_customer_timezone")) ||
+      "Asia/Kuwait",
+  };
+}
+
 function isPreviousBooking(booking: AdminBooking): boolean {
   return isPreviousStatus(booking.status);
 }
@@ -189,6 +311,11 @@ export function BookingExplorer({
   const { users: customers, isLoading: areCustomersLoading } =
     useAdminUsers(customerFilters);
   const { staff, isLoading: isStaffLoading } = useStaff();
+  const {
+    schedules,
+    isLoading: areSchedulesLoading,
+    error: scheduleLoadError,
+  } = usePilates();
   const customerOptions = useMemo(() => {
     const customerLikeUsers = customers.filter(
       (customer) =>
@@ -214,15 +341,24 @@ export function BookingExplorer({
     <>
       <section className="grid gap-9 text-txt-primary">
         {isCreateOpen ? (
-          <CreatePrivateBookingCard
+          <CreateBookingCard
             areCustomersLoading={areCustomersLoading}
             customerOptions={customerOptions.map((customer) => [
               customer.id,
               `${customer.full_name ?? customer.email ?? customer.phone ?? "Unnamed customer"}${customer.email ? ` - ${customer.email}` : ""}`,
             ])}
+            areSchedulesLoading={areSchedulesLoading}
             isStaffLoading={isStaffLoading}
             onClose={() => setIsCreateOpen(false)}
-            onCreated={(bookingNumber) => {
+            onBulkCreated={(orderNumbers) => {
+              setIsCreateOpen(false);
+              setToast({
+                message: `${orderNumbers.join(", ")} ${orderNumbers.length === 1 ? "was" : "were"} created.`,
+                title: "Booking order created",
+                tone: "success",
+              });
+            }}
+            onPrivateCreated={(bookingNumber) => {
               setIsCreateOpen(false);
               setToast({
                 message: `${bookingNumber} was created.`,
@@ -237,6 +373,8 @@ export function BookingExplorer({
                 tone: "error",
               });
             }}
+            scheduleLoadError={scheduleLoadError}
+            schedules={schedules}
             staffOptions={staffOptions.map((member) => [
               member.id,
               `${member.display_name} - ${member.post_title}`,
@@ -595,6 +733,7 @@ function BookingListPanel({ previousOnly }: { previousOnly: boolean }) {
               { key: "date", heading: "Date" },
               { key: "status", heading: "Status" },
               { key: "payment", heading: "Payment" },
+              { key: "source", heading: "Source" },
               { key: "price", heading: "Price" },
               { key: "action", heading: "Action" },
             ]}
@@ -735,6 +874,9 @@ function BookingRecordRow({
           {label(booking.payment_status)}
         </Badge>
       </td>
+      <td className="px-4 py-4 align-top text-sm font-semibold text-txt-primary">
+        {sourceLabel(booking.source)}
+      </td>
       <td className="px-4 py-4 align-top font-semibold text-txt-primary">
         {formatPrice(booking.price?.amount, booking.price?.currency)}
       </td>
@@ -801,6 +943,9 @@ function PrivateBookingRecordRow({
         <Badge tone={paymentTone(booking.payment_status)}>
           {label(booking.payment_status)}
         </Badge>
+      </td>
+      <td className="px-4 py-4 align-top text-sm font-semibold text-txt-primary">
+        {sourceLabel(booking.source)}
       </td>
       <td className="px-4 py-4 align-top font-semibold text-txt-primary">
         {formatPrice(booking.price?.amount, booking.price?.currency)}
@@ -1059,6 +1204,7 @@ function BookingDetailPanel({
           label="Price"
           value={formatPrice(booking.price?.amount, booking.price?.currency)}
         />
+        <DetailItem label="Source" value={sourceLabel(booking.source)} />
 
         <DetailItem
           label="Admin notes"
@@ -1419,6 +1565,7 @@ function PrivateBookingDetailPanel({
           label="Price"
           value={formatPrice(booking.price?.amount, booking.price?.currency)}
         />
+        <DetailItem label="Source" value={sourceLabel(booking.source)} />
         <DetailItem
           label="Admin notes"
           value={booking.admin_notes ?? "No admin notes"}
@@ -1564,6 +1711,885 @@ function ActionCard({
     <section className="flex min-h-[330px] flex-col rounded-md border border-background-secondary bg-card-bg-secondary p-4">
       <h4 className="mb-4 font-semibold">{title}</h4>
       <div className="flex flex-1 flex-col">{children}</div>
+    </section>
+  );
+}
+
+function CreateBookingCard({
+  areCustomersLoading,
+  areSchedulesLoading,
+  customerOptions,
+  isStaffLoading,
+  onBulkCreated,
+  onClose,
+  onError,
+  onPrivateCreated,
+  scheduleLoadError,
+  schedules,
+  staffOptions,
+}: {
+  areCustomersLoading: boolean;
+  areSchedulesLoading: boolean;
+  customerOptions: Array<[string, string]>;
+  isStaffLoading: boolean;
+  onBulkCreated: (orderNumbers: string[]) => void;
+  onClose: () => void;
+  onError: (message: string) => void;
+  onPrivateCreated: (bookingNumber: string) => void;
+  scheduleLoadError: string | null;
+  schedules: PilatesSchedule[];
+  staffOptions: Array<[string, string]>;
+}) {
+  const [mode, setMode] = useState<CreateBookingMode>("class");
+
+  return (
+    <section className="grid gap-5">
+      <section className="rounded-md border border-background-secondary bg-card-bg-primary p-5 text-txt-primary shadow-sm">
+        <label className="grid max-w-sm gap-1.5 text-xs font-bold">
+          Booking type
+          <span className="relative">
+            <select
+              className={`${fieldClass} appearance-none pr-10`}
+              onChange={(event) =>
+                setMode(event.target.value as CreateBookingMode)
+              }
+              value={mode}
+            >
+              <option value="class">Pilates class booking</option>
+              <option value="private">Private trainer booking</option>
+            </select>
+            <ChevronDown
+              aria-hidden="true"
+              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
+              size={16}
+            />
+          </span>
+        </label>
+      </section>
+
+      {mode === "class" ? (
+        <CreateClassBulkBookingCard
+          areSchedulesLoading={areSchedulesLoading}
+          onClose={onClose}
+          onCreated={onBulkCreated}
+          onError={onError}
+          scheduleLoadError={scheduleLoadError}
+          schedules={schedules}
+        />
+      ) : (
+        <CreatePrivateBookingCard
+          areCustomersLoading={areCustomersLoading}
+          customerOptions={customerOptions}
+          isStaffLoading={isStaffLoading}
+          onClose={onClose}
+          onCreated={onPrivateCreated}
+          onError={onError}
+          staffOptions={staffOptions}
+        />
+      )}
+    </section>
+  );
+}
+
+function CreateClassBulkBookingCard({
+  areSchedulesLoading,
+  onClose,
+  onCreated,
+  onError,
+  scheduleLoadError,
+  schedules,
+}: {
+  areSchedulesLoading: boolean;
+  onClose: () => void;
+  onCreated: (orderNumbers: string[]) => void;
+  onError: (message: string) => void;
+  scheduleLoadError: string | null;
+  schedules: PilatesSchedule[];
+}) {
+  const [customerMode, setCustomerMode] =
+    useState<CustomerBookingMode>("single");
+  const [lookupPhone, setLookupPhone] = useState("");
+  const [lookupCivilId, setLookupCivilId] = useState("");
+  const [lookupCustomer, setLookupCustomer] = useState<CustomerProfile | null>(
+    null,
+  );
+  const [selectedCustomers, setSelectedCustomers] = useState<CustomerProfile[]>(
+    [],
+  );
+  const [lookupStatus, setLookupStatus] = useState<{
+    tone: "idle" | "loading" | "success" | "warning" | "error";
+    message: string;
+  }>({ tone: "idle", message: "Enter phone or Civil ID to find a customer." });
+  const [classId, setClassId] = useState("");
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [selectedScheduleIds, setSelectedScheduleIds] = useState<string[]>([]);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+  const [showNewCustomerPassword, setShowNewCustomerPassword] = useState(false);
+  const [showNewCustomerConfirmPassword, setShowNewCustomerConfirmPassword] =
+    useState(false);
+
+  const classOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    schedules.forEach((schedule) => {
+      if (schedule.class) {
+        map.set(schedule.class_id, schedule.class.title);
+      }
+    });
+    return Array.from(map.entries()).sort((left, right) =>
+      left[1].localeCompare(right[1]),
+    );
+  }, [schedules]);
+
+  const scheduleOptions = useMemo(() => {
+    if (!classId) return [];
+
+    return schedules
+      .filter((schedule) => schedule.status === "scheduled")
+      .filter((schedule) => schedule.class_id === classId)
+      .filter((schedule) => schedule.availability.available_seats > 0)
+      .filter((schedule) =>
+        scheduleDate ? schedule.class_date === scheduleDate : true,
+      )
+      .sort((left, right) =>
+        `${left.class_date} ${left.start_time}`.localeCompare(
+          `${right.class_date} ${right.start_time}`,
+        ),
+      );
+  }, [classId, scheduleDate, schedules]);
+
+  const selectedSchedules = useMemo(
+    () =>
+      selectedScheduleIds
+        .map((scheduleId) =>
+          schedules.find((schedule) => schedule.id === scheduleId),
+        )
+        .filter((schedule): schedule is PilatesSchedule => Boolean(schedule)),
+    [schedules, selectedScheduleIds],
+  );
+  const totalAmount = useMemo(
+    () =>
+      selectedSchedules.reduce(
+        (total, schedule) =>
+          total +
+          (schedule.price_amount ?? schedule.class?.default_price_amount ?? 0),
+        0,
+      ),
+    [selectedSchedules],
+  );
+
+  useEffect(() => {
+    const phone = lookupPhone.trim().replace(/\s+/g, "");
+    const civilId = lookupCivilId.trim();
+    const civilDigits = civilId.replace(/\D/g, "");
+    const canLookupByPhone = phone.startsWith("+") && phone.length >= 8;
+    const canLookupByCivilId = civilDigits.length === 12;
+
+    if (!canLookupByPhone && !canLookupByCivilId) {
+      const reset = window.setTimeout(() => {
+        setLookupCustomer(null);
+        setSelectedCustomers((current) =>
+          customerMode === "single" ? [] : current,
+        );
+        setLookupStatus({
+          tone: "idle",
+          message: "Enter phone or a 12-digit Civil ID to find a customer.",
+        });
+      }, 0);
+
+      return () => window.clearTimeout(reset);
+    }
+
+    const controller = new AbortController();
+    const request = window.setTimeout(() => {
+      setLookupStatus({ tone: "loading", message: "Looking up customer..." });
+      void adminCustomersClient
+        .lookup(
+          {
+            ...(canLookupByPhone ? { phone } : {}),
+            ...(canLookupByCivilId ? { civil_id: civilId } : {}),
+          },
+          controller.signal,
+        )
+        .then((result) => {
+          setLookupCustomer(result.customer);
+
+          if (!result.customer) {
+            setSelectedCustomers((current) =>
+              customerMode === "single" ? [] : current,
+            );
+            setLookupStatus({
+              tone: "warning",
+              message:
+                "No customer matched those details. Create the customer user below, then book.",
+            });
+            return;
+          }
+
+          if (customerMode === "single") {
+            setSelectedCustomers([result.customer]);
+          }
+
+          setLookupStatus({
+            tone: "success",
+            message: `${result.customer.full_name} found and details filled.`,
+          });
+        })
+        .catch((requestError: unknown) => {
+          if (
+            requestError instanceof DOMException &&
+            requestError.name === "AbortError"
+          ) {
+            return;
+          }
+
+          setLookupCustomer(null);
+          setLookupStatus({
+            tone: "error",
+            message: getErrorMessage(requestError),
+          });
+        });
+    }, 120);
+
+    return () => {
+      window.clearTimeout(request);
+      controller.abort();
+    };
+  }, [customerMode, lookupCivilId, lookupPhone]);
+
+  const addLookupCustomer = () => {
+    if (!lookupCustomer) return;
+
+    setSelectedCustomers((current) =>
+      current.some((customer) => customer.id === lookupCustomer.id)
+        ? current
+        : [...current, lookupCustomer],
+    );
+  };
+
+  const toggleSchedule = (scheduleId: string) => {
+    setSelectedScheduleIds((current) =>
+      current.includes(scheduleId)
+        ? current.filter((id) => id !== scheduleId)
+        : [...current, scheduleId],
+    );
+  };
+
+  const addScheduleFromDropdown = (scheduleId: string) => {
+    if (!scheduleId) return;
+
+    setSelectedScheduleIds((current) =>
+      current.includes(scheduleId) ? current : [...current, scheduleId],
+    );
+  };
+
+
+  const createBulkBooking = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const notes = String(formData.get("admin_notes") ?? "").trim();
+    const customers =
+      customerMode === "single"
+        ? selectedCustomers.slice(0, 1)
+        : selectedCustomers;
+
+    if (customers.length === 0) {
+      onError("Find or create the customer user first.");
+      return;
+    }
+
+    if (selectedScheduleIds.length === 0) {
+      onError("Select at least one time slot.");
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const results = await Promise.all(
+        customers.map((customer) =>
+          adminBookingsClient.createBulkBooking({
+            customer_user_id: customer.app_user_id,
+            schedule_ids: selectedScheduleIds,
+            idempotency_key: buildBulkBookingKey({
+              customerUserId: customer.app_user_id,
+              scheduleIds: selectedScheduleIds,
+            }),
+            ...(notes ? { admin_notes: notes } : {}),
+          }),
+        ),
+      );
+      const orderDetails = await Promise.all(
+        results.map((result) =>
+          adminBookingsClient
+            .getBookingOrder(result.booking_order.id)
+            .catch(() => null),
+        ),
+      );
+
+      onCreated(
+        results.map(
+          (result, index) =>
+            orderDetails[index]?.order_number ??
+            result.booking_order.order_number,
+        ),
+      );
+    } catch (requestError: unknown) {
+      onError(getErrorMessage(requestError));
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const createMissingCustomer = async (
+    event: ReactMouseEvent<HTMLButtonElement>,
+  ) => {
+    const form = event.currentTarget.form;
+
+    if (!form) return;
+
+    setIsCreatingCustomer(true);
+    try {
+      const createdCustomer = await adminCustomersClient.create(
+        buildMissingCustomerPayload(
+          new FormData(form),
+          lookupPhone,
+          lookupCivilId,
+        ),
+      );
+
+      setLookupCustomer(createdCustomer);
+      setSelectedCustomers((current) =>
+        customerMode === "single"
+          ? [createdCustomer]
+          : current.some((customer) => customer.id === createdCustomer.id)
+            ? current
+            : [...current, createdCustomer],
+      );
+      setLookupStatus({
+        tone: "success",
+        message: `${createdCustomer.full_name} was created and selected.`,
+      });
+      window.dispatchEvent(new CustomEvent("lafam:users:changed"));
+    } catch (requestError: unknown) {
+      setLookupStatus({
+        tone: "error",
+        message: getErrorMessage(requestError),
+      });
+    } finally {
+      setIsCreatingCustomer(false);
+    }
+  };
+
+  const lookupStatusClass =
+    lookupStatus.tone === "success"
+      ? "border-success/30 bg-success/10 text-success"
+      : lookupStatus.tone === "error"
+        ? "border-error/30 bg-error/10 text-error"
+        : lookupStatus.tone === "warning"
+          ? "border-warning/30 bg-warning/10 text-warning"
+          : "border-background-secondary bg-card-bg-secondary text-txt-secondary";
+
+  return (
+    <form
+      className="overflow-hidden rounded-md border border-background-secondary bg-card-bg-primary text-txt-primary shadow-sm"
+      onSubmit={(formEvent) => void createBulkBooking(formEvent)}
+    >
+      <header className="border-b border-background-secondary bg-card-bg-primary px-5 py-5">
+        <h2 className="text-2xl font-medium">Add Class Booking</h2>
+      </header>
+
+      <div className="grid gap-6 px-5 py-5">
+        <section className="rounded-sm border border-background-secondary bg-card-bg-secondary p-4">
+          <h3 className="text-sm font-bold">1. Find customer user</h3>
+          <p className="mt-1 text-sm text-txt-secondary">
+            Enter phone or Civil ID. Existing customer details fill automatically.
+          </p>
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-2">
+          <label className="grid gap-1.5 text-xs font-bold">
+            Customer selection
+            <span className="relative">
+              <select
+                className={`${fieldClass} appearance-none pr-10`}
+                onChange={(event) => {
+                  const nextMode = event.target.value as CustomerBookingMode;
+                  setCustomerMode(nextMode);
+                  setSelectedCustomers((current) =>
+                    nextMode === "single" ? current.slice(0, 1) : current,
+                  );
+                }}
+                value={customerMode}
+              >
+                <option value="single">Single customer</option>
+                <option value="multiple">Multiple customers</option>
+              </select>
+              <ChevronDown
+                aria-hidden="true"
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
+                size={16}
+              />
+            </span>
+          </label>
+          <FormField
+            label="Customer phone"
+            name="lookup_phone"
+            onChange={setLookupPhone}
+            placeholder="+923001234567"
+            type="text"
+          />
+          <FormField
+            label="Civil ID"
+            name="lookup_civil_id"
+            onChange={setLookupCivilId}
+            placeholder="2990-1011-2345"
+            type="text"
+          />
+        </section>
+
+        <section
+          aria-live="polite"
+          className={`rounded-sm border px-4 py-3 text-sm font-semibold ${lookupStatusClass}`}
+          role={lookupStatus.tone === "error" ? "alert" : "status"}
+        >
+          {lookupStatus.message}
+        </section>
+
+        {lookupCustomer ? (
+          <section className="grid gap-3 rounded-sm border border-background-secondary bg-card-bg-secondary p-4">
+            <h3 className="text-sm font-bold">Customer detail</h3>
+            <div className="grid gap-3 md:grid-cols-4">
+              <DetailItem label="Customer" value={lookupCustomer.full_name} />
+              <DetailItem label="Phone" value={lookupCustomer.phone} />
+              <DetailItem label="Email" value={lookupCustomer.email} />
+              <DetailItem label="Civil ID" value={lookupCustomer.civil_id} />
+            </div>
+            {customerMode === "multiple" ? (
+              <button
+                className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-sm font-semibold text-txt-primary"
+                onClick={addLookupCustomer}
+                type="button"
+              >
+                Add customer to booking list
+              </button>
+            ) : null}
+          </section>
+        ) : null}
+
+        {!lookupCustomer && lookupStatus.tone === "warning" ? (
+          <section className="grid gap-4 rounded-sm border border-warning/30 bg-warning/10 p-4">
+            <div>
+              <h3 className="text-sm font-bold">Create customer user for booking</h3>
+              <p className="mt-1 text-sm text-txt-secondary">
+                The phone and Civil ID above will be used for the new customer user.
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                label="Full name"
+                name="new_customer_full_name"
+                placeholder="Ahmad Sajid"
+                required
+              />
+              <FormField
+                label="Email"
+                name="new_customer_email"
+                placeholder="customer@example.com"
+                required
+                type="text"
+              />
+              <BookingPasswordField
+                label="Password"
+                name="new_customer_password"
+                onToggle={() =>
+                  setShowNewCustomerPassword((value) => !value)
+                }
+                required
+                showPassword={showNewCustomerPassword}
+              />
+              <BookingPasswordField
+                label="Confirm password"
+                name="new_customer_confirm_password"
+                onToggle={() =>
+                  setShowNewCustomerConfirmPassword((value) => !value)
+                }
+                required
+                showPassword={showNewCustomerConfirmPassword}
+              />
+              <FormField
+                defaultValue="Asia/Kuwait"
+                label="Timezone"
+                name="new_customer_timezone"
+                placeholder="Asia/Kuwait"
+              />
+            </div>
+            <button
+              className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-sm font-semibold text-txt-primary disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isCreatingCustomer}
+              onClick={(buttonEvent) => void createMissingCustomer(buttonEvent)}
+              type="button"
+            >
+              {isCreatingCustomer ? "Creating customer..." : "Create customer user"}
+            </button>
+          </section>
+        ) : null}
+
+        {customerMode === "multiple" && selectedCustomers.length > 0 ? (
+          <section className="grid gap-2">
+            <h3 className="text-sm font-bold">Selected customers</h3>
+            <div className="flex flex-wrap gap-2">
+              {selectedCustomers.map((customer) => (
+                <span
+                  className="inline-flex items-center gap-2 rounded-sm border border-background-secondary bg-card-bg-secondary px-3 py-2 text-sm font-semibold"
+                  key={customer.id}
+                >
+                  {customer.full_name}
+                  {customerMode === "multiple" ? (
+                    <button
+                      aria-label={`Remove ${customer.full_name}`}
+                      className="text-error"
+                      onClick={() =>
+                        setSelectedCustomers((current) =>
+                          current.filter((item) => item.id !== customer.id),
+                        )
+                      }
+                      type="button"
+                    >
+                      X
+                    </button>
+                  ) : null}
+                </span>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {selectedCustomers.length > 0 ? (
+          <>
+            <section className="grid gap-4">
+              <section className="rounded-sm border border-background-secondary bg-card-bg-secondary p-4">
+                <h3 className="text-sm font-bold">
+                  Booking Details
+                </h3>
+                <p className="mt-1 text-sm text-txt-secondary">
+                  Select a service, date, and available time slots.
+                </p>
+              </section>
+              <div className="grid gap-4">
+                <OptionSelect
+                  disabled={areSchedulesLoading || classOptions.length === 0}
+                  label="Service"
+                  name="class_filter"
+                  onChange={(value) => {
+                    setClassId(value);
+                    setSelectedScheduleIds([]);
+                    setScheduleDate("");
+                  }}
+                  options={classOptions}
+                  placeholder={
+                    areSchedulesLoading ? "Loading services..." : "Select service"
+                  }
+                  value={classId}
+                />
+                <div className="grid gap-3 md:grid-cols-[1fr_1fr_160px_180px]">
+                  <FormField
+                    disabled={!classId}
+                    label="Session date"
+                    name="schedule_date"
+                    onChange={(value) => {
+                      setScheduleDate(value);
+                      setSelectedScheduleIds([]);
+                    }}
+                    type="date"
+                  />
+                  <label className="grid gap-1.5 text-xs font-bold">
+                    Session Time
+                    <span className="relative">
+                      <select
+                        className={`${fieldClass} appearance-none pr-10 disabled:cursor-not-allowed disabled:opacity-60`}
+                        disabled={!classId || scheduleOptions.length === 0}
+                        defaultValue=""
+                        onChange={(event) => {
+                          addScheduleFromDropdown(event.target.value);
+                          event.target.value = "";
+                        }}
+                      >
+                        <option value="">
+                          {!classId
+                            ? "Select service first"
+                            : scheduleOptions.length === 0
+                              ? "No available time"
+                              : "Select time"}
+                        </option>
+                        {scheduleOptions.map((schedule) => (
+                          <option key={schedule.id} value={schedule.id}>
+                            {formatDate(schedule.class_date)} |{" "}
+                            {formatTime(schedule.start_time)} -{" "}
+                            {formatTime(schedule.end_time)} |{" "}
+                            {formatPrice(
+                              schedule.price_amount ??
+                                schedule.class?.default_price_amount ??
+                                null,
+                              schedule.currency ?? schedule.class?.currency,
+                            )}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
+                        size={16}
+                      />
+                    </span>
+                  </label>
+                  <FormField
+                    disabled
+                    label="Total Sessions"
+                    name="total_sessions_display"
+                    value={String(selectedSchedules.length)}
+                  />
+                  <FormField
+                    disabled
+                    label="Total Amount"
+                    name="total_amount_display"
+                    value={`${totalAmount.toFixed(3)} KWD`}
+                  />
+                </div>
+                <div className="grid gap-3 md:grid-cols-[1fr_1fr]">
+                  <label className="grid gap-1.5 text-xs font-bold">
+                    Payment Method
+                    <span className="relative">
+                      <select
+                        className={`${fieldClass} appearance-none pr-10`}
+                        defaultValue="cash"
+                        name="payment_method"
+                      >
+                        <option value="cash">Cash</option>
+                        <option value="card">Card</option>
+                        <option value="knet">KNET</option>
+                      </select>
+                      <ChevronDown
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
+                        size={16}
+                      />
+                    </span>
+                  </label>
+                  <FormField
+                    label="Admin notes"
+                    name="admin_notes"
+                    placeholder="Booked at front desk."
+                  />
+                </div>
+              </div>
+
+              {scheduleLoadError ? (
+                <p className="text-sm text-error" role="alert">
+                  {scheduleLoadError}
+                </p>
+              ) : null}
+
+              <section className="grid gap-2">
+                <h4 className="text-sm font-bold">Selected time slots</h4>
+                {selectedSchedules.length > 0 ? (
+                  <div className="grid gap-2">
+                    {selectedSchedules.map((schedule) => (
+                      <div
+                        className="grid gap-2 rounded-sm border border-background-secondary bg-card-bg-secondary p-3 text-sm md:grid-cols-[1fr_auto]"
+                        key={schedule.id}
+                      >
+                        <div>
+                          <p className="font-semibold">
+                            {schedule.class?.title ?? "Pilates class"}
+                          </p>
+                          <p className="mt-1 text-txt-secondary">
+                            {formatDate(schedule.class_date)} |{" "}
+                            {formatTime(schedule.start_time)} -{" "}
+                            {formatTime(schedule.end_time)} | {schedule.studio}
+                          </p>
+                        </div>
+                        <button
+                          className="min-h-10 rounded-sm border border-background-secondary px-3 text-xs font-bold text-error"
+                          onClick={() => toggleSchedule(schedule.id)}
+                          type="button"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded-sm border border-background-secondary bg-card-bg-secondary p-3 text-sm text-txt-secondary">
+                    No time slots selected.
+                  </p>
+                )}
+              </section>
+            </section>
+
+            <ScheduleWaitlistPanel
+              scheduleId={selectedScheduleIds[0] ?? ""}
+              schedules={schedules}
+            />
+          </>
+        ) : (
+          <section className="rounded-sm border border-background-secondary bg-card-bg-secondary p-4 text-sm text-txt-secondary">
+            Find or create a customer user before choosing a class.
+          </section>
+        )}
+      </div>
+
+      <footer className="flex justify-start gap-2 border-t border-background-secondary px-5 py-5">
+        <button
+          className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-xs font-bold text-txt-primary disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={
+            isCreating ||
+            selectedCustomers.length === 0 ||
+            selectedScheduleIds.length === 0
+          }
+          type="submit"
+        >
+          {isCreating ? "Creating..." : "Create booking order"}
+        </button>
+        <button
+          className="min-h-11 rounded-sm border border-background-secondary px-4 py-3 text-xs font-bold text-txt-secondary transition hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isCreating}
+          onClick={onClose}
+          type="button"
+        >
+          Back to bookings
+        </button>
+      </footer>
+    </form>
+  );
+}
+
+function ScheduleWaitlistPanel({
+  scheduleId,
+  schedules,
+}: {
+  scheduleId: string;
+  schedules: PilatesSchedule[];
+}) {
+  const [waitlist, setWaitlist] = useState<AdminWaitlistEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const schedule = schedules.find((item) => item.id === scheduleId);
+
+  useEffect(() => {
+    if (!scheduleId) {
+      const reset = window.setTimeout(() => {
+        setWaitlist([]);
+        setError(null);
+      }, 0);
+
+      return () => window.clearTimeout(reset);
+    }
+
+    let isCurrent = true;
+    const request = window.setTimeout(() => {
+      setIsLoading(true);
+      setError(null);
+
+      void adminBookingsClient
+        .listScheduleWaitlist(scheduleId)
+        .then((result) => {
+          if (isCurrent) {
+            setWaitlist(result.waitlist);
+          }
+        })
+        .catch((requestError: unknown) => {
+          if (isCurrent) {
+            setError(getErrorMessage(requestError));
+          }
+        })
+        .finally(() => {
+          if (isCurrent) {
+            setIsLoading(false);
+          }
+        });
+    }, 0);
+
+    return () => {
+      isCurrent = false;
+      window.clearTimeout(request);
+    };
+  }, [scheduleId]);
+
+  const removeEntry = async (waitlistId: string) => {
+    setIsRemoving(true);
+    setError(null);
+    try {
+      await adminBookingsClient.removeWaitlistEntry(waitlistId);
+      setWaitlist((current) =>
+        current.filter((entry) => entry.id !== waitlistId),
+      );
+    } catch (requestError: unknown) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
+  if (!scheduleId) {
+    return (
+      <section className="rounded-sm border border-background-secondary bg-card-bg-secondary p-4 text-sm text-txt-secondary">
+        Select a time slot to review its waitlist.
+      </section>
+    );
+  }
+
+  return (
+    <section className="overflow-hidden rounded-sm border border-background-secondary bg-card-bg-secondary">
+      <header className="border-b border-background-secondary px-4 py-3">
+        <h3 className="text-sm font-bold">
+          Waitlist for{" "}
+          {schedule
+            ? `${schedule.class?.title ?? "selected class"} | ${formatDate(schedule.class_date)} ${formatTime(schedule.start_time)}`
+            : "selected slot"}
+        </h3>
+      </header>
+
+      {isLoading ? (
+        <LoadingState className="p-4" label="Loading waitlist" />
+      ) : error ? (
+        <p className="p-4 text-sm text-error" role="alert">
+          {error}
+        </p>
+      ) : waitlist.length === 0 ? (
+        <p className="p-4 text-sm text-txt-secondary">
+          No waitlist entries for this slot.
+        </p>
+      ) : (
+        <div className="grid gap-2 p-4">
+          {waitlist.map((entry) => (
+            <div
+              className="grid gap-2 rounded-sm border border-background-secondary bg-card-bg-primary p-3 md:grid-cols-[1fr_auto]"
+              key={entry.id}
+            >
+              <div>
+                <p className="font-semibold">
+                  #{entry.position}{" "}
+                  {entry.customer?.full_name ??
+                    entry.customer?.email ??
+                    "Unnamed customer"}
+                </p>
+                <p className="mt-1 text-xs text-txt-secondary">
+                  {label(entry.status)} | Joined {formatDateTime(entry.joined_at)}
+                </p>
+              </div>
+              <button
+                className="min-h-10 rounded-sm bg-error px-3 text-xs font-bold text-white disabled:opacity-60"
+                disabled={isRemoving}
+                onClick={() => void removeEntry(entry.id)}
+                type="button"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -1916,6 +2942,7 @@ function FormField({
   required = false,
   step,
   type = "text",
+  value,
 }: {
   defaultValue?: string;
   disabled?: boolean;
@@ -1927,6 +2954,7 @@ function FormField({
   required?: boolean;
   step?: string;
   type?: "date" | "number" | "text" | "time";
+  value?: string;
 }) {
   return (
     <label className="grid gap-1.5 text-xs font-bold">
@@ -1941,10 +2969,56 @@ function FormField({
           onChange ? (event) => onChange(event.target.value) : undefined
         }
         placeholder={placeholder}
+        readOnly={value !== undefined && !onChange}
         required={required}
         step={step}
         type={type}
+        value={value}
       />
+    </label>
+  );
+}
+
+function BookingPasswordField({
+  disabled = false,
+  label,
+  name,
+  onToggle,
+  required = false,
+  showPassword,
+}: {
+  disabled?: boolean;
+  label: string;
+  name: string;
+  onToggle: () => void;
+  required?: boolean;
+  showPassword: boolean;
+}) {
+  const Icon = showPassword ? EyeOff : Eye;
+
+  return (
+    <label className="grid gap-1.5 text-xs font-bold">
+      {label}
+      <span className="relative">
+        <input
+          autoComplete="new-password"
+          className={`${fieldClass} pr-12`}
+          disabled={disabled}
+          maxLength={128}
+          minLength={8}
+          name={name}
+          required={required}
+          type={showPassword ? "text" : "password"}
+        />
+        <button
+          aria-label={showPassword ? "Hide password" : "Show password"}
+          className="absolute right-3 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-sm text-txt-secondary transition hover:bg-background-secondary hover:text-txt-primary"
+          onClick={onToggle}
+          type="button"
+        >
+          <Icon aria-hidden="true" size={18} />
+        </button>
+      </span>
     </label>
   );
 }
@@ -1957,6 +3031,7 @@ function OptionSelect({
   options,
   placeholder,
   required = false,
+  value,
 }: {
   disabled?: boolean;
   label: string;
@@ -1965,6 +3040,7 @@ function OptionSelect({
   options: Array<[string, string]>;
   placeholder: string;
   required?: boolean;
+  value?: string;
 }) {
   return (
     <label className="grid gap-1.5 text-xs font-bold">
@@ -1972,13 +3048,13 @@ function OptionSelect({
       <span className="relative">
         <select
           className={`${fieldClass} appearance-none pr-10 disabled:cursor-not-allowed disabled:opacity-60`}
-          defaultValue=""
           disabled={disabled}
           name={name}
           onChange={
             onChange ? (event) => onChange(event.target.value) : undefined
           }
           required={required}
+          value={value}
         >
           <option value="">{placeholder}</option>
           {options.map(([value, optionLabel]) => (

@@ -1,3 +1,10 @@
-import { AdminDashboard, UserDashboard } from "@/modules/dashboard";
-import { getServerSession, isAdminRole } from "@/lib/auth/session";
-export default async function DashboardPage() { const session = await getServerSession(); return isAdminRole(session?.role) ? <AdminDashboard /> : <UserDashboard />; }
+import { PermissionGuard } from "@/components/guards/PermissionGuard";
+import { AdminDashboard } from "@/modules/dashboard";
+
+export default function DashboardPage() {
+  return (
+    <PermissionGuard route="/dashboard">
+      <AdminDashboard />
+    </PermissionGuard>
+  );
+}

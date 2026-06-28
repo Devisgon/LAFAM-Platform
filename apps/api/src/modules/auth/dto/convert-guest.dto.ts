@@ -4,7 +4,7 @@
  *
  * Role:
  * - Validates guest-to-customer conversion request payloads.
- * - Normalizes email, phone, full name, and timezone before service use.
+ * - Normalizes email, phone, Civil ID, full name, and timezone before service use.
  * - Keeps password values unchanged because passwords must not be trimmed or mutated.
  *
  * Important:
@@ -25,6 +25,7 @@ import {
 
 import { AUTH_FIELD_LIMITS } from '../constants/auth.constants';
 import {
+  normalizeAuthCivilId,
   normalizeAuthEmail,
   normalizeAuthFullName,
   normalizeAuthPhone,
@@ -76,7 +77,6 @@ export class ConvertGuestDto {
   readonly confirm_password!: string;
 
   @Transform((params) => transformStringValue(params, normalizeAuthPhone))
-  @IsOptional()
   @IsString({ message: 'phone must be a string.' })
   @MaxLength(AUTH_FIELD_LIMITS.phoneMaxLength, {
     message: `phone must be at most ${AUTH_FIELD_LIMITS.phoneMaxLength} characters long.`,
@@ -84,7 +84,18 @@ export class ConvertGuestDto {
   @Matches(/^\+?[1-9]\d{6,15}$/u, {
     message: 'phone must be a valid international phone number without spaces.',
   })
-  readonly phone?: string | null;
+  readonly phone!: string;
+
+  @Transform((params) => transformStringValue(params, normalizeAuthCivilId))
+  @IsString({ message: 'civil_id must be a string.' })
+  @MaxLength(AUTH_FIELD_LIMITS.civilIdMaxLength, {
+    message: `civil_id must be at most ${AUTH_FIELD_LIMITS.civilIdMaxLength} characters long.`,
+  })
+  @Matches(/^(?=(?:\D*\d){12}\D*$)[0-9 -]+$/u, {
+    message:
+      'civil_id must contain exactly 12 digits and may include spaces or hyphens.',
+  })
+  readonly civil_id!: string;
 
   @Transform((params) => transformStringValue(params, normalizeAuthTimezone))
   @IsOptional()

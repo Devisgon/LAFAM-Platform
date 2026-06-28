@@ -87,6 +87,21 @@ export type AppErrorCode =
   | 'STAFF_ALREADY_ACTIVE'
   | 'STAFF_ALREADY_DELETED'
   | 'STAFF_EMPTY_UPDATE'
+  | 'CUSTOMER_EMAIL_ALREADY_EXISTS'
+  | 'CUSTOMER_PHONE_ALREADY_EXISTS'
+  | 'CUSTOMER_CIVIL_ID_ALREADY_EXISTS'
+  | 'CUSTOMER_NOT_FOUND'
+  | 'CUSTOMER_LOOKUP_QUERY_REQUIRED'
+  | 'CUSTOMER_LOOKUP_CONFLICT'
+  | 'CUSTOMER_AUTH_USER_CREATION_FAILED'
+  | 'CUSTOMER_PROFILE_CREATION_FAILED'
+  | 'CUSTOMER_CREATE_FAILED'
+  | 'CUSTOMER_UPDATE_FAILED'
+  | 'CUSTOMER_DELETE_FAILED'
+  | 'CUSTOMER_ALREADY_DEACTIVATED'
+  | 'CUSTOMER_ALREADY_ACTIVE'
+  | 'CUSTOMER_ALREADY_DELETED'
+  | 'CUSTOMER_EMPTY_UPDATE'
   | 'PILATES_CLASS_NOT_FOUND'
   | 'PILATES_CLASS_ALREADY_DELETED'
   | 'PILATES_CLASS_EMPTY_UPDATE'
@@ -130,6 +145,17 @@ export type AppErrorCode =
   | 'BOOKING_ALREADY_COMPLETED'
   | 'BOOKING_INVALID_STATUS_TRANSITION'
   | 'BOOKING_PAYMENT_REQUIRED'
+  | 'BOOKING_ORDER_NOT_FOUND'
+  | 'BOOKING_ORDER_EXPIRED'
+  | 'BOOKING_ORDER_ALREADY_PAID'
+  | 'BOOKING_ORDER_NOT_PAYABLE'
+  | 'BOOKING_ORDER_PAYMENT_MISMATCH'
+  | 'BULK_BOOKING_EMPTY_SCHEDULES'
+  | 'BULK_BOOKING_DUPLICATE_SCHEDULES'
+  | 'BULK_BOOKING_SCHEDULE_UNAVAILABLE'
+  | 'BULK_BOOKING_FULL_SCHEDULE_REJECTED'
+  | 'TRAINER_STAFF_PROFILE_NOT_FOUND'
+  | 'TRAINER_SCHEDULE_SCOPE_DENIED'
   | 'BOOKING_WAITLIST_NOT_FOUND'
   | 'BOOKING_WAITLIST_PROMOTION_FAILED'
   | 'BOOKING_CONFLICT_RETRY_REQUIRED'
@@ -867,6 +893,163 @@ export class AppError extends Error {
     return AppError.createValidationError('STAFF_EMPTY_UPDATE', publicMessage);
   }
 
+  static customerEmailAlreadyExists(
+    publicMessage = 'A customer account with this email already exists.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'CUSTOMER_EMAIL_ALREADY_EXISTS',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerPhoneAlreadyExists(
+    publicMessage = 'A customer account with this phone number already exists.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'CUSTOMER_PHONE_ALREADY_EXISTS',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerCivilIdAlreadyExists(
+    publicMessage = 'A customer account with this Civil ID already exists.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'CUSTOMER_CIVIL_ID_ALREADY_EXISTS',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerNotFound(
+    publicMessage = 'The requested customer was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'CUSTOMER_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerLookupQueryRequired(
+    publicMessage = 'Phone number or Civil ID is required for customer lookup.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'CUSTOMER_LOOKUP_QUERY_REQUIRED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerLookupConflict(
+    publicMessage = 'The submitted phone number and Civil ID do not match the same customer.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'CUSTOMER_LOOKUP_CONFLICT',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerAuthUserCreationFailed(cause?: unknown): AppError {
+    return AppError.createExternalProviderError(
+      'CUSTOMER_AUTH_USER_CREATION_FAILED',
+      'Customer login account creation failed. Please try again later.',
+      cause,
+    );
+  }
+
+  static customerProfileCreationFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'CUSTOMER_PROFILE_CREATION_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage:
+        'Customer profile creation failed. Please try again later.',
+      cause,
+    });
+  }
+
+  static customerCreateFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'CUSTOMER_CREATE_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage: 'Customer creation failed. Please try again later.',
+      cause,
+    });
+  }
+
+  static customerUpdateFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'CUSTOMER_UPDATE_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage: 'Customer update failed. Please try again later.',
+      cause,
+    });
+  }
+
+  static customerDeleteFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'CUSTOMER_DELETE_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage: 'Customer deletion failed. Please try again later.',
+      cause,
+    });
+  }
+
+  static customerAlreadyDeactivated(
+    publicMessage = 'This customer is already deactivated.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'CUSTOMER_ALREADY_DEACTIVATED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerAlreadyActive(
+    publicMessage = 'This customer is already active.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'CUSTOMER_ALREADY_ACTIVE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerAlreadyDeleted(
+    publicMessage = 'This customer is already deleted.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'CUSTOMER_ALREADY_DELETED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerEmptyUpdate(
+    publicMessage = 'At least one customer field must be provided for update.',
+  ): AppError {
+    return AppError.createValidationError(
+      'CUSTOMER_EMPTY_UPDATE',
+      publicMessage,
+    );
+  }
+
   static pilatesClassNotFound(
     publicMessage = 'The requested Pilates class was not found.',
     details?: AppErrorDetails,
@@ -1326,6 +1509,126 @@ export class AppError extends Error {
   ): AppError {
     return AppError.createConflictError(
       'BOOKING_PAYMENT_REQUIRED',
+      publicMessage,
+      details,
+    );
+  }
+  static bookingOrderNotFound(
+    publicMessage = 'The requested booking order was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'BOOKING_ORDER_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingOrderExpired(
+    publicMessage = 'This booking order has expired.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_ORDER_EXPIRED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingOrderAlreadyPaid(
+    publicMessage = 'This booking order has already been paid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_ORDER_ALREADY_PAID',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingOrderNotPayable(
+    publicMessage = 'This booking order is not payable.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_ORDER_NOT_PAYABLE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bookingOrderPaymentMismatch(
+    publicMessage = 'The payment does not match the booking order.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BOOKING_ORDER_PAYMENT_MISMATCH',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bulkBookingEmptySchedules(
+    publicMessage = 'At least one schedule must be selected for bulk booking.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'BULK_BOOKING_EMPTY_SCHEDULES',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bulkBookingDuplicateSchedules(
+    publicMessage = 'Duplicate schedules are not allowed in one bulk booking request.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'BULK_BOOKING_DUPLICATE_SCHEDULES',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bulkBookingScheduleUnavailable(
+    publicMessage = 'One or more selected schedules are not available for booking.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BULK_BOOKING_SCHEDULE_UNAVAILABLE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static bulkBookingFullScheduleRejected(
+    publicMessage = 'Bulk booking only supports schedules with available seats.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'BULK_BOOKING_FULL_SCHEDULE_REJECTED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static trainerStaffProfileNotFound(
+    publicMessage = 'The trainer staff profile was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'TRAINER_STAFF_PROFILE_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static trainerScheduleScopeDenied(
+    publicMessage = 'Trainer access is limited to bookings for their own schedules.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createAuthorizationError(
+      'TRAINER_SCHEDULE_SCOPE_DENIED',
       publicMessage,
       details,
     );

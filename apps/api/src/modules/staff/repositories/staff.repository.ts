@@ -31,6 +31,7 @@ import type {
   StaffProfileRow,
   StaffProfileUpdate,
 } from '../../../database/database.types';
+import { AUTH_TRAINER_ROLE } from '../../auth/constants/auth-role.constants';
 import {
   STAFF_DEFAULT_AVAILABILITY_IS_AVAILABLE,
   STAFF_LIST_DEFAULT_LIMIT,
@@ -46,11 +47,11 @@ import type {
   StaffAvailabilityRuleInput,
   StaffCreateRepositoryInput,
   StaffDeactivateRepositoryInput,
+  StaffListQuery,
   StaffProfileWithUser,
   StaffReactivateRepositoryInput,
   StaffSoftDeleteRepositoryInput,
   StaffUpdateRepositoryInput,
-  StaffListQuery,
 } from '../types/staff.types';
 
 const POSTGRES_UNIQUE_VIOLATION_CODE = '23505';
@@ -83,6 +84,14 @@ export interface FindStaffByAuthUserIdInput {
 export interface FindStaffByEmailInput {
   readonly email: string;
   readonly includeDeleted?: boolean;
+}
+
+export interface FindActiveStaffProfileByAppUserIdInput {
+  readonly appUserId: string;
+}
+
+export interface FindActiveTrainerStaffProfileByAppUserIdInput {
+  readonly appUserId: string;
 }
 
 export interface StaffEmailExistsInput {
@@ -205,6 +214,14 @@ function sanitizePostgrestSearchTerm(value: string): string {
 
 function hasObjectKeys(value: Record<string, unknown>): boolean {
   return Object.keys(value).length > 0;
+}
+
+function isActiveAppUser(appUser: AppUserRow): boolean {
+  return (
+    appUser.status === 'active' &&
+    appUser.deactivated_at === null &&
+    appUser.deleted_at === null
+  );
 }
 
 function toAvailabilityInsert(
@@ -479,6 +496,86 @@ export class StaffRepository {
     }
 
     return data ? this.hydrateStaffProfile(data) : null;
+  }
+
+  async findActiveStaffProfileByAppUserId(
+    input: FindActiveStaffProfileByAppUserIdInput,
+  ): Promise<StaffProfileWithUser | null> {
+    const { data, error } = await this.adminClient
+      .from('staff_profiles')
+      .select('*')
+      .eq('app_user_id', input.appUserId)
+      .eq('status', STAFF_PROFILE_STATUS_AVAILABLE)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    const staff = await this.hydrateStaffProfile(data);
+
+    if (!isActiveAppUser(staff.app_user)) {
+      return null;
+    }
+
+    return staff;
+  }
+
+  async getActiveStaffProfileByAppUserId(
+    input: FindActiveStaffProfileByAppUserIdInput,
+  ): Promise<StaffProfileWithUser> {
+    const staff = await this.findActiveStaffProfileByAppUserId(input);
+
+    if (!staff) {
+      throw AppError.staffNotFound(
+        'The active staff profile for this user was not found.',
+        {
+          app_user_id: input.appUserId,
+        },
+      );
+    }
+
+    return staff;
+  }
+
+  async findActiveTrainerStaffProfileByAppUserId(
+    input: FindActiveTrainerStaffProfileByAppUserIdInput,
+  ): Promise<StaffProfileWithUser | null> {
+    const staff = await this.findActiveStaffProfileByAppUserId({
+      appUserId: input.appUserId,
+    });
+
+    if (!staff) {
+      return null;
+    }
+
+    if (staff.app_user.role !== AUTH_TRAINER_ROLE) {
+      return null;
+    }
+
+    return staff;
+  }
+
+  async getActiveTrainerStaffProfileByAppUserId(
+    input: FindActiveTrainerStaffProfileByAppUserIdInput,
+  ): Promise<StaffProfileWithUser> {
+    const trainer = await this.findActiveTrainerStaffProfileByAppUserId(input);
+
+    if (!trainer) {
+      throw AppError.trainerStaffProfileNotFound(
+        'The active trainer staff profile for this user was not found.',
+        {
+          app_user_id: input.appUserId,
+        },
+      );
+    }
+
+    return trainer;
   }
 
   async findByAuthUserId(

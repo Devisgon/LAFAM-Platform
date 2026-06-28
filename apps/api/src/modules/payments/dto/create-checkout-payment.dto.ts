@@ -6,12 +6,13 @@
  * - Validates customer checkout request bodies.
  * - Supports payable Pilates booking checkout.
  * - Supports payable private trainer booking checkout.
+ * - Supports payable bulk booking-order checkout.
  * - Supports wallet top-up checkout through hosted payment methods.
  * - Accepts payment method selection without accepting trusted payment amount for bookings.
  *
  * Important:
- * - Frontend amount is not trusted for booking/private booking payments.
- * - Booking/private booking prices are resolved by backend services.
+ * - Frontend amount is not trusted for booking/private booking/booking-order payments.
+ * - Booking/private booking/booking-order prices are resolved by backend services.
  * - wallet_top_up_amount is allowed only for wallet top-up target.
  * - Wallet top-up cannot use wallet as the payment method.
  * - KNET/card payments must use hosted redirect flow.
@@ -48,6 +49,7 @@ import {
   PAYMENT_METHOD_WALLET,
   PAYMENT_METHODS,
   PAYMENT_TARGET_TYPE_BOOKING,
+  PAYMENT_TARGET_TYPE_BOOKING_ORDER,
   PAYMENT_TARGET_TYPE_PRIVATE_BOOKING,
   PAYMENT_TARGET_TYPE_WALLET_TOP_UP,
   PAYMENT_TARGET_TYPES,
@@ -131,6 +133,10 @@ function isPrivateBookingTarget(dto: CreateCheckoutPaymentDto): boolean {
   return dto.target_type === PAYMENT_TARGET_TYPE_PRIVATE_BOOKING;
 }
 
+function isBookingOrderTarget(dto: CreateCheckoutPaymentDto): boolean {
+  return dto.target_type === PAYMENT_TARGET_TYPE_BOOKING_ORDER;
+}
+
 function isWalletTopUpTarget(dto: CreateCheckoutPaymentDto): boolean {
   return dto.target_type === PAYMENT_TARGET_TYPE_WALLET_TOP_UP;
 }
@@ -147,11 +153,13 @@ export class CreateCheckoutPaymentDto {
   })
   @Transform(requiredTrimmedString)
   @IsIn(PAYMENT_TARGET_TYPES, {
-    message: 'target_type must be booking, private_booking, or wallet_top_up.',
+    message:
+      'target_type must be booking, private_booking, booking_order, or wallet_top_up.',
   })
   readonly target_type!:
     | typeof PAYMENT_TARGET_TYPE_BOOKING
     | typeof PAYMENT_TARGET_TYPE_PRIVATE_BOOKING
+    | typeof PAYMENT_TARGET_TYPE_BOOKING_ORDER
     | typeof PAYMENT_TARGET_TYPE_WALLET_TOP_UP;
 
   @ApiPropertyOptional({
@@ -189,7 +197,23 @@ export class CreateCheckoutPaymentDto {
 
   @ApiPropertyOptional({
     description:
-      'Wallet top-up amount. Required only when target_type is wallet_top_up. Booking and private booking checkout amounts are never trusted from frontend.',
+      'Booking order identifier. Required when target_type is booking_order. The backend resolves the trusted amount from the full booking order.',
+    example: '4fb96de0-b109-4ad7-8f94-0a6de30f32ef',
+    format: 'uuid',
+  })
+  @ValidateIf(isBookingOrderTarget)
+  @IsDefined({
+    message: 'booking_order_id is required when target_type is booking_order.',
+  })
+  @Transform(requiredTrimmedString)
+  @IsUUID('4', {
+    message: 'booking_order_id must be a valid UUID.',
+  })
+  readonly booking_order_id?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Wallet top-up amount. Required only when target_type is wallet_top_up. Booking, private booking, and booking-order checkout amounts are never trusted from frontend.',
     example: 25,
     minimum: WALLET_TOP_UP_AMOUNT_MIN,
     maximum: WALLET_TOP_UP_AMOUNT_MAX,
@@ -233,7 +257,7 @@ export class CreateCheckoutPaymentDto {
 
   @ApiPropertyOptional({
     description:
-      'Payment currency. Current Payment Module supports KWD only. Booking/private booking currency is still resolved from backend-owned records.',
+      'Payment currency. Current Payment Module supports KWD only. Booking/private booking/booking-order currency is still resolved from backend-owned records.',
     enum: PAYMENT_ALLOWED_CURRENCIES,
     example: PAYMENT_DEFAULT_CURRENCY,
     default: PAYMENT_DEFAULT_CURRENCY,
@@ -305,7 +329,7 @@ export class CreateCheckoutPaymentDto {
 
   @ApiPropertyOptional({
     description:
-      'Reserved guard field. This field must not be sent for booking/private booking targets because frontend-submitted amounts are not trusted.',
+      'Reserved guard field. This field must not be sent for booking/private booking/booking-order targets because frontend-submitted amounts are not trusted.',
     deprecated: true,
   })
   @ValidateIf(isNotWalletTopUpTarget)

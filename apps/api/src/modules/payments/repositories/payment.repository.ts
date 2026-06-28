@@ -81,6 +81,7 @@ interface CreatePaymentIntentAtomicInput {
   readonly target_type: PaymentTargetType;
   readonly booking_id: string | null;
   readonly private_booking_id: string | null;
+  readonly booking_order_id: string | null;
   readonly amount: number;
   readonly discount_amount: number;
   readonly final_amount: number;
@@ -144,6 +145,15 @@ function createProviderErrorDetails(
   };
 }
 
+function databaseMessageIncludes(
+  error: ProviderDatabaseError,
+  expectedMessage: string,
+): boolean {
+  return (error.message ?? '')
+    .toLowerCase()
+    .includes(expectedMessage.toLowerCase());
+}
+
 function mapDatabaseError(error: unknown): AppError {
   if (!isProviderDatabaseError(error)) {
     return AppError.databaseOperationFailed(error);
@@ -151,6 +161,58 @@ function mapDatabaseError(error: unknown): AppError {
 
   const details = createProviderErrorDetails(error);
   const message = error.message ?? '';
+
+  if (
+    databaseMessageIncludes(error, 'booking order was not found') ||
+    databaseMessageIncludes(error, 'booking order payment target requires') ||
+    databaseMessageIncludes(error, 'payment is not linked to a booking order')
+  ) {
+    return AppError.bookingOrderNotFound(
+      'The requested booking order was not found.',
+      details,
+    );
+  }
+
+  if (databaseMessageIncludes(error, 'booking order has expired')) {
+    return AppError.bookingOrderExpired(
+      'This booking order has expired.',
+      details,
+    );
+  }
+
+  if (
+    databaseMessageIncludes(error, 'booking order is not pending payment') ||
+    databaseMessageIncludes(error, 'booking order is not payable') ||
+    databaseMessageIncludes(
+      error,
+      'booking order wallet payment is not pending',
+    )
+  ) {
+    return AppError.bookingOrderNotPayable(
+      'This booking order is not payable.',
+      details,
+    );
+  }
+
+  if (
+    databaseMessageIncludes(
+      error,
+      'booking order payment amount does not match',
+    ) ||
+    databaseMessageIncludes(
+      error,
+      'booking order payment currency does not match',
+    ) ||
+    databaseMessageIncludes(
+      error,
+      'wallet payment amount does not match booking order total',
+    )
+  ) {
+    return AppError.bookingOrderPaymentMismatch(
+      'The payment does not match the booking order.',
+      details,
+    );
+  }
 
   if (
     error.code === '23505' &&
@@ -274,6 +336,7 @@ export class PaymentRepository {
         p_target_type: input.target_type,
         p_booking_id: input.booking_id,
         p_private_booking_id: input.private_booking_id,
+        p_booking_order_id: input.booking_order_id,
         p_amount: input.amount,
         p_discount_amount: input.discount_amount,
         p_final_amount: input.final_amount,
@@ -440,6 +503,10 @@ export class PaymentRepository {
       query = query.eq('private_booking_id', input.private_booking_id);
     }
 
+    if (input.booking_order_id) {
+      query = query.eq('booking_order_id', input.booking_order_id);
+    }
+
     if (input.payment_method) {
       query = query.eq('payment_method', input.payment_method);
     }
@@ -493,6 +560,10 @@ export class PaymentRepository {
 
     if (input.target_type) {
       query = query.eq('target_type', input.target_type);
+    }
+
+    if (input.booking_order_id) {
+      query = query.eq('booking_order_id', input.booking_order_id);
     }
 
     if (input.status) {

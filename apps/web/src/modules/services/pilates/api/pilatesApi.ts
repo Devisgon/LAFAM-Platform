@@ -107,54 +107,40 @@ export type UpdatePilatesClassPayload = Partial<
   remove_image?: boolean;
 };
 
-export type CreateSinglePilatesSchedulePayload = {
-  mode?: "single";
+export type PilatesSchedulePlanDay = {
+  day_of_week: number;
+  time_slots: PilatesScheduleTimeSlot[];
+};
+
+export type CreatePilatesSchedulePayload = {
   class_id: string;
   trainer_staff_profile_id: string;
   studio: string;
-  class_date: string;
+  start_date: string;
+  end_date: string;
+  default_capacity: number;
+  price_amount: number;
+  currency: PilatesCurrency;
+  schedule_days: PilatesSchedulePlanDay[];
+};
+
+export type UpdatePilatesSchedulePayload = {
+  class_id?: string;
+  trainer_staff_profile_id?: string;
+  studio?: string;
+  class_date?: string;
   start_time: string;
   duration_minutes: number;
   capacity: number;
-  price_amount: number;
-  currency: PilatesCurrency;
-};
-
-export type WeeklyPilatesRecurrence = {
-  frequency: "weekly";
-  days_of_week: number[];
-  excluded_dates?: string[];
+  price_amount?: number;
+  currency?: PilatesCurrency;
 };
 
 export type PilatesScheduleTimeSlot = {
   start_time: string;
   duration_minutes: number;
   capacity: number;
-  studio: string;
 };
-
-export type CreateRecurringPilatesSchedulePayload = {
-  mode: "recurring";
-  class_id: string;
-  trainer_staff_profile_id: string;
-  studio: string;
-  start_date: string;
-  end_date: string;
-  start_time: string;
-  duration_minutes: number;
-  capacity: number;
-  price_amount: number;
-  currency: PilatesCurrency;
-  time_slots: PilatesScheduleTimeSlot[];
-  recurrence: WeeklyPilatesRecurrence;
-};
-
-export type CreatePilatesSchedulePayload =
-  | CreateSinglePilatesSchedulePayload
-  | CreateRecurringPilatesSchedulePayload;
-
-export type UpdatePilatesSchedulePayload =
-  Partial<Omit<CreateSinglePilatesSchedulePayload, "mode">>;
 
 type PaginatedResult<T> = {
   items: T[];
@@ -235,8 +221,16 @@ export const pilatesClient = {
   },
 
   async listSchedules(): Promise<PaginatedResult<PilatesSchedule>> {
+    const params = new URLSearchParams({
+      limit: "100",
+      offset: "0",
+      sort_by: "class_date",
+      sort_direction: "asc",
+      status: "scheduled",
+    });
+
     const response = await authFetch<ApiResponse<PaginatedResult<PilatesSchedule>>>(
-      "/admin/pilates/schedules?limit=100&offset=0&sort_by=class_date&sort_direction=asc",
+      `/admin/pilates/schedules?${params.toString()}`,
       { method: "GET" },
     );
     return response.data;

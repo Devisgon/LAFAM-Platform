@@ -10,7 +10,7 @@
  * Important:
  * - This service does not expose passwords.
  * - This service does not log passwords, OTPs, access tokens, or refresh tokens.
- * - Staff Auth creation must keep email verification required.
+ * - Admin-created staff users are created as active/verified users and do not require email OTP verification.
  * - Staff profile data stays separate from Auth identity data.
  * - Staff deletion is soft-delete by default.
  */
@@ -23,7 +23,10 @@ import {
   AUTH_ERROR_REASON_PASSWORD_CONFIRMATION_MISMATCH,
   AUTH_ERROR_REASON_PASSWORD_POLICY_FAILED,
 } from '../../auth/constants/auth-error.constants';
-import { AUTH_USER_STATUS_PENDING_EMAIL_VERIFICATION } from '../../auth/constants/auth.constants';
+import {
+  AUTH_USER_STATUS_ACTIVE,
+  AUTH_USER_STATUS_PENDING_EMAIL_VERIFICATION,
+} from '../../auth/constants/auth.constants';
 import { SupabaseAuthRepository } from '../../auth/repositories/supabase-auth.repository';
 import type { AuthInternalContext } from '../../auth/types/auth-context.types';
 import {
@@ -217,6 +220,7 @@ function mapAvailabilityRuleToSafeResponse(
     updated_at: rule.updated_at,
   };
 }
+
 function resolveStaffEmail(value: string | null): string {
   if (value) {
     return value;
@@ -224,6 +228,7 @@ function resolveStaffEmail(value: string | null): string {
 
   throw AppError.staffNotFound('The related staff user email was not found.');
 }
+
 function mapStaffToSafeResponse(staff: StaffProfileWithUser): SafeStaffProfile {
   return {
     id: staff.profile.id,
@@ -346,7 +351,7 @@ export class StaffAdminService {
           phone: dto.phone ?? null,
           full_name: dto.display_name,
           role: dto.portal_role,
-          status: AUTH_USER_STATUS_PENDING_EMAIL_VERIFICATION,
+          status: AUTH_USER_STATUS_ACTIVE,
           is_guest: false,
           metadata: {
             source: STAFF_AUTH_METADATA_SOURCE_ADMIN_STAFF_CREATE,

@@ -141,20 +141,6 @@ export type PilatesClassSchedulePublicVisibleStatus =
 export type PilatesClassScheduleTerminalStatus =
   (typeof PILATES_CLASS_SCHEDULE_TERMINAL_STATUSES)[number];
 
-export const PILATES_SCHEDULE_CREATION_MODES = ['single', 'recurring'] as const;
-
-export type PilatesScheduleCreationMode =
-  (typeof PILATES_SCHEDULE_CREATION_MODES)[number];
-
-export const PILATES_SCHEDULE_CREATION_MODE_SINGLE =
-  'single' satisfies PilatesScheduleCreationMode;
-
-export const PILATES_SCHEDULE_CREATION_MODE_RECURRING =
-  'recurring' satisfies PilatesScheduleCreationMode;
-
-export const PILATES_SCHEDULE_DEFAULT_CREATION_MODE =
-  PILATES_SCHEDULE_CREATION_MODE_SINGLE satisfies PilatesScheduleCreationMode;
-
 export const PILATES_SCHEDULE_SERIES_FREQUENCIES = [
   'weekly',
   'monthly',
@@ -551,10 +537,6 @@ const PILATES_CLASS_SCHEDULE_TERMINAL_STATUS_SET =
     PILATES_CLASS_SCHEDULE_TERMINAL_STATUSES,
   );
 
-const PILATES_SCHEDULE_CREATION_MODE_SET = new Set<PilatesScheduleCreationMode>(
-  PILATES_SCHEDULE_CREATION_MODES,
-);
-
 const PILATES_SCHEDULE_SERIES_FREQUENCY_SET =
   new Set<PilatesScheduleSeriesFrequency>(PILATES_SCHEDULE_SERIES_FREQUENCIES);
 
@@ -685,14 +667,6 @@ export function isPilatesClassScheduleTerminalStatus(
 ): value is PilatesClassScheduleTerminalStatus {
   return PILATES_CLASS_SCHEDULE_TERMINAL_STATUS_SET.has(
     value as PilatesClassScheduleTerminalStatus,
-  );
-}
-
-export function isPilatesScheduleCreationMode(
-  value: string,
-): value is PilatesScheduleCreationMode {
-  return PILATES_SCHEDULE_CREATION_MODE_SET.has(
-    value as PilatesScheduleCreationMode,
   );
 }
 

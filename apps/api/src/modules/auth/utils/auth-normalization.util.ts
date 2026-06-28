@@ -37,9 +37,12 @@ export interface AuthNormalizedDeviceMetadata {
 
 const AUTH_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 const AUTH_PHONE_PATTERN = /^\+?[1-9]\d{6,15}$/u;
+const AUTH_CIVIL_ID_PATTERN = /^[0-9 -]+$/u;
+const AUTH_CIVIL_ID_NORMALIZED_PATTERN = /^\d{12}$/u;
 const AUTH_TIMEZONE_PATTERN = /^[A-Za-z]+(?:[/_-][A-Za-z0-9+_-]+)+$/u;
 const WHITESPACE_PATTERN = /\s+/gu;
 const PHONE_REMOVABLE_CHARACTER_PATTERN = /[()\s-]/gu;
+const CIVIL_ID_NON_DIGIT_PATTERN = /\D/gu;
 
 function normalizeNullableString(
   value: string | null | undefined,
@@ -124,6 +127,53 @@ export function isValidAuthPhone(value: string): boolean {
     normalizedValue !== null &&
     normalizedValue.length <= AUTH_FIELD_LIMITS.phoneMaxLength &&
     AUTH_PHONE_PATTERN.test(normalizedValue)
+  );
+}
+
+export function normalizeAuthCivilId(
+  value: string | null | undefined,
+): string | null {
+  const normalizedValue = normalizeNullableString(value);
+
+  if (!normalizedValue) {
+    return null;
+  }
+
+  return limitString(
+    collapseWhitespace(removeControlCharacters(normalizedValue)),
+    AUTH_FIELD_LIMITS.civilIdMaxLength,
+  );
+}
+
+export function normalizeAuthCivilIdNormalized(
+  value: string | null | undefined,
+): string | null {
+  const normalizedCivilId = normalizeAuthCivilId(value);
+
+  if (!normalizedCivilId) {
+    return null;
+  }
+
+  const normalizedDigits = normalizedCivilId.replace(
+    CIVIL_ID_NON_DIGIT_PATTERN,
+    '',
+  );
+
+  return normalizedDigits.length > 0 ? normalizedDigits : null;
+}
+
+export function isValidAuthCivilId(value: string): boolean {
+  const normalizedCivilId = normalizeAuthCivilId(value);
+  const normalizedCivilIdDigits = normalizeAuthCivilIdNormalized(value);
+
+  return (
+    normalizedCivilId !== null &&
+    normalizedCivilId.length <= AUTH_FIELD_LIMITS.civilIdMaxLength &&
+    AUTH_CIVIL_ID_PATTERN.test(normalizedCivilId) &&
+    normalizedCivilIdDigits !== null &&
+    normalizedCivilIdDigits.length ===
+      AUTH_FIELD_LIMITS.civilIdNormalizedLength &&
+    AUTH_CIVIL_ID_NORMALIZED_PATTERN.test(normalizedCivilIdDigits)
   );
 }
 

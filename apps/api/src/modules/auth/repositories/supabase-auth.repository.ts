@@ -12,7 +12,8 @@
  * - Never log passwords, OTPs, access tokens, refresh tokens, or reset tokens.
  * - Public Auth calls use isolated Supabase clients to avoid shared session state.
  * - Admin Auth calls use the injected server-only Supabase admin client.
- * - Staff Auth creation intentionally creates a pending email-verification identity.
+ * - Admin-created staff/customer identities are created through Supabase Admin Auth
+ *   with confirmed email/phone state and do not require email OTP verification.
  */
 
 import { Inject, Injectable } from '@nestjs/common';
@@ -94,6 +95,15 @@ export interface CreateStaffAuthUserWithPasswordInput {
   readonly displayName: string;
   readonly phone: string | null;
   readonly portalRole: 'trainer' | 'staff';
+  readonly createdByAdminId: string;
+}
+
+export interface CreateCustomerAuthUserWithPasswordInput {
+  readonly email: string;
+  readonly password: string;
+  readonly fullName: string;
+  readonly phone: string;
+  readonly timezone: string | null;
   readonly createdByAdminId: string;
 }
 
@@ -295,6 +305,42 @@ function mapStaffAuthCreationError(error: unknown): AppError {
   return AppError.staffAuthUserCreationFailed(mappedError);
 }
 
+function mapCustomerAuthCreationError(error: unknown): AppError {
+  const mappedError = mapAuthProviderErrorToAppError({
+    error,
+    flow: 'sign_up',
+  });
+
+  if (mappedError.code === 'EMAIL_ALREADY_REGISTERED') {
+    return AppError.customerEmailAlreadyExists(undefined, {
+      field: 'email',
+    });
+  }
+
+  const providerError = normalizeAuthProviderError(error);
+  const searchText = [
+    providerError.name,
+    providerError.code,
+    providerError.message,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(' ')
+    .toLowerCase();
+
+  if (
+    searchText.includes('phone') &&
+    (searchText.includes('already') ||
+      searchText.includes('exists') ||
+      searchText.includes('registered'))
+  ) {
+    return AppError.customerPhoneAlreadyExists(undefined, {
+      field: 'phone',
+    });
+  }
+
+  return AppError.customerAuthUserCreationFailed(mappedError);
+}
+
 function isMissingAuthUserDuringSoftDelete(error: unknown): boolean {
   const providerError = normalizeAuthProviderError(error);
   const searchText = [
@@ -355,19 +401,18 @@ export class SupabaseAuthRepository {
   async createStaffAuthUserWithPassword(
     input: CreateStaffAuthUserWithPasswordInput,
   ): Promise<SupabaseAuthUserResult> {
-    const client = createPublicAuthClient();
-
-    const { data, error } = await client.auth.signUp({
+    const { data, error } = await this.adminClient.auth.admin.createUser({
       email: input.email,
       password: input.password,
-      options: {
-        data: {
-          full_name: input.displayName,
-          phone: input.phone,
-          portal_role: input.portalRole,
-          source: 'lafam_admin_staff_create',
-          created_by_admin_id: input.createdByAdminId,
-        },
+      ...(input.phone ? { phone: input.phone } : {}),
+      email_confirm: true,
+      ...(input.phone ? { phone_confirm: true } : {}),
+      user_metadata: {
+        full_name: input.displayName,
+        phone: input.phone,
+        portal_role: input.portalRole,
+        source: 'lafam_admin_staff_create',
+        created_by_admin_id: input.createdByAdminId,
       },
     });
 
@@ -376,7 +421,34 @@ export class SupabaseAuthRepository {
     }
 
     return {
-      user: assertSupabaseUser(data.user, 'sign_up'),
+      user: assertSupabaseUser(data.user, 'admin_user_operation'),
+    };
+  }
+
+  async createCustomerAuthUserWithPassword(
+    input: CreateCustomerAuthUserWithPasswordInput,
+  ): Promise<SupabaseAuthUserResult> {
+    const { data, error } = await this.adminClient.auth.admin.createUser({
+      email: input.email,
+      password: input.password,
+      phone: input.phone,
+      email_confirm: true,
+      phone_confirm: true,
+      user_metadata: {
+        full_name: input.fullName,
+        phone: input.phone,
+        timezone: input.timezone,
+        source: 'lafam_admin_customer_create',
+        created_by_admin_id: input.createdByAdminId,
+      },
+    });
+
+    if (error) {
+      throw mapCustomerAuthCreationError(error);
+    }
+
+    return {
+      user: assertSupabaseUser(data.user, 'admin_user_operation'),
     };
   }
 

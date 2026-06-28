@@ -5,6 +5,7 @@
  * Role:
  * - Exposes protected customer Payment Module endpoints.
  * - Allows authenticated customers to create checkout payments.
+ * - Allows authenticated customers to create checkout for booking-order bulk bookings.
  * - Allows authenticated customers to list their own payments.
  * - Allows authenticated customers to read their own payment details.
  * - Allows authenticated customers to list transactions for their own payments.
@@ -19,6 +20,7 @@
  * - Customer ownership must be enforced before returning payment details.
  * - Browser callback and webhook settlement remain owned by PaymentCallbackService.
  * - Controllers must stay thin and delegate business logic to services/repositories.
+ * - Booking-order checkout uses booking_order_id from DTO and pricing/payment services validate ownership.
  */
 
 import {
@@ -214,6 +216,7 @@ function mapPaymentToSummary(payment: PaymentRecord): PaymentSummary {
     target_type: payment.target_type,
     booking_id: payment.booking_id,
     private_booking_id: payment.private_booking_id,
+    booking_order_id: payment.booking_order_id,
     amount: payment.amount,
     discount_amount: payment.discount_amount,
     final_amount: payment.final_amount,
@@ -343,6 +346,9 @@ function buildReceiptSummary(
     receipt_number: payment.receipt_number,
     user_id: payment.user_id,
     target_type: payment.target_type,
+    booking_id: payment.booking_id,
+    private_booking_id: payment.private_booking_id,
+    booking_order_id: payment.booking_order_id,
     amount: payment.amount,
     discount_amount: payment.discount_amount,
     final_amount: payment.final_amount,
@@ -376,6 +382,7 @@ export class PaymentCustomerController {
         target_type: body.target_type,
         booking_id: body.booking_id ?? null,
         private_booking_id: body.private_booking_id ?? null,
+        booking_order_id: body.booking_order_id ?? null,
         wallet_top_up_amount: body.wallet_top_up_amount,
         payment_method: body.payment_method,
         currency: body.currency,

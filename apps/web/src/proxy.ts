@@ -12,6 +12,14 @@ const SESSION_ID_COOKIE = "lafam_session_id";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 const adminRoles = new Set(["admin", "super_admin"]);
+const dashboardShellRoles = new Set([
+  "admin",
+  "super_admin",
+  "staff",
+  "trainer",
+  "stylist",
+]);
+const staffDashboardRoles = new Set(["staff", "trainer", "stylist"]);
 
 type ProxyRefreshApiData = {
   authenticated?: boolean;
@@ -53,8 +61,7 @@ const protectedRoutes = [
   "/users",
   "/wallet",
 ];
-const adminOnlyRoutes = ["/calendar", "/payments", "/staff", "/users"];
-const authRoutes = ["/login", "/signup", "/forgot-password", "/verify-email"];
+const authRoutes = ["/login", "/forgot-password"];
 
 const authCookieNames = [
   ACCESS_TOKEN_COOKIE,
@@ -71,8 +78,14 @@ function isAdminRole(role?: string): boolean {
   return Boolean(role && adminRoles.has(role));
 }
 
+function canEnterDashboardShell(role?: string): boolean {
+  return Boolean(role && dashboardShellRoles.has(role));
+}
+
 function getDashboardPath(role?: string): string {
   if (isAdminRole(role)) return "/dashboard";
+
+  if (role && staffDashboardRoles.has(role)) return "/bookings";
 
   if (role) return "/dashboard";
 
@@ -81,8 +94,10 @@ function getDashboardPath(role?: string): string {
 
 function canAccessPath(pathname: string, role?: string): boolean {
   if (!role) return false;
-  return !adminOnlyRoutes.some((route) => isRouteMatch(pathname, route)) ||
-    isAdminRole(role);
+  return (
+    canEnterDashboardShell(role) &&
+    protectedRoutes.some((route) => isRouteMatch(pathname, route))
+  );
 }
 
 function getApiUrl(path: string): string | null {
@@ -383,9 +398,7 @@ export const config = {
   matcher: [
     "/",
     "/login",
-    "/signup/:path*",
     "/forgot-password/:path*",
-    "/verify-email/:path*",
     "/dashboard/:path*",
     "/bookings/:path*",
     "/calendar/:path*",

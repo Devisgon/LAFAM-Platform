@@ -8,7 +8,7 @@ import {
   CreditCard,
   Dumbbell,
   Gauge,
-  House,
+  LockKeyhole,
   Menu,
   Settings,
   UserRound,
@@ -17,13 +17,17 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import {
+  type AdminRouteKey,
+  hasAdminRouteAccess,
+} from "@/lib/auth/admin-access";
+import type { AuthContextData } from "@/lib/auth/auth-context";
 
 type IconName =
   | "bookings"
   | "calendar"
-  | "dashboard"
   | "classes"
-  | "home"
+  | "dashboard"
   | "payments"
   | "services"
   | "settings"
@@ -31,12 +35,14 @@ type IconName =
   | "wallet";
 
 type NavItem = {
+  accessRoute: AdminRouteKey;
   href: string;
   icon: IconName;
   label: string;
 };
 
 type NavigationChild = {
+  accessRoute: AdminRouteKey;
   href: string;
   label: string;
 };
@@ -44,35 +50,26 @@ type NavigationChild = {
 const MOBILE_SIDEBAR_EVENT = "lafam:open-mobile-sidebar";
 
 const icons: Record<IconName, LucideIcon> = {
-  dashboard: Gauge,
-  classes: Dumbbell,
-  home: House,
   bookings: CalendarDays,
   calendar: CalendarDays,
+  classes: Dumbbell,
+  dashboard: Gauge,
+  payments: CreditCard,
   services: ListChecks,
+  settings: Settings,
   staff: UserRound,
   wallet: WalletCards,
-  payments: CreditCard,
-  settings: Settings,
 };
 
 const primaryItems: NavItem[] = [
-  { href: "/dashboard", icon: "dashboard", label: "Dashboard" },
-  { href: "/bookings", icon: "bookings", label: "Bookings" },
-  { href: "/calendar", icon: "calendar", label: "Calendar" },
+  { accessRoute: "/dashboard", href: "/dashboard", icon: "dashboard", label: "Dashboard" },
+  { accessRoute: "/bookings", href: "/bookings", icon: "bookings", label: "Bookings" },
+  { accessRoute: "/calendar", href: "/calendar", icon: "calendar", label: "Calendar" },
 ];
 
 const managementItems: NavItem[] = [
-  { href: "/payments", icon: "payments", label: "Payments" },
-  { href: "/settings", icon: "settings", label: "Settings" },
-];
-
-const userItems: NavItem[] = [
-  { href: "/dashboard", icon: "home", label: "Home" },
-  { href: "/services/pilates", icon: "classes", label: "Classes" },
-  { href: "/bookings", icon: "bookings", label: "Booking" },
-  { href: "/wallet", icon: "wallet", label: "Wallet" },
-  { href: "/settings", icon: "settings", label: "Profile" },
+  { accessRoute: "/payments", href: "/payments", icon: "payments", label: "Payments" },
+  { accessRoute: "/settings", href: "/settings", icon: "settings", label: "Settings" },
 ];
 
 function Icon({ name }: { name: IconName }) {
@@ -84,6 +81,7 @@ function Icon({ name }: { name: IconName }) {
 function NavigationLink({
   active = false,
   collapsed,
+  disabled = false,
   href,
   icon,
   label,
@@ -91,21 +89,46 @@ function NavigationLink({
 }: {
   active?: boolean;
   collapsed: boolean;
+  disabled?: boolean;
   href: string;
   icon: IconName;
   label: string;
   onNavigate?: () => void;
 }) {
+  const className = `flex min-h-14 w-full items-center text-[14px] transition ${
+    collapsed ? "justify-center px-0" : "gap-4 px-5"
+  } ${
+    disabled
+      ? "cursor-not-allowed opacity-55"
+      : "hover:bg-black hover:text-white"
+  } ${active ? "bg-black text-white" : ""}`;
+
+  if (disabled) {
+    return (
+      <button
+        aria-disabled="true"
+        aria-label={`${label} locked`}
+        className={className}
+        title={`${label} locked`}
+        type="button"
+      >
+        <Icon name={icon} />
+        {!collapsed && <span className="flex-1 text-left">{label}</span>}
+        {!collapsed && (
+          <LockKeyhole aria-hidden="true" size={15} strokeWidth={2.5} />
+        )}
+      </button>
+    );
+  }
+
   return (
     <Link
-      href={href}
-      title={label}
-      aria-label={label}
       aria-current={active ? "page" : undefined}
+      aria-label={label}
+      className={className}
+      href={href}
       onClick={onNavigate}
-      className={`flex min-h-14 w-full items-center text-[14px] transition hover:bg-black hover:text-white ${
-        collapsed ? "justify-center px-0" : "gap-4 px-5"
-      } ${active ? "bg-black text-white" : ""}`}
+      title={label}
     >
       <Icon name={icon} />
       {!collapsed && <span>{label}</span>}
@@ -120,6 +143,7 @@ function NavigationGroup({
   icon,
   label,
   onNavigate,
+  resolveAccess,
 }: {
   activeItem?: string;
   children: NavigationChild[];
@@ -127,14 +151,18 @@ function NavigationGroup({
   icon: IconName;
   label: string;
   onNavigate?: () => void;
+  resolveAccess: (route: AdminRouteKey) => boolean;
 }) {
   const [open, setOpen] = useState(true);
+  const firstChild = children[0];
+  const firstChildLocked = firstChild ? !resolveAccess(firstChild.accessRoute) : true;
 
   if (collapsed) {
     return (
       <NavigationLink
         collapsed={collapsed}
-        href={children[0]?.href || "#"}
+        disabled={firstChildLocked}
+        href={firstChild?.href || "#"}
         icon={icon}
         label={label}
         onNavigate={onNavigate}
@@ -145,64 +173,61 @@ function NavigationGroup({
   return (
     <div className="w-full">
       <button
-        type="button"
-        title={label}
-        aria-label={label}
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        aria-label={label}
         className={`flex min-h-14 w-full items-center gap-4 px-5 text-[14px] transition ${
           open
             ? "bg-black text-white"
             : "text-black hover:bg-black hover:text-white"
         }`}
+        onClick={() => setOpen((value) => !value)}
+        title={label}
+        type="button"
       >
         <Icon name={icon} />
-
         <span className="flex-1 text-left">{label}</span>
-
         <ChevronDown
+          className={`transition ${open ? "rotate-180" : ""}`}
           size={18}
           strokeWidth={3}
-          className={`transition ${open ? "rotate-180" : ""}`}
         />
       </button>
 
-      {open && (
+      {open ? (
         <div className="w-full border-b border-black/20 bg-sidebar-header py-3 shadow-sm">
           {children.map((child) => (
-            <Link
+            <NavigationChildLink
+              active={child.label === activeItem}
+              child={child}
+              disabled={!resolveAccess(child.accessRoute)}
               key={child.label}
-              href={child.href}
-              aria-current={child.label === activeItem ? "page" : undefined}
-              onClick={onNavigate}
-              className={`block w-full px-[72px] py-2 text-[16px] font-medium text-black transition hover:bg-black/10 ${
-                child.label === activeItem ? "bg-black/10" : ""
-              }`}
-            >
-              {child.label}
-            </Link>
+              onNavigate={onNavigate}
+            />
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
 
 function SidebarContent({
   activeItem,
+  authContext,
   collapsed,
   isMobile = false,
   onClose,
   onToggleCollapse,
-  variant,
 }: {
   activeItem: string;
+  authContext: AuthContextData;
   collapsed: boolean;
   isMobile?: boolean;
   onClose?: () => void;
   onToggleCollapse?: () => void;
-  variant: "admin" | "user";
 }) {
+  const resolveAccess = (route: AdminRouteKey) =>
+    hasAdminRouteAccess(authContext, route);
+
   return (
     <>
       <div
@@ -211,22 +236,21 @@ function SidebarContent({
         }`}
       >
         {!collapsed && <h2 className="text-[16px]">Navigation</h2>}
-
         {isMobile ? (
           <button
-            type="button"
             aria-label="Close sidebar"
-            onClick={onClose}
             className="rounded-md p-1 transition"
+            onClick={onClose}
+            type="button"
           >
             <X size={24} strokeWidth={3} />
           </button>
         ) : (
           <button
-            type="button"
             aria-label="Toggle sidebar"
-            onClick={onToggleCollapse}
             className="rounded-md p-1 transition"
+            onClick={onToggleCollapse}
+            type="button"
           >
             <Menu size={24} strokeWidth={3} />
           </button>
@@ -234,89 +258,125 @@ function SidebarContent({
       </div>
 
       <nav className="mt-8 grid" aria-label="Main navigation">
-        {variant === "user"
-          ? userItems.map((item) => (
-              <NavigationLink
-                key={item.label}
-                active={item.label === activeItem}
-                collapsed={collapsed}
-                onNavigate={onClose}
-                {...item}
-              />
-            ))
-          : null}
+        {primaryItems.map((item) => (
+          <NavigationLink
+            active={item.label === activeItem}
+            collapsed={collapsed}
+            disabled={!resolveAccess(item.accessRoute)}
+            key={item.label}
+            onNavigate={onClose}
+            {...item}
+          />
+        ))}
 
-        {variant === "admin" ? (
-          <>
-            {primaryItems.map((item) => (
-              <NavigationLink
-                key={item.label}
-                active={item.label === activeItem}
-                collapsed={collapsed}
-                onNavigate={onClose}
-                {...item}
-              />
-            ))}
+        <NavigationGroup
+          activeItem={activeItem}
+          collapsed={collapsed}
+          icon="services"
+          label="Services"
+          onNavigate={onClose}
+          resolveAccess={resolveAccess}
+        >
+          {[
+            {
+              accessRoute: "/services/pilates",
+              href: "/services/pilates",
+              label: "Pilates",
+            },
+          ]}
+        </NavigationGroup>
 
-            <NavigationGroup
-              activeItem={activeItem}
-              collapsed={collapsed}
-              icon="services"
-              label="Services"
-              onNavigate={onClose}
-            >
-              {[{ href: "/services/pilates", label: "Pilates" }]}
-            </NavigationGroup>
+        <NavigationLink
+          active={activeItem === "Staff"}
+          collapsed={collapsed}
+          disabled={!resolveAccess("/staff")}
+          href="/staff"
+          icon="staff"
+          label="Staff"
+          onNavigate={onClose}
+        />
 
-            <NavigationLink
-              active={activeItem === "Staff"}
-              collapsed={collapsed}
-              href="/staff"
-              icon="staff"
-              label="Staff"
-              onNavigate={onClose}
-            />
+        <NavigationLink
+          active={activeItem === "Wallet"}
+          collapsed={collapsed}
+          disabled={!resolveAccess("/wallet")}
+          href="/wallet"
+          icon="wallet"
+          label="Wallet"
+          onNavigate={onClose}
+        />
 
-            <NavigationLink
-              active={activeItem === "Wallet"}
-              collapsed={collapsed}
-              href="/wallet"
-              icon="wallet"
-              label="Wallet"
-              onNavigate={onClose}
-            />
-
-            {managementItems.map((item) => (
-              <NavigationLink
-                key={item.label}
-                active={item.label === activeItem}
-                collapsed={collapsed}
-                onNavigate={onClose}
-                {...item}
-              />
-            ))}
-          </>
-        ) : null}
+        {managementItems.map((item) => (
+          <NavigationLink
+            active={item.label === activeItem}
+            collapsed={collapsed}
+            disabled={!resolveAccess(item.accessRoute)}
+            key={item.label}
+            onNavigate={onClose}
+            {...item}
+          />
+        ))}
       </nav>
     </>
   );
 }
 
+function NavigationChildLink({
+  active,
+  child,
+  disabled,
+  onNavigate,
+}: {
+  active: boolean;
+  child: NavigationChild;
+  disabled: boolean;
+  onNavigate?: () => void;
+}) {
+  const className = `flex w-full items-center gap-2 px-[72px] py-2 text-left text-[16px] font-medium text-black transition ${
+    disabled
+      ? "cursor-not-allowed opacity-55"
+      : "hover:bg-black/10"
+  } ${active ? "bg-black/10" : ""}`;
+
+  if (disabled) {
+    return (
+      <button
+        aria-disabled="true"
+        className={className}
+        title={`${child.label} locked`}
+        type="button"
+      >
+        <span className="flex-1">{child.label}</span>
+        <LockKeyhole aria-hidden="true" size={14} strokeWidth={2.5} />
+      </button>
+    );
+  }
+
+  return (
+    <Link
+      aria-current={active ? "page" : undefined}
+      className={className}
+      href={child.href}
+      onClick={onNavigate}
+    >
+      {child.label}
+    </Link>
+  );
+}
+
 export function Sidebar({
   activeItem = "Dashboard",
-  variant = "admin",
+  authContext,
 }: {
   activeItem?: string;
-  variant?: "admin" | "user";
+  authContext: AuthContextData;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
   const width = collapsed ? "md:w-[72px]" : "md:w-[300px]";
 
   useEffect(() => {
     const openMobileSidebar = () => setMobileOpen(true);
-
     window.addEventListener(MOBILE_SIDEBAR_EVENT, openMobileSidebar);
 
     return () => {
@@ -326,17 +386,15 @@ export function Sidebar({
 
   return (
     <>
-      {/* Mobile overlay */}
-      {mobileOpen && (
+      {mobileOpen ? (
         <button
-          type="button"
           aria-label="Close sidebar overlay"
-          onClick={() => setMobileOpen(false)}
           className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setMobileOpen(false)}
+          type="button"
         />
-      )}
+      ) : null}
 
-      {/* Mobile sidebar */}
       <aside
         className={`fixed bottom-0 left-0 top-0 z-50 flex w-[280px] shrink-0 flex-col bg-foreground py-4 text-black shadow-xl transition-transform duration-300 md:hidden ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
@@ -344,22 +402,21 @@ export function Sidebar({
       >
         <SidebarContent
           activeItem={activeItem}
+          authContext={authContext}
           collapsed={false}
           isMobile
           onClose={() => setMobileOpen(false)}
-          variant={variant}
         />
       </aside>
 
-      {/* Desktop sidebar */}
       <aside
         className={`relative z-20 hidden shrink-0 flex-col bg-foreground py-4 text-black transition-[width] duration-300 md:fixed md:bottom-0 md:left-0 md:top-20 md:flex md:overflow-y-auto ${width}`}
       >
         <SidebarContent
           activeItem={activeItem}
+          authContext={authContext}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((value) => !value)}
-          variant={variant}
         />
       </aside>
 

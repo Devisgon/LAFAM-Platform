@@ -41,6 +41,7 @@ import type {
   AdminWalletListQuery,
   CreditWalletAtomicResult,
   DebitWalletForBookingAtomicResult,
+  DebitWalletForBookingOrderAtomicResult,
   PaymentRepositoryListResult,
   WalletAccountCreateRecord,
   WalletAccountRecord,
@@ -66,6 +67,12 @@ interface WalletAccountStatusUpdateInput {
 }
 
 interface DebitWalletForBookingAtomicInput {
+  readonly payment_id: string;
+  readonly description?: string | null;
+  readonly metadata?: DatabaseJsonObject;
+}
+
+interface DebitWalletForBookingOrderAtomicInput {
   readonly payment_id: string;
   readonly description?: string | null;
   readonly metadata?: DatabaseJsonObject;
@@ -157,9 +164,55 @@ function mapWalletDatabaseError(error: unknown): AppError {
     }
 
     if (
+      databaseMessageIncludes(error, 'booking order was not found') ||
+      databaseMessageIncludes(
+        error,
+        'booking order wallet payment is missing booking_order_id',
+      )
+    ) {
+      return AppError.bookingOrderNotFound(
+        'The requested booking order was not found.',
+        details,
+      );
+    }
+
+    if (
+      databaseMessageIncludes(error, 'booking order is not pending payment') ||
+      databaseMessageIncludes(
+        error,
+        'booking order wallet payment is not pending',
+      )
+    ) {
+      return AppError.bookingOrderNotPayable(
+        'This booking order is not payable.',
+        details,
+      );
+    }
+
+    if (
+      databaseMessageIncludes(
+        error,
+        'wallet payment amount does not match booking order total',
+      ) ||
+      databaseMessageIncludes(
+        error,
+        'booking order does not belong to the payment user',
+      )
+    ) {
+      return AppError.bookingOrderPaymentMismatch(
+        'The payment does not match the booking order.',
+        details,
+      );
+    }
+
+    if (
       databaseMessageIncludes(error, 'payment is not a wallet payment') ||
       databaseMessageIncludes(error, 'wallet payment is not pending') ||
       databaseMessageIncludes(error, 'wallet debit is only supported') ||
+      databaseMessageIncludes(
+        error,
+        'wallet booking order debit requires a booking_order payment target',
+      ) ||
       databaseMessageIncludes(error, 'target booking was not found') ||
       databaseMessageIncludes(
         error,
@@ -189,7 +242,7 @@ function mapWalletDatabaseError(error: unknown): AppError {
 
   if (error.code === POSTGRES_FOREIGN_KEY_VIOLATION_CODE) {
     return AppError.invalidRequest(
-      'A related wallet, user, payment, booking, or private booking record was not found.',
+      'A related wallet, user, payment, booking, private booking, or booking order record was not found.',
       details,
     );
   }
@@ -624,6 +677,28 @@ export class WalletRepository {
     return getRequiredRpcRow<DebitWalletForBookingAtomicResult>(
       data,
       'debit_wallet_for_booking_atomic',
+    );
+  }
+
+  async debitWalletForBookingOrderAtomic(
+    input: DebitWalletForBookingOrderAtomicInput,
+  ): Promise<DebitWalletForBookingOrderAtomicResult> {
+    const { data, error } = await this.adminClient.rpc(
+      'debit_wallet_for_booking_order_atomic',
+      {
+        p_payment_id: input.payment_id,
+        p_description: input.description ?? null,
+        p_metadata: input.metadata ?? {},
+      },
+    );
+
+    if (error) {
+      throw mapWalletDatabaseError(error);
+    }
+
+    return getRequiredRpcRow<DebitWalletForBookingOrderAtomicResult>(
+      data,
+      'debit_wallet_for_booking_order_atomic',
     );
   }
 

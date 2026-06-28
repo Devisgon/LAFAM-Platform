@@ -27,6 +27,7 @@ import type {
 } from '../../../database/database.types';
 import {
   AUTH_ADMIN_ROLE,
+  AUTH_CUSTOMER_ROLE,
   AUTH_SUPER_ADMIN_ROLE,
 } from '../constants/auth-role.constants';
 import {
@@ -72,6 +73,11 @@ const EMPTY_REQUEST_METADATA: AuthAdminServiceRequestMetadata = {
 const DEFAULT_LIST_USERS_LIMIT = 50;
 const MAX_LIST_USERS_LIMIT = 200;
 
+type CustomerProfileIdentityRow = {
+  readonly id: string;
+  readonly app_user_id: string;
+};
+
 function isDatabaseError(value: unknown): value is {
   readonly code?: string;
   readonly message?: string;
@@ -113,6 +119,14 @@ function normalizeSearchValue(search: string | undefined): string | null {
   const sanitizedSearch = normalizedSearch.replace(/[%_,]/gu, '').trim();
 
   return sanitizedSearch.length > 0 ? sanitizedSearch : null;
+}
+
+function resolveCustomerAppUserIds(users: readonly AppUserRow[]): string[] {
+  return users
+    .filter(
+      (user) => user.role === AUTH_CUSTOMER_ROLE && user.is_guest === false,
+    )
+    .map((user) => user.id);
 }
 
 function assertAppUserRow(
@@ -234,8 +248,13 @@ export class AuthAdminService {
       throw mapDatabaseError(error);
     }
 
-    const users: AuthAdminUserResponse[] = (data ?? []).map(
-      mapAppUserRowToAdminUserResponse,
+    const userRows = data ?? [];
+    const customerProfileIds =
+      await this.findCustomerProfileIdsForAppUsers(userRows);
+    const users: AuthAdminUserResponse[] = userRows.map((user) =>
+      mapAppUserRowToAdminUserResponse(user, {
+        customerProfileId: customerProfileIds.get(user.id) ?? null,
+      }),
     );
 
     return {
@@ -381,6 +400,32 @@ export class AuthAdminService {
       hard_deleted: true,
       user_id: target.id,
     };
+  }
+
+  private async findCustomerProfileIdsForAppUsers(
+    users: readonly AppUserRow[],
+  ): Promise<Map<string, string>> {
+    const appUserIds = resolveCustomerAppUserIds(users);
+
+    if (appUserIds.length === 0) {
+      return new Map();
+    }
+
+    const { data, error } = await this.adminClient
+      .from('customer_profiles')
+      .select('id, app_user_id')
+      .in('app_user_id', appUserIds);
+
+    if (error) {
+      throw mapDatabaseError(error);
+    }
+
+    return new Map(
+      ((data ?? []) as CustomerProfileIdentityRow[]).map((profile) => [
+        profile.app_user_id,
+        profile.id,
+      ]),
+    );
   }
 
   private async getAppUserById(userId: string): Promise<AppUserRow> {

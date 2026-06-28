@@ -74,6 +74,7 @@ export interface AuthSafeUserResponse {
 
 export interface AuthAdminUserResponse extends AuthSafeUserResponse {
   readonly auth_user_id: string;
+  readonly customer_profile_id?: string | null;
   readonly guest_expires_at: string | null;
   readonly converted_from_guest_at: string | null;
   readonly deactivated_at: string | null;
@@ -179,10 +180,16 @@ export function mapAppUserRowToSafeUserResponse(
 
 export function mapAppUserRowToAdminUserResponse(
   row: AppUserRow,
+  options?: {
+    readonly customerProfileId?: string | null;
+  },
 ): AuthAdminUserResponse {
   return {
     ...mapAppUserRowToSafeUserResponse(row),
     auth_user_id: row.auth_user_id,
+    ...(options
+      ? { customer_profile_id: options.customerProfileId ?? null }
+      : {}),
     guest_expires_at: row.guest_expires_at,
     converted_from_guest_at: row.converted_from_guest_at,
     deactivated_at: row.deactivated_at,

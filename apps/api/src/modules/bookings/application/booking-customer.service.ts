@@ -5,9 +5,10 @@
  * Role:
  * - Owns customer-facing Booking Module business flows.
  * - Creates Pilates class bookings through atomic PostgreSQL booking RPC.
+ * - Creates bulk Pilates booking orders through atomic PostgreSQL booking-order RPC.
  * - Creates private trainer bookings through atomic PostgreSQL private booking RPC.
  * - Lists the authenticated customer's class bookings and private bookings.
- * - Reads customer booking details.
+ * - Reads customer booking and booking-order details.
  * - Cancels customer bookings.
  * - Reschedules customer bookings.
  * - Lists and cancels customer waitlist entries.
@@ -19,7 +20,9 @@
  * - Customer ownership always comes from the authenticated user context.
  * - Guest users are blocked by guards/RPC rules and cannot create real bookings.
  * - Class booking RPC functions remain the class booking concurrency authority.
+ * - Bulk booking order RPC functions remain the all-or-nothing concurrency authority.
  * - Private booking RPC functions remain the private trainer conflict authority.
+ * - Customer booking creation is payment-required. Frontend cannot create free bookings.
  */
 
 import { Injectable } from '@nestjs/common';
@@ -27,11 +30,15 @@ import { Injectable } from '@nestjs/common';
 import { AppError } from '../../../common/errors/app-error';
 import type {
   AppUserRow,
+  DatabaseJsonObject,
   PilatesClassRow,
   PilatesClassScheduleRow,
 } from '../../../database/database.types';
+import { AUTH_CUSTOMER_ROLE } from '../../auth/constants/auth-role.constants';
 import {
   BOOKING_DEFAULT_PAYMENT_REQUIRED,
+  BOOKING_ORDER_RPC_ACTION_CREATED_ORDER,
+  BOOKING_ORDER_RPC_ACTION_EXISTING_ORDER,
   BOOKING_PAYMENT_CONFIRMING_STATUSES,
   BOOKING_PAYMENT_FAILURE_STATUSES,
   BOOKING_PAYMENT_PAYABLE_STATUSES,
@@ -52,8 +59,13 @@ import {
   PRIVATE_BOOKING_DEFAULT_PAYMENT_REQUIRED,
   PRIVATE_BOOKING_DEFAULT_STUDIO,
   WAITLIST_STATUS_WAITING,
+  type BookingPaymentStatus,
 } from '../constants/booking.constants';
 import { assertBookingCanBeCancelled } from '../domain/booking-lifecycle.policy';
+import {
+  BookingOrderLifecyclePolicy,
+  type BookingOrderLifecycleRecord,
+} from '../domain/booking-order-lifecycle.policy';
 import { PrivateBookingLifecyclePolicy } from '../domain/private-booking-lifecycle.policy';
 import {
   assertWaitlistBelongsToUser,
@@ -62,6 +74,7 @@ import {
 } from '../domain/waitlist-fifo.policy';
 import type { CancelBookingDto } from '../dto/cancel-booking.dto';
 import type { CreateBookingDto } from '../dto/create-booking.dto';
+import type { CreateBulkBookingDto } from '../dto/create-bulk-booking.dto';
 import type { CreatePrivateBookingDto } from '../dto/create-private-booking.dto';
 import type { ListBookingsQueryDto } from '../dto/list-bookings-query.dto';
 import type { ListPrivateBookingsQueryDto } from '../dto/list-private-bookings-query.dto';
@@ -71,6 +84,7 @@ import { BookingRepository } from '../repositories/booking.repository';
 import { BookingAvailabilityService } from './booking-availability.service';
 import type {
   BookingAvailabilitySnapshot,
+  BookingBulkCreateResult,
   BookingCancelAtomicRpcRow,
   BookingCancelResult,
   BookingClassSnapshot,
@@ -83,6 +97,11 @@ import type {
   BookingHydratedRow,
   BookingListItem,
   BookingListResult,
+  BookingOrderDetail,
+  BookingOrderHydratedRow,
+  BookingOrderItemHydratedRow,
+  BookingOrderItemSummary,
+  BookingOrderSummary,
   BookingPaymentStateSnapshot,
   BookingPaymentSummary,
   BookingPriceSnapshot,
@@ -112,9 +131,19 @@ type BookingHydratedStaffProfile = NonNullable<
   BookingHydratedRow['staff_profiles']
 >;
 
+type BookingOrderHydratedStaffProfile = NonNullable<
+  BookingOrderHydratedRow['staff_profiles']
+>;
+
+type BookingOrderItemHydratedStaffProfile = NonNullable<
+  BookingOrderItemHydratedRow['staff_profiles']
+>;
+
 type PrivateBookingHydratedStaffProfile = NonNullable<
   PrivateBookingHydratedRow['staff_profiles']
 >;
+
+const EMPTY_DATABASE_METADATA: DatabaseJsonObject = {};
 
 function getLatestHydratedPayment(
   payments: readonly BookingHydratedPaymentRow[] | null | undefined,
@@ -160,6 +189,7 @@ function toPaymentSummary(
     target_kind: targetKind,
     booking_id: payment.booking_id,
     private_booking_id: payment.private_booking_id,
+    booking_order_id: payment.booking_order_id,
     amount: payment.amount,
     discount_amount: payment.discount_amount,
     final_amount: payment.final_amount,
@@ -181,9 +211,9 @@ function toPaymentSummary(
 }
 
 function buildPaymentStateSnapshot(input: {
-  readonly booking_status: BookingHydratedRow['status'];
+  readonly booking_status: string;
   readonly payment_required: boolean;
-  readonly payment_status: BookingHydratedRow['payment_status'];
+  readonly payment_status: BookingPaymentStatus;
   readonly seat_hold_expires_at: string | null;
   readonly latest_payment: BookingPaymentSummary | null;
 }): BookingPaymentStateSnapshot {
@@ -319,8 +349,7 @@ export class BookingCustomerService {
     const rpcResult = await this.bookingRepository.createBookingAtomic({
       user_id: userId,
       schedule_id: dto.schedule_id,
-      payment_required:
-        dto.payment_required ?? BOOKING_DEFAULT_PAYMENT_REQUIRED,
+      payment_required: BOOKING_DEFAULT_PAYMENT_REQUIRED,
       idempotency_key: dto.idempotency_key ?? null,
       created_by_admin_id: null,
       source: BOOKING_SOURCE_CUSTOMER_WEB,
@@ -373,6 +402,57 @@ export class BookingCustomerService {
     };
   }
 
+  async createBulkBooking(
+    userId: string,
+    dto: CreateBulkBookingDto,
+  ): Promise<BookingBulkCreateResult> {
+    await this.bookingAvailabilityService.assertBulkSchedulesHaveAvailableSeats(
+      {
+        schedule_ids: dto.schedule_ids,
+      },
+    );
+
+    const rpcResult = await this.bookingRepository.createBookingOrderAtomic({
+      customer_user_id: userId,
+      schedule_ids: dto.schedule_ids,
+      idempotency_key: dto.idempotency_key ?? null,
+      created_by_user_id: userId,
+      created_by_admin_id: null,
+      created_by_staff_profile_id: null,
+      created_by_role: AUTH_CUSTOMER_ROLE,
+      source: BOOKING_SOURCE_CUSTOMER_WEB,
+      admin_notes: null,
+      metadata: EMPTY_DATABASE_METADATA,
+    });
+
+    BookingOrderLifecyclePolicy.assertRpcCreateResultIsConsistent(
+      rpcResult.rpc,
+    );
+
+    const actionResult = this.resolveBookingOrderCreateActionResult(
+      rpcResult.rpc.action_result,
+    );
+    const bookingOrderId = this.requireReturnedId(
+      rpcResult.rpc.booking_order_id,
+      'create_booking_order_atomic did not return booking_order_id.',
+    );
+    const bookingOrderRow = await this.getRequiredCustomerBookingOrderRow(
+      userId,
+      bookingOrderId,
+    );
+    const bookingOrder = this.toBookingOrderSummary(bookingOrderRow);
+    const bookingOrderItems = (bookingOrderRow.booking_order_items ?? []).map(
+      (item) => this.toBookingOrderItemSummary(item),
+    );
+
+    return {
+      result: actionResult,
+      booking_order: bookingOrder,
+      items: bookingOrderItems,
+      checkout_required: bookingOrder.checkout_required,
+    };
+  }
+
   async createPrivateBooking(
     userId: string,
     dto: CreatePrivateBookingDto,
@@ -401,8 +481,7 @@ export class BookingCustomerService {
       start_time: startTime,
       duration_minutes: durationMinutes,
       studio: dto.studio ?? PRIVATE_BOOKING_DEFAULT_STUDIO,
-      payment_required:
-        dto.payment_required ?? PRIVATE_BOOKING_DEFAULT_PAYMENT_REQUIRED,
+      payment_required: PRIVATE_BOOKING_DEFAULT_PAYMENT_REQUIRED,
       idempotency_key: dto.idempotency_key ?? null,
       created_by_admin_id: null,
       source: BOOKING_SOURCE_CUSTOMER_WEB,
@@ -500,6 +579,18 @@ export class BookingCustomerService {
       })),
       availability,
     );
+  }
+
+  async getBookingOrderById(
+    userId: string,
+    bookingOrderId: string,
+  ): Promise<BookingOrderDetail> {
+    const bookingOrderRow = await this.getRequiredCustomerBookingOrderRow(
+      userId,
+      bookingOrderId,
+    );
+
+    return this.toBookingOrderDetail(bookingOrderRow);
   }
 
   async getPrivateBookingById(
@@ -735,8 +826,6 @@ export class BookingCustomerService {
     const targetDurationMinutes =
       dto.target_duration_minutes ??
       existingLookup.private_booking.duration_minutes;
-    const paymentRequired =
-      dto.payment_required ?? existingLookup.private_booking.payment_required;
 
     PrivateBookingLifecyclePolicy.assertTargetSessionDateIsNotInPast(
       targetSessionDate,
@@ -760,7 +849,7 @@ export class BookingCustomerService {
         actor_admin_id: null,
         reason: dto.reason ?? null,
         idempotency_key: dto.idempotency_key ?? null,
-        payment_required: paymentRequired,
+        payment_required: PRIVATE_BOOKING_DEFAULT_PAYMENT_REQUIRED,
       });
 
     const actionResult = this.resolvePrivateRescheduleActionResult(
@@ -859,6 +948,22 @@ export class BookingCustomerService {
     return this.toBookingListItem(lookup.booking);
   }
 
+  private async getRequiredCustomerBookingOrderRow(
+    userId: string,
+    bookingOrderId: string,
+  ): Promise<BookingOrderHydratedRow> {
+    const lookup = await this.bookingRepository.findBookingOrderByIdForUser({
+      booking_order_id: bookingOrderId,
+      user_id: userId,
+    });
+
+    if (!lookup.booking_order) {
+      throw AppError.bookingOrderNotFound();
+    }
+
+    return lookup.booking_order;
+  }
+
   private async getRequiredCustomerPrivateBookingListItem(
     userId: string,
     privateBookingId: string,
@@ -913,6 +1018,7 @@ export class BookingCustomerService {
     return {
       status: dto.status ?? null,
       user_id: userId,
+      booking_order_id: null,
       from_date: dto.from_date ?? null,
       to_date: dto.to_date ?? null,
       limit: dto.limit,
@@ -951,6 +1057,14 @@ export class BookingCustomerService {
     };
   }
 
+  private toBookingOrderDetail(
+    row: BookingOrderHydratedRow,
+  ): BookingOrderDetail {
+    return {
+      ...this.toBookingOrderSummary(row),
+    } as BookingOrderDetail;
+  }
+
   private toPrivateBookingDetail(
     row: PrivateBookingHydratedRow,
     history: readonly PrivateBookingHistoryEntry[],
@@ -969,6 +1083,84 @@ export class BookingCustomerService {
       schedule: this.toScheduleSnapshot(row.pilates_class_schedules ?? null),
       trainer: this.toTrainerSnapshot(row.staff_profiles ?? null),
     };
+  }
+
+  private toBookingOrderSummary(
+    row: BookingOrderHydratedRow,
+  ): BookingOrderSummary {
+    const latestPayment = toPaymentSummary(
+      getLatestHydratedPayment(row.payments),
+      'booking_order',
+    );
+    const lifecycleRecord = this.toBookingOrderLifecycleRecord(row);
+    const paymentState = buildPaymentStateSnapshot({
+      booking_status: row.status,
+      payment_required: row.payment_required,
+      payment_status: row.payment_status,
+      seat_hold_expires_at: row.expires_at,
+      latest_payment: latestPayment,
+    });
+
+    return {
+      id: row.id,
+      order_number: row.order_number,
+      customer_user_id: row.customer_user_id,
+      status: row.status,
+      payment_status: row.payment_status,
+      payment_required: row.payment_required,
+      total_amount: row.total_amount,
+      currency: row.currency,
+      booking_count: row.booking_count,
+      idempotency_key: row.idempotency_key,
+      created_by_user_id: row.created_by_user_id,
+      created_by_admin_id: row.created_by_admin_id,
+      created_by_staff_profile_id: row.created_by_staff_profile_id,
+      created_by_role: row.created_by_role,
+      admin_notes: row.admin_notes,
+      metadata: row.metadata,
+      expires_at: row.expires_at,
+      paid_at: row.paid_at,
+      expired_at: row.expired_at,
+      cancelled_at: row.cancelled_at,
+      refunded_at: row.refunded_at,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      realtime_version: row.realtime_version,
+      customer: this.toSafeUserSnapshot(row.app_users ?? null),
+      created_by_staff: this.toBookingOrderStaffSnapshot(
+        row.staff_profiles ?? null,
+      ),
+      items: (row.booking_order_items ?? []).map((item) =>
+        this.toBookingOrderItemSummary(item),
+      ),
+      latest_payment: latestPayment,
+      payment_state: paymentState,
+      checkout_required:
+        BookingOrderLifecyclePolicy.resolveCheckoutRequired(lifecycleRecord),
+    } as BookingOrderSummary;
+  }
+
+  private toBookingOrderItemSummary(
+    row: BookingOrderItemHydratedRow,
+  ): BookingOrderItemSummary {
+    return {
+      id: row.id,
+      booking_order_id: row.booking_order_id,
+      booking_id: row.booking_id,
+      schedule_id: row.schedule_id,
+      class_id: row.class_id,
+      trainer_staff_profile_id: row.trainer_staff_profile_id,
+      price_amount: row.price_amount,
+      currency: row.currency,
+      status: row.status,
+      booking: row.bookings ? this.toSafeBooking(row.bookings) : null,
+      class: this.toClassSnapshot(row.pilates_classes ?? null),
+      schedule: this.toScheduleSnapshot(row.pilates_class_schedules ?? null),
+      trainer: this.toBookingOrderItemTrainerSnapshot(
+        row.staff_profiles ?? null,
+      ),
+      created_at: row.created_at,
+    } as BookingOrderItemSummary;
   }
 
   private toPrivateBookingListItem(
@@ -1001,6 +1193,7 @@ export class BookingCustomerService {
       schedule_id: row.schedule_id,
       class_id: row.class_id,
       trainer_staff_profile_id: row.trainer_staff_profile_id,
+      booking_order_id: row.booking_order_id,
       status: row.status,
       source: row.source,
       payment_status: row.payment_status,
@@ -1193,6 +1386,42 @@ export class BookingCustomerService {
     };
   }
 
+  private toBookingOrderStaffSnapshot(
+    row: BookingOrderHydratedStaffProfile | null,
+  ): BookingTrainerSnapshot | null {
+    if (!row) {
+      return null;
+    }
+
+    return {
+      staff_profile_id: row.id,
+      app_user_id: row.app_user_id,
+      display_name: row.display_name,
+      post_title: row.post_title,
+      email: row.app_users?.email ?? null,
+      phone: row.app_users?.phone ?? null,
+      avatar_path: row.app_users?.avatar_path ?? null,
+    };
+  }
+
+  private toBookingOrderItemTrainerSnapshot(
+    row: BookingOrderItemHydratedStaffProfile | null,
+  ): BookingTrainerSnapshot | null {
+    if (!row) {
+      return null;
+    }
+
+    return {
+      staff_profile_id: row.id,
+      app_user_id: row.app_user_id,
+      display_name: row.display_name,
+      post_title: row.post_title,
+      email: row.app_users?.email ?? null,
+      phone: row.app_users?.phone ?? null,
+      avatar_path: row.app_users?.avatar_path ?? null,
+    };
+  }
+
   private toPrivateTrainerSnapshot(
     row: PrivateBookingHydratedStaffProfile | null,
   ): BookingTrainerSnapshot | null {
@@ -1229,6 +1458,42 @@ export class BookingCustomerService {
     };
   }
 
+  private toBookingOrderLifecycleRecord(
+    row: BookingOrderHydratedRow,
+  ): BookingOrderLifecycleRecord {
+    return {
+      id: row.id,
+      order_number: row.order_number,
+      customer_user_id: row.customer_user_id,
+      status: row.status,
+      payment_status: row.payment_status,
+      payment_required: row.payment_required,
+      total_amount: row.total_amount,
+      currency: row.currency,
+      booking_count: row.booking_count,
+      expires_at: row.expires_at,
+      paid_at: row.paid_at,
+      expired_at: row.expired_at,
+      cancelled_at: row.cancelled_at,
+      refunded_at: row.refunded_at,
+    };
+  }
+
+  private resolveBookingOrderScheduleIds(
+    row: BookingOrderHydratedRow,
+    fallbackScheduleIds: readonly string[],
+  ): readonly string[] {
+    const itemScheduleIds = (row.booking_order_items ?? [])
+      .map((item) => item.schedule_id)
+      .filter((scheduleId) => scheduleId.length > 0);
+
+    if (itemScheduleIds.length > 0) {
+      return [...new Set(itemScheduleIds)];
+    }
+
+    return fallbackScheduleIds;
+  }
+
   private resolveAvailabilityScheduleId(
     row:
       | BookingCreateAtomicRpcRow
@@ -1263,6 +1528,21 @@ export class BookingCustomerService {
 
     throw AppError.bookingDatabaseTransactionFailed(
       new Error(`Unexpected create booking RPC action result: ${value}`),
+    );
+  }
+
+  private resolveBookingOrderCreateActionResult(
+    value: string,
+  ): BookingBulkCreateResult['result'] {
+    if (
+      value === BOOKING_ORDER_RPC_ACTION_CREATED_ORDER ||
+      value === BOOKING_ORDER_RPC_ACTION_EXISTING_ORDER
+    ) {
+      return value;
+    }
+
+    throw AppError.bookingDatabaseTransactionFailed(
+      new Error(`Unexpected create booking order RPC action result: ${value}`),
     );
   }
 

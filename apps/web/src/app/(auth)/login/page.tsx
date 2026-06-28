@@ -6,10 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, UserRound } from "lucide-react";
 import { useAuth } from "@/modules/auth";
-import {
-  isEmailVerificationRequiredError,
-  resolvePostLoginRedirect,
-} from "@/modules/auth";
+import { resolvePostLoginRedirect } from "@/modules/auth";
 
 export default function LoginScreen() {
   return (
@@ -47,20 +44,8 @@ function LoginForm() {
       const nextPath = resolvePostLoginRedirect(result.user.role, redirectPath);
 
       router.replace(nextPath);
-    } catch (error: unknown) {
-      if (isEmailVerificationRequiredError(error)) {
-        const verificationUrl = new URL(
-          "/verify-email",
-          window.location.origin,
-        );
-        const redirectPath = searchParams.get("redirect");
-
-        if (redirectPath) {
-          verificationUrl.searchParams.set("redirect", redirectPath);
-        }
-
-        router.replace(`${verificationUrl.pathname}${verificationUrl.search}`);
-      }
+    } catch {
+      // The auth provider owns the user-facing error state.
     }
   };
 

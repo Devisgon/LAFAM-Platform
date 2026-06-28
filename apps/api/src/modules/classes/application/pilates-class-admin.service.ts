@@ -5,17 +5,15 @@
  * Role:
  * - Owns admin-facing Pilates class and schedule business rules.
  * - Validates trainer assignment, trainer availability, schedule conflicts, class status, and lifecycle transitions.
- * - Supports backward-compatible single Pilates schedule creation.
- * - Supports single-date multi-slot schedule creation.
- * - Supports recurring weekly/monthly schedule generation.
+ * - Supports one weekly Pilates schedule plan that generates concrete schedule rows.
  * - Converts repository records into admin-safe response contracts.
  * - Emits internal domain events after successful mutations.
  *
  * Important:
  * - This service does not directly query Supabase.
  * - This service does not create bookings, payments, memberships, or waitlist rows.
- * - Customers book concrete pilates_class_schedules rows, not recurrence templates.
- * - Recurrence policy generates candidate occurrences only; repository/service logic validates trainer availability and conflicts.
+ * - Customers book concrete pilates_class_schedules rows, not schedule plan templates.
+ * - Schedule policy generates candidate occurrences only; repository/service logic validates trainer availability and conflicts.
  * - This service prepares the Classes module for realtime updates through event payloads.
  */
 
@@ -52,7 +50,6 @@ import {
   PILATES_CLASS_DEFAULT_DURATION_MINUTES,
   PILATES_CLASS_DEFAULT_LEVEL,
   PILATES_CLASS_DEFAULT_PRICE_AMOUNT,
-  PILATES_CLASS_DEFAULT_STUDIO,
   PILATES_CLASS_SCHEDULE_STATUS_CANCELLED,
   PILATES_CLASS_SCHEDULE_STATUS_COMPLETED,
   PILATES_CLASS_SCHEDULE_STATUS_DELETED,
@@ -63,17 +60,10 @@ import {
   PILATES_CLASS_TEMPORARY_WAITLIST_AVAILABLE,
   PILATES_CLASS_TEMPORARY_WAITLIST_COUNT,
   PILATES_CLASS_TRAINER_ROLE,
-  PILATES_SCHEDULE_CREATION_MODE_RECURRING,
-  PILATES_SCHEDULE_CREATION_MODE_SINGLE,
   PILATES_SCHEDULE_GENERATION_SOURCE_RECURRING,
-  PILATES_SCHEDULE_GENERATION_SOURCE_SINGLE,
-  PILATES_SCHEDULE_MONTHLY_RULE_DAY_OF_MONTH,
-  PILATES_SCHEDULE_SERIES_FREQUENCY_MONTHLY,
   PILATES_SCHEDULE_SERIES_FREQUENCY_WEEKLY,
   PILATES_SCHEDULE_SERIES_STATUS_ACTIVE,
   PILATES_SCHEDULE_UPDATE_SCOPE_THIS_OCCURRENCE,
-  PILATES_SCHEDULE_WEEKDAY_MAX,
-  PILATES_SCHEDULE_WEEKDAY_MIN,
   isPilatesClassAdminManagementRole,
   isPilatesClassCurrency,
   type PilatesClassCurrency,
@@ -95,7 +85,6 @@ import type {
   PilatesClassAvailabilitySnapshot,
   PilatesClassImageUploadFile,
   PilatesClassListQuery,
-  PilatesClassPriceSnapshot,
   PilatesClassScheduleAdminDetail,
   PilatesClassScheduleAdminSummary,
   PilatesClassScheduleListQuery,
@@ -104,12 +93,13 @@ import type {
   PilatesClassTrainerSummary,
   PilatesPaginatedResult,
   PilatesScheduleGeneratedOccurrence,
-  PilatesScheduleRecurrenceGenerationInput,
   PilatesScheduleSeriesAdminDetail,
   PilatesScheduleSeriesAdminSummary,
   PilatesScheduleSeriesTimeSlotCreateInput,
   PilatesScheduleSeriesTimeSlotSummary,
   PilatesScheduleSeriesWithRelations,
+  PilatesWeeklySchedulePlanAdminSummary,
+  PilatesWeeklySchedulePlanGenerationInput,
 } from '../types/pilates-class.types';
 import { PilatesClassEventService } from './pilates-class-event.service';
 import { PilatesClassImageService } from './pilates-class-image.service';
@@ -140,17 +130,6 @@ interface AssignableTrainerContext {
   readonly appUser: AppUserRow;
 }
 
-interface RecurrenceGenerationBuildContext {
-  readonly startDate: string;
-  readonly endDate: string;
-  readonly startTime: string;
-  readonly durationMinutes: number;
-  readonly capacity: number;
-  readonly studio: string;
-  readonly priceAmount: number;
-  readonly currency: PilatesClassCurrency;
-}
-
 type PilatesClassImageUrlResolver = (imagePath: string | null) => string | null;
 
 function resolveAdminActorId(auth: AuthInternalContext): string {
@@ -173,28 +152,6 @@ function resolvePilatesClassCurrency(value: string): PilatesClassCurrency {
   });
 }
 
-function resolveSchedulePrice(input: {
-  readonly dtoPriceAmount?: number;
-  readonly dtoCurrency?: string;
-  readonly classRecord: PilatesClassRow;
-}): PilatesClassPriceSnapshot {
-  const amount =
-    input.dtoPriceAmount ??
-    input.classRecord.default_price_amount ??
-    PILATES_CLASS_DEFAULT_PRICE_AMOUNT;
-
-  const currency = resolvePilatesClassCurrency(
-    input.dtoCurrency ??
-      input.classRecord.currency ??
-      PILATES_CLASS_DEFAULT_CURRENCY,
-  );
-
-  return {
-    amount,
-    currency,
-  };
-}
-
 function mapSeriesTimeSlotToAdminSummary(
   timeSlot: NonNullable<
     PilatesScheduleSeriesWithRelations['time_slots']
@@ -204,6 +161,10 @@ function mapSeriesTimeSlotToAdminSummary(
     id: timeSlot.id,
     series_id: timeSlot.series_id,
     slot_index: timeSlot.slot_index,
+    day_of_week:
+      timeSlot.day_of_week !== null
+        ? (timeSlot.day_of_week as PilatesScheduleWeekday)
+        : null,
     studio: timeSlot.studio,
     start_time: timeSlot.start_time,
     end_time: timeSlot.end_time,
@@ -217,35 +178,6 @@ function mapSeriesTimeSlotToAdminSummary(
     created_at: timeSlot.created_at,
     updated_at: timeSlot.updated_at,
   };
-}
-
-function buildRecurringTimeSlots(
-  dto: CreatePilatesScheduleDto,
-  input: RecurrenceGenerationBuildContext,
-): readonly PilatesScheduleSeriesTimeSlotCreateInput[] | undefined {
-  if (!dto.time_slots || dto.time_slots.length === 0) {
-    return undefined;
-  }
-
-  return dto.time_slots.map((timeSlot, index) => {
-    const durationMinutes = timeSlot.duration_minutes;
-    const startTime = timeSlot.start_time;
-    const endTime = calculateEndTime(startTime, durationMinutes);
-    const currency = resolvePilatesClassCurrency(
-      timeSlot.currency ?? input.currency,
-    );
-
-    return {
-      slot_index: index + 1,
-      studio: timeSlot.studio ?? input.studio,
-      start_time: startTime,
-      end_time: endTime,
-      duration_minutes: durationMinutes,
-      capacity: timeSlot.capacity ?? input.capacity,
-      price_amount: timeSlot.price_amount ?? input.priceAmount,
-      currency,
-    };
-  });
 }
 
 function hasObjectKeys(value: Record<string, unknown>): boolean {
@@ -353,74 +285,62 @@ function calculateEndTime(startTime: string, durationMinutes: number): string {
 
   return formatMinutesToTime(endMinutes);
 }
-function resolveScheduleBaseStartTime(dto: CreatePilatesScheduleDto): string {
-  if (typeof dto.start_time === 'string' && dto.start_time.trim().length > 0) {
-    return dto.start_time;
-  }
 
-  const firstTimeSlot = dto.time_slots?.[0];
-
-  if (
-    typeof firstTimeSlot?.start_time === 'string' &&
-    firstTimeSlot.start_time.trim().length > 0
-  ) {
-    return firstTimeSlot.start_time;
-  }
-
-  throw AppError.invalidRequest(
-    'start_time is required when time_slots is not provided.',
-  );
+function buildWeeklySchedulePlanInput(
+  dto: CreatePilatesScheduleDto,
+): PilatesWeeklySchedulePlanGenerationInput {
+  return {
+    start_date: dto.start_date,
+    end_date: dto.end_date,
+    studio: dto.studio,
+    default_capacity: dto.default_capacity,
+    price_amount: dto.price_amount,
+    currency: resolvePilatesClassCurrency(dto.currency),
+    schedule_days: dto.schedule_days.map((scheduleDay) => ({
+      day_of_week: scheduleDay.day_of_week as PilatesScheduleWeekday,
+      time_slots: scheduleDay.time_slots.map((timeSlot) => ({
+        start_time: timeSlot.start_time,
+        duration_minutes: timeSlot.duration_minutes,
+        ...(typeof timeSlot.capacity === 'number'
+          ? { capacity: timeSlot.capacity }
+          : {}),
+      })),
+    })),
+  };
 }
 
-function assertScheduleWindowsDoNotOverlap(
-  windows: readonly PilatesClassScheduleTimeWindow[],
-): void {
-  for (let leftIndex = 0; leftIndex < windows.length; leftIndex += 1) {
-    const leftWindow = windows[leftIndex];
+function buildWeeklySeriesTimeSlotPayloads(
+  input: PilatesWeeklySchedulePlanGenerationInput,
+): readonly PilatesScheduleSeriesTimeSlotCreateInput[] {
+  let nextSlotIndex = 1;
+  const timeSlots: PilatesScheduleSeriesTimeSlotCreateInput[] = [];
 
-    if (!leftWindow) {
-      continue;
-    }
-
-    const leftStart = parseTimeToMinutes(leftWindow.start_time);
-    const leftEnd = parseTimeToMinutes(leftWindow.end_time);
-
-    for (
-      let rightIndex = leftIndex + 1;
-      rightIndex < windows.length;
-      rightIndex += 1
-    ) {
-      const rightWindow = windows[rightIndex];
-
-      if (!rightWindow || leftWindow.class_date !== rightWindow.class_date) {
-        continue;
-      }
-
-      const rightStart = parseTimeToMinutes(rightWindow.start_time);
-      const rightEnd = parseTimeToMinutes(rightWindow.end_time);
-      const overlaps = leftStart < rightEnd && rightStart < leftEnd;
-
-      if (!overlaps) {
-        continue;
-      }
-
-      throw AppError.pilatesScheduleDuplicateTimeSlot(
-        'Duplicate or overlapping Pilates schedule time slots are not allowed.',
-        {
-          first_slot: {
-            class_date: leftWindow.class_date,
-            start_time: leftWindow.start_time,
-            end_time: leftWindow.end_time,
-          },
-          second_slot: {
-            class_date: rightWindow.class_date,
-            start_time: rightWindow.start_time,
-            end_time: rightWindow.end_time,
-          },
-        },
+  for (const scheduleDay of [...input.schedule_days].sort(
+    (firstDay, secondDay) => firstDay.day_of_week - secondDay.day_of_week,
+  )) {
+    for (const timeSlot of scheduleDay.time_slots) {
+      const endTime = calculateEndTime(
+        timeSlot.start_time,
+        timeSlot.duration_minutes,
       );
+
+      timeSlots.push({
+        slot_index: nextSlotIndex,
+        day_of_week: scheduleDay.day_of_week,
+        studio: input.studio,
+        start_time: timeSlot.start_time,
+        end_time: endTime,
+        duration_minutes: timeSlot.duration_minutes,
+        capacity: timeSlot.capacity ?? input.default_capacity,
+        price_amount: input.price_amount,
+        currency: input.currency,
+      });
+
+      nextSlotIndex += 1;
     }
   }
+
+  return timeSlots;
 }
 
 function isTimeWindowCoveredByRule(
@@ -821,102 +741,6 @@ function assertTrainerProfileIsAssignable(
       },
     );
   }
-}
-
-function normalizeWeekdaysForSeries(
-  daysOfWeek: readonly PilatesScheduleWeekday[] | undefined,
-): readonly PilatesScheduleWeekday[] {
-  if (daysOfWeek === undefined || daysOfWeek.length === 0) {
-    throw AppError.invalidRequest(
-      'Weekly recurrence requires at least one weekday.',
-    );
-  }
-
-  const normalizedWeekdays = new Set<PilatesScheduleWeekday>();
-
-  for (const weekday of daysOfWeek) {
-    if (
-      !Number.isInteger(weekday) ||
-      weekday < PILATES_SCHEDULE_WEEKDAY_MIN ||
-      weekday > PILATES_SCHEDULE_WEEKDAY_MAX
-    ) {
-      throw AppError.invalidRequest(
-        `Weekly recurrence weekdays must be between ${PILATES_SCHEDULE_WEEKDAY_MIN} and ${PILATES_SCHEDULE_WEEKDAY_MAX}.`,
-        {
-          weekday,
-        },
-      );
-    }
-
-    normalizedWeekdays.add(weekday);
-  }
-
-  if (normalizedWeekdays.size !== daysOfWeek.length) {
-    throw AppError.invalidRequest(
-      'Weekly recurrence days_of_week must not contain duplicate weekdays.',
-    );
-  }
-
-  return [...normalizedWeekdays];
-}
-
-function buildRecurrenceGenerationInput(
-  dto: CreatePilatesScheduleDto,
-  input: RecurrenceGenerationBuildContext,
-): PilatesScheduleRecurrenceGenerationInput {
-  const recurrence = dto.recurrence;
-  const timeSlots = buildRecurringTimeSlots(dto, input);
-
-  if (!recurrence) {
-    throw AppError.invalidRequest(
-      'recurrence is required for recurring schedule creation.',
-    );
-  }
-
-  if (recurrence.frequency === PILATES_SCHEDULE_SERIES_FREQUENCY_WEEKLY) {
-    return {
-      frequency: PILATES_SCHEDULE_SERIES_FREQUENCY_WEEKLY,
-      start_date: input.startDate,
-      end_date: input.endDate,
-      start_time: input.startTime,
-      duration_minutes: input.durationMinutes,
-      capacity: input.capacity,
-      price_amount: input.priceAmount,
-      currency: input.currency,
-      ...(timeSlots !== undefined ? { time_slots: timeSlots } : {}),
-      days_of_week: normalizeWeekdaysForSeries(
-        recurrence.days_of_week as
-          | readonly PilatesScheduleWeekday[]
-          | undefined,
-      ),
-      monthly_rule: null,
-      day_of_month: null,
-      excluded_dates: recurrence.excluded_dates ?? [],
-    };
-  }
-
-  if (recurrence.frequency === PILATES_SCHEDULE_SERIES_FREQUENCY_MONTHLY) {
-    return {
-      frequency: PILATES_SCHEDULE_SERIES_FREQUENCY_MONTHLY,
-      start_date: input.startDate,
-      end_date: input.endDate,
-      start_time: input.startTime,
-      duration_minutes: input.durationMinutes,
-      capacity: input.capacity,
-      price_amount: input.priceAmount,
-      currency: input.currency,
-      ...(timeSlots !== undefined ? { time_slots: timeSlots } : {}),
-      days_of_week: [],
-      monthly_rule:
-        recurrence.monthly_rule ?? PILATES_SCHEDULE_MONTHLY_RULE_DAY_OF_MONTH,
-      day_of_month: recurrence.day_of_month ?? null,
-      excluded_dates: recurrence.excluded_dates ?? [],
-    };
-  }
-
-  throw AppError.invalidRequest('Unsupported Pilates schedule frequency.', {
-    frequency: recurrence.frequency,
-  });
 }
 
 @Injectable()
@@ -1323,13 +1147,8 @@ export class PilatesClassAdminService {
     dto: CreatePilatesScheduleDto,
   ): Promise<CreatePilatesClassScheduleResult> {
     const adminUserId = resolveAdminActorId(auth);
-    const mode = dto.mode ?? PILATES_SCHEDULE_CREATION_MODE_SINGLE;
 
-    if (mode === PILATES_SCHEDULE_CREATION_MODE_RECURRING) {
-      return this.createRecurringSchedule(adminUserId, dto);
-    }
-
-    return this.createSingleSchedule(adminUserId, dto);
+    return this.createWeeklySchedulePlan(adminUserId, dto);
   }
 
   async updateSchedule(
@@ -1644,308 +1463,59 @@ export class PilatesClassAdminService {
     };
   }
 
-  private async createSingleSchedule(
+  private async createWeeklySchedulePlan(
     adminUserId: string,
     dto: CreatePilatesScheduleDto,
   ): Promise<CreatePilatesClassScheduleResult> {
-    if (typeof dto.class_date !== 'string') {
-      throw AppError.invalidRequest(
-        'class_date is required for single schedule creation.',
-      );
-    }
-
-    const classRecord = await this.resolveSchedulableClass(dto.class_id);
-    const studio = dto.studio ?? PILATES_CLASS_DEFAULT_STUDIO;
-    const pricing = resolveSchedulePrice({
-      dtoPriceAmount: dto.price_amount,
-      dtoCurrency: dto.currency,
-      classRecord,
-    });
-
-    assertDateIsNotInPast(dto.class_date);
-
-    if (dto.time_slots !== undefined && dto.time_slots.length > 0) {
-      const windows: PilatesClassScheduleTimeWindow[] = dto.time_slots.map(
-        (timeSlot) => {
-          const durationMinutes =
-            timeSlot.duration_minutes ??
-            dto.duration_minutes ??
-            classRecord.default_duration_minutes;
-          const endTime = calculateEndTime(
-            timeSlot.start_time,
-            durationMinutes,
-          );
-
-          return {
-            class_date: dto.class_date as string,
-            start_time: timeSlot.start_time,
-            end_time: endTime,
-            duration_minutes: durationMinutes,
-          };
-        },
-      );
-
-      assertScheduleWindowsDoNotOverlap(windows);
-
-      for (const window of windows) {
-        await this.assertTrainerCanBeAssigned({
-          trainerStaffProfileId: dto.trainer_staff_profile_id,
-          window,
-        });
-      }
-
-      const schedulePayloads: PilatesClassScheduleInsert[] = dto.time_slots.map(
-        (timeSlot, index) => {
-          const window = windows[index];
-
-          if (!window) {
-            throw AppError.invalidRequest(
-              'A Pilates schedule time slot could not be resolved.',
-              {
-                slot_index: index,
-              },
-            );
-          }
-
-          const currency = resolvePilatesClassCurrency(
-            timeSlot.currency ?? pricing.currency,
-          );
-
-          return {
-            class_id: classRecord.id,
-            trainer_staff_profile_id: dto.trainer_staff_profile_id,
-            studio: timeSlot.studio ?? studio,
-            class_date: window.class_date,
-            start_time: window.start_time,
-            end_time: window.end_time,
-            duration_minutes: window.duration_minutes,
-            capacity:
-              timeSlot.capacity ?? dto.capacity ?? classRecord.default_capacity,
-            price_amount: timeSlot.price_amount ?? pricing.amount,
-            currency,
-            status: PILATES_CLASS_SCHEDULE_STATUS_SCHEDULED,
-            created_by_admin_id: adminUserId,
-            updated_by_admin_id: adminUserId,
-            series_id: null,
-            series_occurrence_index: null,
-            series_time_slot_id: null,
-            series_date_index: null,
-            series_slot_index: null,
-            generation_source: PILATES_SCHEDULE_GENERATION_SOURCE_SINGLE,
-          };
-        },
-      );
-
-      const schedules =
-        await this.pilatesClassRepository.createSchedules(schedulePayloads);
-
-      if (schedules.length === 0) {
-        throw AppError.databaseOperationFailed(
-          new Error('Single multi-slot schedule creation returned no rows.'),
-        );
-      }
-
-      for (const schedule of schedules) {
-        this.pilatesClassEventService.recordScheduleCreated(
-          schedule,
-          createAvailabilitySnapshot(schedule),
-          {
-            actor_admin_user_id: adminUserId,
-          },
-        );
-      }
-
-      const hydratedSchedules = await Promise.all(
-        schedules.map((schedule) =>
-          this.pilatesClassRepository.findScheduleWithRelationsById(
-            schedule.id,
-          ),
-        ),
-      );
-
-      const missingScheduleIds = schedules
-        .filter((_schedule, index) => hydratedSchedules[index] === null)
-        .map((schedule) => schedule.id);
-
-      if (missingScheduleIds.length > 0) {
-        throw AppError.pilatesScheduleNotFound(
-          'One or more created Pilates schedules could not be loaded.',
-          {
-            schedule_ids: missingScheduleIds,
-          },
-        );
-      }
-
-      const generatedSchedules = hydratedSchedules.map((schedule, index) => {
-        if (!schedule) {
-          throw AppError.pilatesScheduleNotFound(
-            'One created Pilates schedule could not be loaded.',
-            {
-              schedule_id: schedules[index]?.id,
-            },
-          );
-        }
-
-        return this.mapScheduleToAdminDetail(schedule);
-      });
-
-      const firstGeneratedSchedule = generatedSchedules[0];
-
-      if (!firstGeneratedSchedule) {
-        throw AppError.pilatesScheduleNotFound(
-          'The created Pilates schedule could not be loaded.',
-          {
-            schedule_ids: schedules.map((schedule) => schedule.id),
-          },
-        );
-      }
-
-      return {
-        mode: PILATES_SCHEDULE_CREATION_MODE_SINGLE,
-        schedule: firstGeneratedSchedule,
-        generated_schedules: generatedSchedules,
-        generated_count: generatedSchedules.length,
-      };
-    }
-
-    const startTime = resolveScheduleBaseStartTime(dto);
-    const durationMinutes =
-      dto.duration_minutes ?? classRecord.default_duration_minutes;
-    const capacity = dto.capacity ?? classRecord.default_capacity;
-    const endTime = calculateEndTime(startTime, durationMinutes);
-
-    const window: PilatesClassScheduleTimeWindow = {
-      class_date: dto.class_date,
-      start_time: startTime,
-      end_time: endTime,
-      duration_minutes: durationMinutes,
-    };
-
-    await this.assertTrainerCanBeAssigned({
-      trainerStaffProfileId: dto.trainer_staff_profile_id,
-      window,
-    });
-
-    const payload: PilatesClassScheduleInsert = {
-      class_id: classRecord.id,
-      trainer_staff_profile_id: dto.trainer_staff_profile_id,
-      studio,
-      class_date: window.class_date,
-      start_time: window.start_time,
-      end_time: window.end_time,
-      duration_minutes: window.duration_minutes,
-      capacity,
-      price_amount: pricing.amount,
-      currency: pricing.currency,
-      status: PILATES_CLASS_SCHEDULE_STATUS_SCHEDULED,
-      created_by_admin_id: adminUserId,
-      updated_by_admin_id: adminUserId,
-      series_id: null,
-      series_occurrence_index: null,
-      series_time_slot_id: null,
-      series_date_index: null,
-      series_slot_index: null,
-      generation_source: PILATES_SCHEDULE_GENERATION_SOURCE_SINGLE,
-    };
-
-    const schedule = await this.pilatesClassRepository.createSchedule(payload);
-
-    this.pilatesClassEventService.recordScheduleCreated(
-      schedule,
-      createAvailabilitySnapshot(schedule),
-      {
-        actor_admin_user_id: adminUserId,
-      },
-    );
-
-    const hydratedSchedule =
-      await this.pilatesClassRepository.findScheduleWithRelationsById(
-        schedule.id,
-      );
-
-    if (!hydratedSchedule) {
-      throw AppError.pilatesScheduleNotFound(
-        'The created Pilates schedule could not be loaded.',
-        {
-          schedule_id: schedule.id,
-        },
-      );
-    }
-
-    return {
-      mode: PILATES_SCHEDULE_CREATION_MODE_SINGLE,
-      schedule: this.mapScheduleToAdminDetail(hydratedSchedule),
-    };
-  }
-
-  private async createRecurringSchedule(
-    adminUserId: string,
-    dto: CreatePilatesScheduleDto,
-  ): Promise<CreatePilatesClassScheduleResult> {
-    if (typeof dto.start_date !== 'string') {
-      throw AppError.invalidRequest(
-        'start_date is required for recurring schedule creation.',
-      );
-    }
-
-    if (typeof dto.end_date !== 'string') {
-      throw AppError.invalidRequest(
-        'end_date is required for recurring schedule creation.',
-      );
-    }
-
     assertDateIsNotInPast(dto.start_date);
 
     const classRecord = await this.resolveSchedulableClass(dto.class_id);
-    const durationMinutes =
-      dto.duration_minutes ?? classRecord.default_duration_minutes;
-    const capacity = dto.capacity ?? classRecord.default_capacity;
-    const studio = dto.studio ?? PILATES_CLASS_DEFAULT_STUDIO;
-    const pricing = resolveSchedulePrice({
-      dtoPriceAmount: dto.price_amount,
-      dtoCurrency: dto.currency,
-      classRecord,
-    });
-    const baseStartTime = resolveScheduleBaseStartTime(dto);
+    const generationInput = buildWeeklySchedulePlanInput(dto);
+    const generationResult =
+      PilatesScheduleRecurrencePolicy.generateOccurrences(generationInput);
 
-    const recurrenceInput = buildRecurrenceGenerationInput(dto, {
-      startDate: dto.start_date,
-      endDate: dto.end_date,
-      startTime: baseStartTime,
-      durationMinutes,
-      capacity,
-      studio,
-      priceAmount: pricing.amount,
-      currency: pricing.currency,
-    });
-
-    const recurrenceResult =
-      PilatesScheduleRecurrencePolicy.generateOccurrences(recurrenceInput);
-
-    assertOccurrencesAreNotInPast(recurrenceResult.occurrences);
+    assertOccurrencesAreNotInPast(generationResult.occurrences);
 
     await this.assertTrainerCanBeAssignedForGeneratedOccurrences({
       trainerStaffProfileId: dto.trainer_staff_profile_id,
-      occurrences: recurrenceResult.occurrences,
+      occurrences: generationResult.occurrences,
     });
+
+    const seriesTimeSlotInputs =
+      buildWeeklySeriesTimeSlotPayloads(generationInput);
+    const firstTimeSlot = seriesTimeSlotInputs[0];
+
+    if (typeof firstTimeSlot === 'undefined') {
+      throw AppError.pilatesScheduleTimeSlotInvalid(
+        'schedule_days must include at least one time slot.',
+      );
+    }
+
+    const daysOfWeek = [
+      ...new Set(
+        generationInput.schedule_days.map(
+          (scheduleDay) => scheduleDay.day_of_week,
+        ),
+      ),
+    ].sort((firstDay, secondDay) => firstDay - secondDay);
 
     const seriesPayload: PilatesScheduleSeriesInsert = {
       class_id: classRecord.id,
       trainer_staff_profile_id: dto.trainer_staff_profile_id,
-      studio,
-      frequency: recurrenceInput.frequency,
-      days_of_week: [...(recurrenceInput.days_of_week ?? [])],
-      monthly_rule: recurrenceInput.monthly_rule ?? null,
-      day_of_month: recurrenceInput.day_of_month ?? null,
-      start_date: recurrenceInput.start_date,
-      end_date: recurrenceInput.end_date,
-      start_time: recurrenceInput.start_time,
-      end_time: recurrenceResult.occurrences[0]?.end_time ?? '',
-      duration_minutes: recurrenceInput.duration_minutes,
-      capacity: recurrenceInput.capacity,
-      uses_multiple_time_slots: (recurrenceInput.time_slots ?? []).length > 0,
-      time_slot_count: Math.max(1, recurrenceInput.time_slots?.length ?? 1),
-      excluded_dates: [...(recurrenceInput.excluded_dates ?? [])],
+      studio: generationInput.studio,
+      frequency: PILATES_SCHEDULE_SERIES_FREQUENCY_WEEKLY,
+      days_of_week: daysOfWeek,
+      monthly_rule: null,
+      day_of_month: null,
+      start_date: generationInput.start_date,
+      end_date: generationInput.end_date,
+      start_time: firstTimeSlot.start_time,
+      end_time: firstTimeSlot.end_time,
+      duration_minutes: firstTimeSlot.duration_minutes,
+      capacity: generationInput.default_capacity,
+      uses_multiple_time_slots: seriesTimeSlotInputs.length > 1,
+      time_slot_count: seriesTimeSlotInputs.length,
+      excluded_dates: [],
       status: PILATES_SCHEDULE_SERIES_STATUS_ACTIVE,
       created_by_admin_id: adminUserId,
       updated_by_admin_id: adminUserId,
@@ -1954,19 +1524,19 @@ export class PilatesClassAdminService {
     const series =
       await this.pilatesClassRepository.createScheduleSeries(seriesPayload);
 
-    const seriesTimeSlotPayloads: PilatesScheduleSeriesTimeSlotInsert[] = (
-      recurrenceInput.time_slots ?? []
-    ).map((timeSlot) => ({
-      series_id: series.id,
-      slot_index: timeSlot.slot_index,
-      studio: timeSlot.studio,
-      start_time: timeSlot.start_time,
-      end_time: timeSlot.end_time,
-      duration_minutes: timeSlot.duration_minutes,
-      capacity: timeSlot.capacity,
-      price_amount: timeSlot.price_amount ?? pricing.amount,
-      currency: timeSlot.currency ?? pricing.currency,
-    }));
+    const seriesTimeSlotPayloads: PilatesScheduleSeriesTimeSlotInsert[] =
+      seriesTimeSlotInputs.map((timeSlot) => ({
+        series_id: series.id,
+        slot_index: timeSlot.slot_index,
+        day_of_week: timeSlot.day_of_week,
+        studio: timeSlot.studio,
+        start_time: timeSlot.start_time,
+        end_time: timeSlot.end_time,
+        duration_minutes: timeSlot.duration_minutes,
+        capacity: timeSlot.capacity,
+        price_amount: timeSlot.price_amount,
+        currency: timeSlot.currency,
+      }));
 
     const seriesTimeSlots =
       await this.pilatesClassRepository.createScheduleSeriesTimeSlots(
@@ -1978,32 +1548,29 @@ export class PilatesClassAdminService {
     );
 
     const schedulePayloads: PilatesClassScheduleInsert[] =
-      recurrenceResult.occurrences.map((occurrence) => {
+      generationResult.occurrences.map((occurrence) => {
         const seriesTimeSlot =
-          typeof occurrence.series_slot_index === 'number'
-            ? (seriesTimeSlotsBySlotIndex.get(occurrence.series_slot_index) ??
-              null)
-            : null;
+          seriesTimeSlotsBySlotIndex.get(occurrence.series_slot_index) ?? null;
 
         return {
           class_id: classRecord.id,
           trainer_staff_profile_id: dto.trainer_staff_profile_id,
-          studio: occurrence.studio ?? studio,
+          studio: occurrence.studio ?? generationInput.studio,
           class_date: occurrence.class_date,
           start_time: occurrence.start_time,
           end_time: occurrence.end_time,
           duration_minutes: occurrence.duration_minutes,
           capacity: occurrence.capacity,
-          price_amount: occurrence.price_amount ?? pricing.amount,
-          currency: occurrence.currency ?? pricing.currency,
+          price_amount: occurrence.price_amount ?? generationInput.price_amount,
+          currency: occurrence.currency ?? generationInput.currency,
           status: PILATES_CLASS_SCHEDULE_STATUS_SCHEDULED,
           created_by_admin_id: adminUserId,
           updated_by_admin_id: adminUserId,
           series_id: series.id,
           series_occurrence_index: occurrence.occurrence_index,
           series_time_slot_id: seriesTimeSlot?.id ?? null,
-          series_date_index: occurrence.series_date_index ?? null,
-          series_slot_index: occurrence.series_slot_index ?? null,
+          series_date_index: occurrence.series_date_index,
+          series_slot_index: occurrence.series_slot_index,
           generation_source: PILATES_SCHEDULE_GENERATION_SOURCE_RECURRING,
         };
       });
@@ -2028,7 +1595,7 @@ export class PilatesClassAdminService {
 
     if (!hydratedSeries) {
       throw AppError.pilatesScheduleNotFound(
-        'The created recurring Pilates schedule series could not be loaded.',
+        'The created Pilates schedule plan could not be loaded.',
         {
           series_id: series.id,
         },
@@ -2039,16 +1606,28 @@ export class PilatesClassAdminService {
     const generatedScheduleSummaries = (
       hydratedSeries.generated_schedules ?? []
     ).map((schedule) => this.mapScheduleToAdminSummary(schedule));
+    const schedulePlan: PilatesWeeklySchedulePlanAdminSummary = {
+      id: seriesDetail.id,
+      class_id: seriesDetail.class_id,
+      trainer_staff_profile_id: seriesDetail.trainer_staff_profile_id,
+      studio: seriesDetail.studio,
+      start_date: seriesDetail.start_date,
+      end_date: seriesDetail.end_date,
+      days_of_week: seriesDetail.days_of_week,
+      default_capacity: generationInput.default_capacity,
+      price_amount: generationInput.price_amount,
+      currency: generationInput.currency,
+      time_slot_count: seriesTimeSlotInputs.length,
+      generated_schedule_count: generatedScheduleSummaries.length,
+    };
 
     return {
-      mode: PILATES_SCHEDULE_CREATION_MODE_RECURRING,
-      series: seriesDetail,
+      schedule_plan: schedulePlan,
       generated_schedules: generatedScheduleSummaries,
       generated_count: generatedScheduleSummaries.length,
-      skipped_dates: recurrenceResult.skipped_dates,
+      skipped_dates: generationResult.skipped_dates,
     };
   }
-
   private async resolveSchedulableClass(
     classId: string,
   ): Promise<PilatesClassRow> {

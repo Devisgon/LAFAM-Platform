@@ -10,15 +10,18 @@
  *
  * Important:
  * - Guest conversion always produces a customer account state.
+ * - Guest conversion requires full name, email, phone, Civil ID, password, and password confirmation.
  * - Guest conversion must never allow role escalation.
- * - Raw access tokens, refresh tokens, passwords, and OTPs must never be logged.
+ * - Raw access tokens, refresh tokens, passwords, OTPs, and Civil ID values must never be logged.
  * - The controller must provide the current guest access/refresh tokens because Supabase
  *   requires the anonymous session to update the anonymous user into an email/password user.
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 
 import { AppError, isAppError } from '../../../common/errors/app-error';
+import { CustomerRepository } from '../../customers/repositories/customer.repository';
+import { normalizeAuthCivilIdNormalized } from '../utils/auth-normalization.util';
 import {
   AUTH_ERROR_DETAIL_KEYS,
   AUTH_ERROR_REASON_PASSWORD_CONFIRMATION_MISMATCH,
@@ -61,7 +64,8 @@ export interface GuestConversionTokenInput {
 export interface ConvertGuestToCustomerDtoLike {
   readonly full_name: string;
   readonly email: string;
-  readonly phone?: string | null;
+  readonly phone: string;
+  readonly civil_id: string;
   readonly password: string;
   readonly confirm_password: string;
   readonly timezone?: string | null;
@@ -157,6 +161,21 @@ function mapSafeUserToGuestConversionResponse(
   };
 }
 
+function resolveRequiredCivilIdNormalized(civilId: string): string {
+  const civilIdNormalized = normalizeAuthCivilIdNormalized(civilId);
+
+  if (!civilIdNormalized) {
+    throw AppError.validationFailed(
+      'civil_id must contain exactly 12 digits and may include spaces or hyphens.',
+      {
+        field: 'civil_id',
+      },
+    );
+  }
+
+  return civilIdNormalized;
+}
+
 @Injectable()
 export class GuestConversionService {
   constructor(
@@ -164,6 +183,8 @@ export class GuestConversionService {
     private readonly authUserRepository: AuthUserRepository,
     private readonly guestSessionRepository: GuestSessionRepository,
     private readonly authAuditRepository: AuthAuditRepository,
+    @Optional()
+    private readonly customerRepository?: CustomerRepository,
   ) {}
 
   async convertGuestToCustomer(
@@ -173,7 +194,17 @@ export class GuestConversionService {
     request: GuestConversionServiceRequestMetadata = EMPTY_REQUEST_METADATA,
   ): Promise<AuthGuestConversionResponse> {
     assertContextIsConvertibleGuest(auth);
+
+    const civilIdNormalized = resolveRequiredCivilIdNormalized(dto.civil_id);
+
     assertPasswordAllowed(dto);
+
+    await this.assertCustomerConversionIdentityAvailable({
+      currentGuestUserId: auth.profile.id,
+      email: dto.email,
+      phone: dto.phone,
+      civilIdNormalized,
+    });
 
     try {
       const providerResult =
@@ -183,7 +214,7 @@ export class GuestConversionService {
           email: dto.email,
           password: dto.password,
           fullName: dto.full_name,
-          phone: dto.phone ?? null,
+          phone: dto.phone,
           timezone: dto.timezone ?? null,
         });
 
@@ -201,11 +232,19 @@ export class GuestConversionService {
         await this.guestSessionRepository.convertGuestUserToCustomerById({
           userId: auth.profile.id,
           email: dto.email,
-          phone: dto.phone ?? null,
+          phone: dto.phone,
           fullName: dto.full_name,
           timezone: dto.timezone ?? null,
           convertedFromGuestAt: convertedAt,
         });
+
+      await this.getCustomerRepository().createProfile({
+        appUserId: user.id,
+        civilId: dto.civil_id,
+        civilIdNormalized,
+        createdByAdminId: null,
+        updatedByAdminId: null,
+      });
 
       await this.guestSessionRepository.markGuestSessionConverted({
         sessionId: auth.session.id,
@@ -274,6 +313,55 @@ export class GuestConversionService {
       },
       completedAt: input.completedAt,
     };
+  }
+  private async assertCustomerConversionIdentityAvailable(input: {
+    readonly currentGuestUserId: string;
+    readonly email: string;
+    readonly phone: string;
+    readonly civilIdNormalized: string;
+  }): Promise<void> {
+    const existingUser = await this.authUserRepository.findByEmail({
+      email: input.email,
+    });
+
+    if (existingUser && existingUser.id !== input.currentGuestUserId) {
+      throw AppError.emailAlreadyRegistered(
+        'An account with this email already exists.',
+      );
+    }
+
+    const existingPhoneUser = await this.authUserRepository.findByPhone({
+      phone: input.phone,
+      excludeUserId: input.currentGuestUserId,
+    });
+
+    if (existingPhoneUser) {
+      throw AppError.customerPhoneAlreadyExists(undefined, {
+        field: 'phone',
+      });
+    }
+
+    const existingCivilIdProfile =
+      await this.getCustomerRepository().findByCivilIdNormalized({
+        civilIdNormalized: input.civilIdNormalized,
+        includeDeleted: true,
+      });
+
+    if (existingCivilIdProfile) {
+      throw AppError.customerCivilIdAlreadyExists(undefined, {
+        field: 'civil_id',
+      });
+    }
+  }
+
+  private getCustomerRepository(): CustomerRepository {
+    if (!this.customerRepository) {
+      throw AppError.customerProfileCreationFailed(
+        new Error('CustomerRepository provider is not registered.'),
+      );
+    }
+
+    return this.customerRepository;
   }
 
   private async writeGuestConversionFailedAudit(

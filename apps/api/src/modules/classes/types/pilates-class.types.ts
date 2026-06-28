@@ -30,7 +30,6 @@ import type {
   PilatesClassSortDirection,
   PilatesClassSortField,
   PilatesClassStatus,
-  PilatesScheduleCreationMode,
   PilatesScheduleGenerationSource,
   PilatesScheduleMonthlyRule,
   PilatesScheduleSeriesFrequency,
@@ -70,16 +69,14 @@ export interface PilatesClassPriceSnapshot {
 }
 
 export interface PilatesScheduleTimeSlotInput {
-  readonly studio?: string;
   readonly start_time: string;
   readonly duration_minutes: number;
   readonly capacity?: number;
-  readonly price_amount?: number;
-  readonly currency?: PilatesClassCurrency;
 }
 
 export interface PilatesScheduleSeriesTimeSlotCreateInput {
   readonly slot_index: number;
+  readonly day_of_week: PilatesScheduleWeekday | null;
   readonly studio: string;
   readonly start_time: string;
   readonly end_time: string;
@@ -93,6 +90,7 @@ export interface PilatesScheduleSeriesTimeSlotSummary {
   readonly id: string;
   readonly series_id: string;
   readonly slot_index: number;
+  readonly day_of_week: PilatesScheduleWeekday | null;
   readonly studio: string;
   readonly start_time: string;
   readonly end_time: string;
@@ -364,58 +362,23 @@ export interface DeletePilatesClassInput {
   readonly actor_admin_user_id: string;
 }
 
-export interface PilatesScheduleWeeklyRecurrenceInput {
-  readonly frequency: 'weekly';
-  readonly days_of_week: readonly PilatesScheduleWeekday[];
-  readonly excluded_dates?: readonly string[];
+export interface PilatesWeeklySchedulePlanDayInput {
+  readonly day_of_week: PilatesScheduleWeekday;
+  readonly time_slots: readonly PilatesScheduleTimeSlotInput[];
 }
 
-export interface PilatesScheduleMonthlyRecurrenceInput {
-  readonly frequency: 'monthly';
-  readonly monthly_rule: 'day_of_month';
-  readonly day_of_month: number;
-  readonly excluded_dates?: readonly string[];
-}
-
-export type PilatesScheduleRecurrenceInput =
-  | PilatesScheduleWeeklyRecurrenceInput
-  | PilatesScheduleMonthlyRecurrenceInput;
-
-export interface CreateSinglePilatesClassScheduleInput {
-  readonly mode?: Extract<PilatesScheduleCreationMode, 'single'>;
+export interface CreatePilatesClassScheduleInput {
   readonly class_id: string;
   readonly trainer_staff_profile_id: string;
-  readonly studio?: string;
-  readonly class_date: string;
-  readonly start_time?: string;
-  readonly duration_minutes?: number;
-  readonly capacity?: number;
-  readonly price_amount?: number;
-  readonly currency?: PilatesClassCurrency;
-  readonly time_slots?: readonly PilatesScheduleTimeSlotInput[];
-  readonly actor_admin_user_id: string;
-}
-
-export interface CreateRecurringPilatesClassScheduleInput {
-  readonly mode: Extract<PilatesScheduleCreationMode, 'recurring'>;
-  readonly class_id: string;
-  readonly trainer_staff_profile_id: string;
-  readonly studio?: string;
+  readonly studio: string;
   readonly start_date: string;
   readonly end_date: string;
-  readonly start_time?: string;
-  readonly duration_minutes?: number;
-  readonly capacity?: number;
-  readonly price_amount?: number;
+  readonly default_capacity: number;
+  readonly price_amount: number;
   readonly currency?: PilatesClassCurrency;
-  readonly time_slots?: readonly PilatesScheduleTimeSlotInput[];
-  readonly recurrence: PilatesScheduleRecurrenceInput;
+  readonly schedule_days: readonly PilatesWeeklySchedulePlanDayInput[];
   readonly actor_admin_user_id: string;
 }
-
-export type CreatePilatesClassScheduleInput =
-  | CreateSinglePilatesClassScheduleInput
-  | CreateRecurringPilatesClassScheduleInput;
 
 export interface UpdatePilatesClassScheduleInput {
   readonly schedule_id: string;
@@ -449,24 +412,28 @@ export interface CompletePilatesClassScheduleInput {
   readonly schedule_id: string;
   readonly actor_admin_user_id: string;
 }
-export interface CreateSinglePilatesClassScheduleResult {
-  readonly mode: Extract<PilatesScheduleCreationMode, 'single'>;
-  readonly schedule: PilatesClassScheduleAdminDetail;
-  readonly generated_schedules?: readonly PilatesClassScheduleAdminDetail[];
-  readonly generated_count?: number;
+
+export interface PilatesWeeklySchedulePlanAdminSummary {
+  readonly id: string;
+  readonly class_id: string;
+  readonly trainer_staff_profile_id: string;
+  readonly studio: string;
+  readonly start_date: string;
+  readonly end_date: string;
+  readonly days_of_week: readonly PilatesScheduleWeekday[];
+  readonly default_capacity: number;
+  readonly price_amount: number;
+  readonly currency: PilatesClassCurrency;
+  readonly time_slot_count: number;
+  readonly generated_schedule_count: number;
 }
 
-export interface CreateRecurringPilatesClassScheduleResult {
-  readonly mode: Extract<PilatesScheduleCreationMode, 'recurring'>;
-  readonly series: PilatesScheduleSeriesAdminDetail;
+export interface CreatePilatesClassScheduleResult {
+  readonly schedule_plan: PilatesWeeklySchedulePlanAdminSummary;
   readonly generated_schedules: readonly PilatesClassScheduleAdminSummary[];
   readonly generated_count: number;
   readonly skipped_dates: readonly string[];
 }
-
-export type CreatePilatesClassScheduleResult =
-  | CreateSinglePilatesClassScheduleResult
-  | CreateRecurringPilatesClassScheduleResult;
 
 export interface PilatesClassScheduleTimeWindow {
   readonly class_date: string;
@@ -477,6 +444,7 @@ export interface PilatesClassScheduleTimeWindow {
 export interface PilatesScheduleGeneratedOccurrence {
   readonly occurrence_index: number;
   readonly class_date: string;
+  readonly day_of_week: PilatesScheduleWeekday;
   readonly start_time: string;
   readonly end_time: string;
   readonly duration_minutes: number;
@@ -485,27 +453,21 @@ export interface PilatesScheduleGeneratedOccurrence {
   readonly price_amount?: number | null;
   readonly currency?: PilatesClassCurrency | null;
   readonly series_time_slot_id?: string | null;
-  readonly series_date_index?: number | null;
-  readonly series_slot_index?: number | null;
+  readonly series_date_index: number;
+  readonly series_slot_index: number;
 }
 
-export interface PilatesScheduleRecurrenceGenerationInput {
-  readonly frequency: PilatesScheduleSeriesFrequency;
+export interface PilatesWeeklySchedulePlanGenerationInput {
   readonly start_date: string;
   readonly end_date: string;
-  readonly start_time: string;
-  readonly duration_minutes: number;
-  readonly capacity: number;
-  readonly price_amount?: number | null;
-  readonly currency?: PilatesClassCurrency | null;
-  readonly time_slots?: readonly PilatesScheduleSeriesTimeSlotCreateInput[];
-  readonly days_of_week?: readonly PilatesScheduleWeekday[];
-  readonly monthly_rule?: PilatesScheduleMonthlyRule | null;
-  readonly day_of_month?: number | null;
-  readonly excluded_dates?: readonly string[];
+  readonly studio: string;
+  readonly default_capacity: number;
+  readonly price_amount: number;
+  readonly currency: PilatesClassCurrency;
+  readonly schedule_days: readonly PilatesWeeklySchedulePlanDayInput[];
 }
 
-export interface PilatesScheduleRecurrenceGenerationResult {
+export interface PilatesWeeklySchedulePlanGenerationResult {
   readonly occurrences: readonly PilatesScheduleGeneratedOccurrence[];
   readonly skipped_dates: readonly string[];
 }

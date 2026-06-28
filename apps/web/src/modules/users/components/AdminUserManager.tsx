@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   ChevronDown,
+  Eye,
   Power,
   RotateCcw,
   Trash2,
@@ -242,7 +244,7 @@ export function AdminUserManager() {
                 { className: "text-left", key: "username", heading: "Username" },
                 { className: "w-[120px] text-center", key: "password", heading: "Password" },
                 { className: "text-left", key: "role", heading: "Role" },
-                { className: "w-[140px] text-center", key: "action", heading: "Action" },
+                { className: "w-[170px] text-center", key: "action", heading: "Action" },
               ]}
               emptyMessage="No users found."
               headerRowClassName="bg-card-bg-secondary text-txt-primary border-b border-background-secondary divide-x divide-background-secondary"
@@ -250,7 +252,12 @@ export function AdminUserManager() {
               minWidthClassName="min-w-[1100px]"
               wrapperClassName="overflow-x-auto px-5"
             >
-              {pagedUsers.map((user) => (
+              {pagedUsers.map((user) => {
+                const customerDetailHref = user.customer_profile_id
+                  ? `/settings/customers/${encodeURIComponent(user.customer_profile_id)}`
+                  : null;
+
+                return (
                       <tr
                         className="bg-card-bg-primary hover:bg-card-bg-secondary/40 odd:bg-background-secondary/20 transition divide-x divide-background-secondary"
                         key={user.id}
@@ -292,6 +299,12 @@ export function AdminUserManager() {
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex items-center justify-center gap-2">
+                            {customerDetailHref ? (
+                              <ViewCustomerLink
+                                href={customerDetailHref}
+                                label={`View ${user.full_name ?? user.email ?? "customer"}`}
+                              />
+                            ) : null}
                             {user.status === "deactivated" ? (
                               <ActionButton
                                 icon="reactivate"
@@ -322,7 +335,8 @@ export function AdminUserManager() {
                           </div>
                         </td>
                       </tr>
-              ))}
+                );
+              })}
             </DataTable>
 
             <footer className="flex flex-col gap-4 px-5 py-5 text-base text-txt-secondary md:flex-row md:items-center md:justify-between">
@@ -451,6 +465,25 @@ function FilterSelect({
         size={16}
       />
     </label>
+  );
+}
+
+function ViewCustomerLink({
+  href,
+  label: actionLabel,
+}: {
+  href: string;
+  label: string;
+}) {
+  return (
+    <Link
+      aria-label={actionLabel}
+      className="flex size-9 items-center justify-center rounded-full bg-primary text-white shadow-sm transition hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      href={href}
+      title={actionLabel}
+    >
+      <Eye aria-hidden="true" size={17} strokeWidth={2.5} />
+    </Link>
   );
 }
 

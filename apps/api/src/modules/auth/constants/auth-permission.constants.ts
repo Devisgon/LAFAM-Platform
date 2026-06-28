@@ -54,6 +54,7 @@ export const AUTH_PERMISSIONS = [
   'password:change',
 
   'booking:create_confirmed',
+  'booking:create_bulk',
   'booking:view_history',
   'booking:cancel',
   'booking:reschedule',
@@ -68,6 +69,27 @@ export const AUTH_PERMISSIONS = [
   'admin:users:read',
   'admin:users:deactivate',
   'admin:users:reactivate',
+
+  'admin:customers:read',
+  'admin:customers:lookup',
+  'admin:customers:create',
+  'admin:customers:update',
+  'admin:customers:deactivate',
+  'admin:customers:reactivate',
+  'admin:customers:delete',
+  'admin:customers:manage',
+
+  'admin:bookings:read',
+  'admin:bookings:create',
+  'admin:bookings:bulk_create',
+  'admin:bookings:update',
+  'admin:bookings:cancel',
+  'admin:bookings:reschedule',
+  'admin:bookings:override',
+  'admin:bookings:waitlist',
+  'admin:bookings:calendar',
+  'admin:bookings:manage',
+  'admin:bookings:manage_scoped',
 
   'super_admin:users:hard_delete',
 ] as const;
@@ -110,6 +132,7 @@ export const AUTH_PROFILE_PERMISSIONS = [
 
 export const AUTH_CUSTOMER_BOOKING_PERMISSIONS = [
   'booking:create_confirmed',
+  'booking:create_bulk',
   'booking:view_history',
   'booking:cancel',
   'booking:reschedule',
@@ -125,7 +148,7 @@ export const AUTH_CUSTOMER_PERMISSIONS = [
   ...AUTH_CUSTOMER_BOOKING_PERMISSIONS,
 ] as const satisfies readonly AuthPermission[];
 
-export const AUTH_STAFF_PERMISSIONS = [
+export const AUTH_STAFF_BASE_PERMISSIONS = [
   ...AUTH_PUBLIC_READ_PERMISSIONS,
   'auth:read_context',
   ...AUTH_SESSION_PERMISSIONS,
@@ -133,12 +156,62 @@ export const AUTH_STAFF_PERMISSIONS = [
   'staff:access_dashboard',
 ] as const satisfies readonly AuthPermission[];
 
+export const AUTH_ADMIN_CUSTOMER_PERMISSIONS = [
+  'admin:customers:read',
+  'admin:customers:lookup',
+  'admin:customers:create',
+  'admin:customers:update',
+  'admin:customers:deactivate',
+  'admin:customers:reactivate',
+  'admin:customers:delete',
+  'admin:customers:manage',
+] as const satisfies readonly AuthPermission[];
+export const AUTH_ADMIN_BOOKING_PERMISSIONS = [
+  'admin:bookings:read',
+  'admin:bookings:create',
+  'admin:bookings:bulk_create',
+  'admin:bookings:update',
+  'admin:bookings:cancel',
+  'admin:bookings:reschedule',
+  'admin:bookings:override',
+  'admin:bookings:waitlist',
+  'admin:bookings:calendar',
+  'admin:bookings:manage',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_TRAINER_SCOPED_BOOKING_PERMISSIONS = [
+  'admin:bookings:read',
+  'admin:bookings:create',
+  'admin:bookings:bulk_create',
+  'admin:bookings:update',
+  'admin:bookings:cancel',
+  'admin:bookings:reschedule',
+  'admin:bookings:override',
+  'admin:bookings:waitlist',
+  'admin:bookings:calendar',
+  'admin:bookings:manage_scoped',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_STAFF_PERMISSIONS = [
+  ...AUTH_STAFF_BASE_PERMISSIONS,
+  ...AUTH_ADMIN_CUSTOMER_PERMISSIONS,
+  ...AUTH_ADMIN_BOOKING_PERMISSIONS,
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_TRAINER_PERMISSIONS = [
+  ...AUTH_STAFF_BASE_PERMISSIONS,
+  ...AUTH_ADMIN_CUSTOMER_PERMISSIONS,
+  ...AUTH_TRAINER_SCOPED_BOOKING_PERMISSIONS,
+] as const satisfies readonly AuthPermission[];
+
 export const AUTH_ADMIN_PERMISSIONS = [
-  ...AUTH_STAFF_PERMISSIONS,
+  ...AUTH_STAFF_BASE_PERMISSIONS,
   'admin:access_dashboard',
   'admin:users:read',
   'admin:users:deactivate',
   'admin:users:reactivate',
+  ...AUTH_ADMIN_CUSTOMER_PERMISSIONS,
+  ...AUTH_ADMIN_BOOKING_PERMISSIONS,
 ] as const satisfies readonly AuthPermission[];
 
 export const AUTH_SUPER_ADMIN_PERMISSIONS = [
@@ -148,6 +221,7 @@ export const AUTH_SUPER_ADMIN_PERMISSIONS = [
 
 export const AUTH_GUEST_DENIED_PERMISSIONS = [
   'booking:create_confirmed',
+  'booking:create_bulk',
   'booking:view_history',
   'booking:cancel',
   'booking:reschedule',
@@ -162,13 +236,32 @@ export const AUTH_GUEST_DENIED_PERMISSIONS = [
   'admin:users:read',
   'admin:users:deactivate',
   'admin:users:reactivate',
+  'admin:customers:read',
+  'admin:customers:lookup',
+  'admin:customers:create',
+  'admin:customers:update',
+  'admin:customers:deactivate',
+  'admin:customers:reactivate',
+  'admin:customers:delete',
+  'admin:customers:manage',
+  'admin:bookings:read',
+  'admin:bookings:create',
+  'admin:bookings:bulk_create',
+  'admin:bookings:update',
+  'admin:bookings:cancel',
+  'admin:bookings:reschedule',
+  'admin:bookings:override',
+  'admin:bookings:waitlist',
+  'admin:bookings:calendar',
+  'admin:bookings:manage',
+  'admin:bookings:manage_scoped',
   'super_admin:users:hard_delete',
 ] as const satisfies readonly AuthPermission[];
 
 export const AUTH_ROLE_PERMISSIONS = {
   [AUTH_GUEST_ROLE]: AUTH_GUEST_PERMISSIONS,
   [AUTH_CUSTOMER_ROLE]: AUTH_CUSTOMER_PERMISSIONS,
-  [AUTH_TRAINER_ROLE]: AUTH_STAFF_PERMISSIONS,
+  [AUTH_TRAINER_ROLE]: AUTH_TRAINER_PERMISSIONS,
   [AUTH_STYLIST_ROLE]: AUTH_STAFF_PERMISSIONS,
   [AUTH_STAFF_ROLE]: AUTH_STAFF_PERMISSIONS,
   [AUTH_ADMIN_ROLE]: AUTH_ADMIN_PERMISSIONS,
@@ -187,6 +280,19 @@ export const AUTH_BOOKING_WRITE_PERMISSIONS = [
   'booking:create_confirmed',
   'booking:cancel',
   'booking:reschedule',
+] as const satisfies readonly AuthPermission[];
+export const AUTH_ADMIN_BOOKING_WRITE_PERMISSIONS = [
+  'admin:bookings:create',
+  'admin:bookings:bulk_create',
+  'admin:bookings:update',
+  'admin:bookings:cancel',
+  'admin:bookings:reschedule',
+  'admin:bookings:override',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_TRAINER_SCOPED_BOOKING_WRITE_PERMISSIONS = [
+  'admin:bookings:bulk_create',
+  'admin:bookings:manage_scoped',
 ] as const satisfies readonly AuthPermission[];
 
 export const AUTH_PAYMENT_PERMISSIONS = [

@@ -4,7 +4,7 @@ info:
   version: 0.1.0
   description:
     'LAFAM backend API contract for the single-tenant Pilates and ladies salon booking platform. The contract exposes
-    Core, Auth, Staff, Pilates Classes, Schedules, Bookings, Payment, Wallet, KNET callback/webhook, and Admin management
+    Core, Auth, Customers, Staff, Pilates Classes, Schedules, Bookings, Payment, Wallet, KNET callback/webhook, and Admin management
     endpoints.
 
 
@@ -36,6 +36,8 @@ tags:
     description: Protected admin user-management endpoints
   - name: Auth - Context
     description: Authenticated frontend bootstrapping context endpoint
+  - name: Customers - Admin
+    description: Protected customer management endpoints for admin, super_admin, staff, and trainer roles.
   - name: Staff - Admin
     description: Protected admin staff and trainer management endpoints
   - name: Pilates - Public
@@ -43,11 +45,11 @@ tags:
   - name: Pilates - Admin
     description: Protected admin Pilates class and schedule management endpoints
   - name: Bookings - Customer
-    description: Protected customer Pilates booking, private trainer booking, availability, and waitlist endpoints
+    description: Protected customer Pilates booking, bulk booking order, private trainer booking, availability, and waitlist endpoints.
   - name: Bookings - Admin
-    description: Protected admin booking, private trainer booking, calendar, override, and waitlist management endpoints
+    description: Protected admin/staff/trainer booking endpoints. Admin, super_admin, and staff have full booking scope. Trainer booking access is service-scoped to schedules assigned to the authenticated trainer.
   - name: Payments - Customer
-    description: Protected customer checkout, payment history, payment detail, transaction, and verification endpoints
+    description: Protected customer checkout, booking-order checkout, payment history, payment detail, transaction, and verification endpoints.
   - name: Payments - Public
     description: Public KNET/provider callback and webhook endpoints called by hosted payment providers
   - name: Payments - Admin
@@ -178,7 +180,7 @@ paths:
   /auth/sign-up:
     post:
       summary: Create customer account
-      description: Creates a customer account and starts email verification. Public sign-up never accepts privileged roles.
+      description: Creates a customer account with required full name, email, phone, and Civil ID, then starts email verification. Public sign-up never accepts privileged roles.
       operationId: authSignUp
       tags:
         - Auth - Public
@@ -405,7 +407,7 @@ paths:
   /auth/guest/convert:
     post:
       summary: Convert guest to customer
-      description: Converts the current authenticated guest user into a pending customer account and starts email verification.
+      description: Converts the current authenticated guest user into a pending customer account with required full name, email, phone, and Civil ID, then starts email verification.
       operationId: authConvertGuestToCustomer
       tags:
         - Auth - Guest
@@ -840,6 +842,318 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/AuthenticationRequired'
+  /admin/customers:
+    get:
+      summary: List customers
+      description: Lists customer records for the admin dashboard. Supports broad search, auth-status filtering, soft-deleted inclusion, and pagination. Requires admin or super_admin.
+      operationId: customerAdminListCustomers
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 254
+          description: Broad search over customer name, email, or phone. Use the lookup endpoint for exact phone or Civil ID lookup.
+        - name: auth_status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/AuthUserStatus'
+          description: Filter customers by app user status.
+        - name: include_deleted
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Whether to include soft-deleted customer profiles.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Customers retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerListSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+    post:
+      summary: Create customer
+      description: Creates an active and verified customer account from the admin dashboard. Admin-created customers can log in immediately and do not require email OTP verification.
+      operationId: customerAdminCreateCustomer
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCustomerRequest'
+      responses:
+        '201':
+          description: Customer created successfully. The customer can log in immediately.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: Customer login account creation failed because the authentication provider is temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/customers/lookup:
+    get:
+      summary: Lookup customer
+      description: Performs exact customer lookup by phone, Civil ID, or both. At least one lookup field is required. If both are provided, both must match the same customer. Requires admin or super_admin.
+      operationId: customerAdminLookupCustomer
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: phone
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 32
+            pattern: '^\+?[1-9]\d{6,15}$'
+            example: '+923001234567'
+          description: Customer phone number in international format for exact lookup.
+        - name: civil_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 32
+            pattern: '^(?=(?:\D*\d){12}\D*$)[0-9 -]+$'
+            example: '2990-1011-2345'
+          description: Customer Civil ID for exact lookup. Must contain exactly 12 digits; spaces and hyphens are allowed.
+      responses:
+        '200':
+          description: Customer lookup completed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerLookupSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/customers/{customerId}:
+    get:
+      summary: Get customer
+      description: Returns one customer record by customer profile id. Requires admin or super_admin.
+      operationId: customerAdminGetCustomerById
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Customer profile id from public.customer_profiles.id.
+      responses:
+        '200':
+          description: Customer retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update customer
+      description: Updates safe customer fields. Email, password, role, and status are not updated through this endpoint.
+      operationId: customerAdminUpdateCustomer
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Customer profile id from public.customer_profiles.id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCustomerRequest'
+      responses:
+        '200':
+          description: Customer updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      summary: Delete customer
+      description: Soft-deletes a customer profile and marks the related app user as deleted. Requires admin or super_admin.
+      operationId: customerAdminDeleteCustomer
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Customer profile id from public.customer_profiles.id.
+      responses:
+        '200':
+          description: Customer deleted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerDeleteSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/customers/{customerId}/deactivate:
+    post:
+      summary: Deactivate customer
+      description: Deactivates a customer account. Requires admin or super_admin.
+      operationId: customerAdminDeactivateCustomer
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Customer profile id from public.customer_profiles.id.
+      responses:
+        '200':
+          description: Customer deactivated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/customers/{customerId}/reactivate:
+    post:
+      summary: Reactivate customer
+      description: Reactivates a deactivated customer account. Requires admin or super_admin.
+      operationId: customerAdminReactivateCustomer
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Customer profile id from public.customer_profiles.id.
+      responses:
+        '200':
+          description: Customer reactivated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /admin/staff:
     get:
       summary: List staff members
@@ -908,7 +1222,7 @@ paths:
           $ref: '#/components/responses/AuthorizationDenied'
     post:
       summary: Create staff member
-      description: Creates a staff or trainer account from the admin dashboard. The created Supabase Auth user must verify email before login.
+      description: Creates an active and verified staff or trainer account from the admin dashboard. Admin-created staff can log in immediately and do not require email OTP verification.
       operationId: staffAdminCreateStaff
       tags:
         - Staff - Admin
@@ -922,7 +1236,7 @@ paths:
               $ref: '#/components/schemas/CreateStaffRequest'
       responses:
         '201':
-          description: Staff member created successfully. Email verification is required before login.
+          description: Staff member created successfully. The staff member can log in immediately.
           content:
             application/json:
               schema:
@@ -1691,8 +2005,8 @@ paths:
           $ref: '#/components/responses/AuthorizationDenied'
 
     post:
-      summary: Create Pilates schedule
-      description: Creates either one Pilates schedule occurrence, one date with multiple bookable time slots, or a recurring schedule series that generates concrete bookable schedule rows. Backend calculates end_time from each resolved start_time and duration_minutes pair.
+      summary: Create Pilates weekly schedule plan
+      description: Creates one weekly Pilates schedule plan and generates concrete bookable schedule rows between start_date and end_date. Backend calculates each end_time from start_time and duration_minutes.
       operationId: pilatesAdminCreateSchedule
       tags:
         - Pilates - Admin
@@ -1705,89 +2019,29 @@ paths:
             schema:
               $ref: '#/components/schemas/CreatePilatesScheduleRequest'
             examples:
-              singleMultiSlot:
-                summary: Create one date with multiple bookable time slots
+              weeklyPlan:
+                summary: Create a weekly schedule plan
                 value:
-                  mode: single
                   class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
                   trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
                   studio: LAFAM Pilates Studio
-                  class_date: '2026-06-22'
+                  start_date: '2026-07-01'
+                  end_date: '2026-09-30'
+                  default_capacity: 8
                   price_amount: 15
                   currency: KWD
-                  time_slots:
-                    - start_time: '09:00'
-                      duration_minutes: 60
-                      capacity: 8
-                      studio: LAFAM Pilates Studio
-                    - start_time: '11:00'
-                      duration_minutes: 60
-                      capacity: 8
-                      studio: LAFAM Pilates Studio
-              singleBackwardCompatible:
-                summary: Create one schedule occurrence with legacy single-time shape
-                value:
-                  mode: single
-                  class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
-                  trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
-                  studio: LAFAM Pilates Studio
-                  class_date: '2026-06-22'
-                  start_time: '10:00'
-                  duration_minutes: 60
-                  capacity: 8
-                  price_amount: 15
-                  currency: KWD
-              recurringWeeklyMultiSlot:
-                summary: Create weekly recurring schedules with multiple time slots
-                value:
-                  mode: recurring
-                  class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
-                  trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
-                  studio: LAFAM Pilates Studio
-                  start_date: '2026-06-22'
-                  end_date: '2026-07-22'
-                  price_amount: 15
-                  currency: KWD
-                  time_slots:
-                    - start_time: '09:00'
-                      duration_minutes: 60
-                      capacity: 8
-                      studio: LAFAM Pilates Studio
-                    - start_time: '11:00'
-                      duration_minutes: 60
-                      capacity: 8
-                      studio: LAFAM Pilates Studio
-                  recurrence:
-                    frequency: weekly
-                    days_of_week:
-                      - 1
-                      - 3
-                      - 5
-                    excluded_dates:
-                      - '2026-07-01'
-              recurringMonthlyMultiSlot:
-                summary: Create monthly recurring schedules with multiple time slots
-                value:
-                  mode: recurring
-                  class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
-                  trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
-                  studio: LAFAM Pilates Studio
-                  start_date: '2026-06-22'
-                  end_date: '2026-09-22'
-                  price_amount: 15
-                  currency: KWD
-                  time_slots:
-                    - start_time: '09:00'
-                      duration_minutes: 60
-                      capacity: 8
-                    - start_time: '11:00'
-                      duration_minutes: 60
-                      capacity: 8
-                  recurrence:
-                    frequency: monthly
-                    monthly_rule: day_of_month
-                    day_of_month: 22
-                    excluded_dates: []
+                  schedule_days:
+                    - day_of_week: 1
+                      time_slots:
+                        - start_time: '09:00'
+                          duration_minutes: 60
+                          capacity: 8
+                        - start_time: '11:00'
+                          duration_minutes: 60
+                    - day_of_week: 3
+                      time_slots:
+                        - start_time: '18:00'
+                          duration_minutes: 60
       responses:
         '201':
           description: Pilates schedule created successfully.
@@ -2431,6 +2685,155 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /bookings/bulk:
+    post:
+      summary: Create customer bulk Pilates booking order
+      description: Creates one backend-owned booking order for multiple Pilates schedules. The backend validates all selected schedules, rejects full schedules, creates pending-payment bookings, and returns one order for checkout. The request must not include payment_required, payment_status, status, price, or currency.
+      operationId: bookingCustomerCreateBulkBooking
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBulkBookingRequest'
+            examples:
+              customerBulkBooking:
+                summary: Customer bulk booking order
+                value:
+                  schedule_ids:
+                    - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    - 4fa85f64-5717-4562-b3fc-2c963f66afa7
+                  idempotency_key: customer-cart-20260701-001
+      responses:
+        '201':
+          description: Bulk booking order created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingBulkCreateSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /bookings/orders/{bookingOrderId}:
+    get:
+      summary: Get customer booking order
+      description: Returns one booking order owned by the authenticated customer.
+      operationId: bookingCustomerGetBookingOrderById
+      tags:
+        - Bookings - Customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingOrderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Booking order id.
+      responses:
+        '200':
+          description: Booking order retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingOrderDetailSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/bookings/bulk:
+    post:
+      summary: Create admin/staff/trainer bulk Pilates booking order
+      description: Creates one backend-owned booking order for a selected customer. Admin, super_admin, and staff can create orders for any schedule. Trainers can create orders only for schedules assigned to their trainer staff profile. The request must not include payment_required, payment_status, status, price, currency, or created_by fields.
+      operationId: bookingAdminCreateBulkBooking
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAdminBulkBookingRequest'
+            examples:
+              adminBulkBooking:
+                summary: Admin/staff bulk booking order
+                value:
+                  customer_user_id: 5fa85f64-5717-4562-b3fc-2c963f66afa8
+                  schedule_ids:
+                    - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    - 4fa85f64-5717-4562-b3fc-2c963f66afa7
+                  idempotency_key: admin-cart-20260701-001
+                  admin_notes: Booked at front desk.
+      responses:
+        '201':
+          description: Bulk booking order created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingBulkCreateSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/bookings/orders/{bookingOrderId}:
+    get:
+      summary: Get admin/staff/trainer booking order
+      description: Returns one booking order. Admin, super_admin, and staff have full access. Trainers can read only booking orders whose schedules are assigned to their trainer staff profile.
+      operationId: bookingAdminGetBookingOrderById
+      tags:
+        - Bookings - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingOrderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Booking order id.
+      responses:
+        '200':
+          description: Booking order retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingOrderDetailSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /bookings/{bookingId}:
     get:
@@ -3203,7 +3606,7 @@ paths:
   /payments/checkout:
     post:
       summary: Create customer checkout payment
-      description: Creates a backend-owned payment intent for booking, private trainer booking, or wallet top-up. KNET/card return a hosted redirect URL. Wallet payment uses internal wallet debit and never trusts frontend amount.
+      description: Creates a backend-owned payment intent for booking, private trainer booking, booking order, or wallet top-up. KNET/card return a hosted redirect URL. Wallet payment uses internal wallet debit and never trusts frontend amount.
       operationId: paymentCustomerCreateCheckout
       tags:
         - Payments - Customer
@@ -3230,13 +3633,27 @@ paths:
                   private_booking_id: 4fa85f64-5717-4562-b3fc-2c963f66afa7
                   payment_method: card
                   idempotency_key: private-checkout-001
-              walletBooking:
-                summary: Wallet booking payment
+              knetBookingOrder:
+                summary: KNET booking-order payment
                 value:
-                  target_type: booking
-                  booking_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  target_type: booking_order
+                  booking_order_id: 5fa85f64-5717-4562-b3fc-2c963f66afa8
+                  payment_method: knet
+                  idempotency_key: booking-order-checkout-001
+              walletBookingOrder:
+                summary: Wallet booking-order payment
+                value:
+                  target_type: booking_order
+                  booking_order_id: 5fa85f64-5717-4562-b3fc-2c963f66afa8
                   payment_method: wallet
-                  idempotency_key: wallet-booking-001
+                  idempotency_key: wallet-booking-order-001
+              walletTopUp:
+                summary: Wallet top-up
+                value:
+                  target_type: wallet_top_up
+                  wallet_top_up_amount: 25
+                  payment_method: knet
+                  idempotency_key: wallet-top-up-001
       responses:
         '201':
           description: Checkout payment created successfully.
@@ -3256,7 +3673,6 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/RateLimited'
-
   /payments:
     get:
       summary: List customer payments
@@ -4769,10 +5185,18 @@ components:
     SignUpRequest:
       type: object
       required:
+        - full_name
         - email
+        - phone
+        - civil_id
         - password
         - confirm_password
       properties:
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Saqiba Customer
         email:
           type: string
           format: email
@@ -4781,13 +5205,14 @@ components:
         phone:
           type: string
           maxLength: 32
-          nullable: true
+          pattern: '^\+?[1-9]\d{6,15}$'
           example: '+96550000000'
-        full_name:
+        civil_id:
           type: string
-          maxLength: 120
-          nullable: true
-          example: Saqiba Customer
+          maxLength: 32
+          pattern: '^(?=(?:\D*\d){12}\D*$)[0-9 -]+$'
+          example: '2990-1011-2345'
+          description: Must contain exactly 12 digits. Spaces and hyphens are allowed for readability.
         password:
           type: string
           format: password
@@ -4955,11 +5380,14 @@ components:
       required:
         - full_name
         - email
+        - phone
+        - civil_id
         - password
         - confirm_password
       properties:
         full_name:
           type: string
+          minLength: 1
           maxLength: 120
           example: Saqiba Customer
         email:
@@ -4970,8 +5398,14 @@ components:
         phone:
           type: string
           maxLength: 32
-          nullable: true
+          pattern: '^\+?[1-9]\d{6,15}$'
           example: '+96550000000'
+        civil_id:
+          type: string
+          maxLength: 32
+          pattern: '^(?=(?:\D*\d){12}\D*$)[0-9 -]+$'
+          example: '2990-1011-2345'
+          description: Must contain exactly 12 digits. Spaces and hyphens are allowed for readability.
         password:
           type: string
           format: password
@@ -5837,7 +6271,7 @@ components:
           $ref: '#/components/schemas/AuthUserStatus'
         email_verification_required:
           type: boolean
-          example: true
+          example: false
         availability:
           type: array
           items:
@@ -6071,6 +6505,269 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/StaffDeleteData'
+    CustomerProfile:
+      type: object
+      required:
+        - id
+        - app_user_id
+        - auth_user_id
+        - email
+        - phone
+        - full_name
+        - civil_id
+        - role
+        - auth_status
+        - is_guest
+        - avatar_path
+        - timezone
+        - created_by_admin_id
+        - updated_by_admin_id
+        - created_at
+        - updated_at
+        - deactivated_at
+        - deleted_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Customer profile id from public.customer_profiles.id.
+        app_user_id:
+          type: string
+          format: uuid
+          description: Related app user id from public.app_users.id.
+        auth_user_id:
+          type: string
+          format: uuid
+          description: Related Supabase Auth user id.
+        email:
+          type: string
+          format: email
+          example: customer@example.com
+        phone:
+          type: string
+          example: '+923001234567'
+        full_name:
+          type: string
+          example: Ahmad Sajid
+        civil_id:
+          type: string
+          maxLength: 32
+          example: '2990-1011-2345'
+          description: Admin-visible Civil ID. This value must not be logged or written to audit metadata.
+        role:
+          type: string
+          enum:
+            - customer
+          example: customer
+        auth_status:
+          $ref: '#/components/schemas/AuthUserStatus'
+        is_guest:
+          type: boolean
+          enum:
+            - false
+        avatar_path:
+          type: string
+          nullable: true
+          example: avatars/customer.png
+        timezone:
+          type: string
+          nullable: true
+          maxLength: 64
+          example: Asia/Kuwait
+        created_by_admin_id:
+          type: string
+          format: uuid
+          nullable: true
+        updated_by_admin_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deactivated_at:
+          type: string
+          format: date-time
+          nullable: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateCustomerRequest:
+      type: object
+      required:
+        - full_name
+        - email
+        - phone
+        - civil_id
+        - password
+        - confirm_password
+      properties:
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Ahmad Sajid
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: customer@example.com
+        phone:
+          type: string
+          maxLength: 32
+          pattern: '^\+?[1-9]\d{6,15}$'
+          example: '+923001234567'
+        civil_id:
+          type: string
+          maxLength: 32
+          pattern: '^(?=(?:\D*\d){12}\D*$)[0-9 -]+$'
+          example: '2990-1011-2345'
+          description: Must contain exactly 12 digits. Spaces and hyphens are allowed for readability.
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          writeOnly: true
+          example: StrongPass123!
+        confirm_password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          writeOnly: true
+          example: StrongPass123!
+        timezone:
+          type: string
+          nullable: true
+          maxLength: 64
+          example: Asia/Kuwait
+
+    UpdateCustomerRequest:
+      type: object
+      minProperties: 1
+      properties:
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Ahmad Sajid
+        phone:
+          type: string
+          maxLength: 32
+          pattern: '^\+?[1-9]\d{6,15}$'
+          example: '+923001234567'
+        civil_id:
+          type: string
+          maxLength: 32
+          pattern: '^(?=(?:\D*\d){12}\D*$)[0-9 -]+$'
+          example: '2990-1011-2345'
+          description: Must contain exactly 12 digits. Spaces and hyphens are allowed for readability.
+        timezone:
+          type: string
+          nullable: true
+          maxLength: 64
+          example: Asia/Kuwait
+
+    CustomerListData:
+      type: object
+      required:
+        - customers
+        - total
+        - limit
+        - offset
+      properties:
+        customers:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerProfile'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+
+    CustomerMutationData:
+      type: object
+      required:
+        - customer
+      properties:
+        customer:
+          $ref: '#/components/schemas/CustomerProfile'
+
+    CustomerLookupData:
+      type: object
+      required:
+        - customer
+        - matched_by
+      properties:
+        customer:
+          allOf:
+            - $ref: '#/components/schemas/CustomerProfile'
+          nullable: true
+        matched_by:
+          type: string
+          nullable: true
+          enum:
+            - phone
+            - civil_id
+            - phone_and_civil_id
+          example: phone
+
+    CustomerDeleteData:
+      type: object
+      required:
+        - deleted
+        - customer_id
+      properties:
+        deleted:
+          type: boolean
+          enum:
+            - true
+        customer_id:
+          type: string
+          format: uuid
+
+    CustomerListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CustomerListData'
+
+    CustomerMutationSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CustomerMutationData'
+
+    CustomerLookupSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CustomerLookupData'
+
+    CustomerDeleteSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CustomerDeleteData'
     PilatesClassLevel:
       type: string
       enum:
@@ -7024,122 +7721,49 @@ components:
           minimum: 1
           maximum: 100
           example: 8
-          description: Optional slot-level capacity override. If omitted, the schedule/class capacity fallback is used.
-        studio:
-          type: string
-          minLength: 1
-          maxLength: 120
-          nullable: true
-          example: LAFAM Pilates Studio
-          description: Optional slot-level studio override. If omitted, the schedule studio is used.
-        price_amount:
-          type: number
-          minimum: 0
-          nullable: true
-          example: 15
-          description: Optional slot-level price override. If omitted, the schedule/class price fallback is used.
-        currency:
-          allOf:
-            - $ref: '#/components/schemas/PaymentCurrency'
-          nullable: true
-          description: Optional slot-level currency. KWD is currently supported.
-    CreatePilatesScheduleRequest:
-      oneOf:
-        - $ref: '#/components/schemas/CreateSinglePilatesScheduleRequest'
-        - $ref: '#/components/schemas/CreateRecurringPilatesScheduleRequest'
+          description: Optional slot-level capacity override. If omitted, default_capacity is used.
 
-    CreateSinglePilatesScheduleRequest:
+    PilatesScheduleDayInput:
       type: object
       required:
-        - class_id
-        - trainer_staff_profile_id
-        - class_date
-      anyOf:
-        - required:
-            - start_time
-        - required:
-            - time_slots
+        - day_of_week
+        - time_slots
       properties:
-        mode:
-          type: string
+        day_of_week:
+          type: integer
+          minimum: 0
+          maximum: 6
           enum:
-            - single
-          default: single
-          description: Optional. Missing mode is treated as single for backward compatibility.
-          example: single
-        class_id:
-          type: string
-          format: uuid
-        trainer_staff_profile_id:
-          type: string
-          format: uuid
-        studio:
-          type: string
-          minLength: 1
-          maxLength: 120
-          default: LAFAM Pilates Studio
-          example: LAFAM Pilates Studio
-        class_date:
-          type: string
-          pattern: '^\d{4}-\d{2}-\d{2}$'
-          example: '2026-06-22'
-        start_time:
-          type: string
-          pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
-          example: '10:00'
-          description: Backward-compatible single-time field. Required when time_slots is omitted.
-        duration_minutes:
-          type: integer
-          minimum: 15
-          maximum: 240
-          default: 60
-          example: 60
-          description: Schedule-level duration used by backward-compatible single-time creation. Slot-level duration_minutes is used when time_slots is provided.
-        capacity:
-          type: integer
-          minimum: 1
-          maximum: 100
-          example: 8
-          description: Schedule-level capacity fallback. Slot-level capacity overrides this value when time_slots is provided.
+            - 0
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            - 6
+          example: 1
+          description: Weekday for this schedule day. Uses 0 = Sunday through 6 = Saturday.
         time_slots:
           type: array
           minItems: 1
-          maxItems: 12
-          description: Multiple schedule slots to create on the same class_date. Required when start_time is omitted.
+          maxItems: 24
           items:
             $ref: '#/components/schemas/PilatesScheduleTimeSlotInput'
-        price_amount:
-          type: number
-          minimum: 0
-          nullable: true
-          example: 15
-          description: Optional schedule-level price override. If null or omitted, class default price is used. Slot-level price_amount overrides this value.
-        currency:
-          allOf:
-            - $ref: '#/components/schemas/PaymentCurrency'
-          nullable: true
-          description: Optional schedule-level currency. KWD is currently supported. Slot-level currency overrides this value.
+          description: Time slots generated for this weekday.
 
-    CreateRecurringPilatesScheduleRequest:
+    CreatePilatesScheduleRequest:
       type: object
       required:
-        - mode
         - class_id
         - trainer_staff_profile_id
+        - studio
         - start_date
         - end_date
-        - recurrence
-      anyOf:
-        - required:
-            - start_time
-        - required:
-            - time_slots
+        - default_capacity
+        - price_amount
+        - currency
+        - schedule_days
       properties:
-        mode:
-          type: string
-          enum:
-            - recurring
-          example: recurring
         class_id:
           type: string
           format: uuid
@@ -7150,55 +7774,36 @@ components:
           type: string
           minLength: 1
           maxLength: 120
-          default: LAFAM Pilates Studio
           example: LAFAM Pilates Studio
         start_date:
           type: string
           pattern: '^\d{4}-\d{2}-\d{2}$'
-          example: '2026-06-22'
+          example: '2026-07-01'
         end_date:
           type: string
           pattern: '^\d{4}-\d{2}-\d{2}$'
-          example: '2026-07-22'
-        start_time:
-          type: string
-          pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
-          example: '10:00'
-          description: Backward-compatible base start time. Required when time_slots is omitted. When time_slots is provided and start_time is omitted, the backend uses the first slot start_time as the series base start time.
-        duration_minutes:
-          type: integer
-          minimum: 15
-          maximum: 240
-          default: 60
-          example: 60
-          description: Schedule-level duration used by backward-compatible recurring creation. Slot-level duration_minutes is used when time_slots is provided.
-        capacity:
+          example: '2026-09-30'
+        default_capacity:
           type: integer
           minimum: 1
           maximum: 100
           example: 8
-          description: Schedule-level capacity fallback. Slot-level capacity overrides this value when time_slots is provided.
-        time_slots:
-          type: array
-          minItems: 1
-          maxItems: 12
-          description: Multiple recurring slots generated for every matched recurrence date. Required when start_time is omitted.
-          items:
-            $ref: '#/components/schemas/PilatesScheduleTimeSlotInput'
+          description: Default generated schedule capacity. Slot capacity overrides may narrow or expand this value.
         price_amount:
           type: number
           minimum: 0
-          nullable: true
           example: 15
-          description: Optional schedule-level price override copied to generated schedules. Slot-level price_amount overrides this value.
+          description: Price snapshot copied to every generated schedule row.
         currency:
-          allOf:
-            - $ref: '#/components/schemas/PaymentCurrency'
-          nullable: true
-          description: Optional schedule-level currency. KWD is currently supported. Slot-level currency overrides this value.
-        recurrence:
-          $ref: '#/components/schemas/PilatesScheduleRecurrenceInput'
-
+          $ref: '#/components/schemas/PaymentCurrency'
+        schedule_days:
+          type: array
+          minItems: 1
+          maxItems: 7
+          uniqueItems: false
+          items:
+            $ref: '#/components/schemas/PilatesScheduleDayInput'
+          description: Weekly schedule days. day_of_week values must be unique.
     UpdatePilatesScheduleRequest:
       type: object
       minProperties: 1
@@ -7379,46 +7984,80 @@ components:
       properties:
         schedule:
           $ref: '#/components/schemas/PilatesScheduleAdminSummary'
-    CreatePilatesScheduleSingleData:
+    PilatesWeeklySchedulePlanAdminSummary:
       type: object
       required:
-        - mode
-        - schedule
+        - id
+        - class_id
+        - trainer_staff_profile_id
+        - studio
+        - start_date
+        - end_date
+        - days_of_week
+        - default_capacity
+        - price_amount
+        - currency
+        - time_slot_count
+        - generated_schedule_count
       properties:
-        mode:
+        id:
           type: string
-          enum:
-            - single
-          example: single
-        schedule:
-          $ref: '#/components/schemas/PilatesScheduleAdminSummary'
-        generated_schedules:
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+        studio:
+          type: string
+          example: LAFAM Pilates Studio
+        start_date:
+          type: string
+          format: date
+          example: '2026-07-01'
+        end_date:
+          type: string
+          format: date
+          example: '2026-09-30'
+        days_of_week:
           type: array
-          description: Present for single-date multi-slot creation. Contains every schedule row created for the submitted class_date.
           items:
-            $ref: '#/components/schemas/PilatesScheduleAdminSummary'
-        generated_count:
+            type: integer
+            minimum: 0
+            maximum: 6
+          example:
+            - 1
+            - 3
+        default_capacity:
+          type: integer
+          minimum: 1
+          example: 8
+        price_amount:
+          type: number
+          minimum: 0
+          example: 15
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+        time_slot_count:
+          type: integer
+          minimum: 1
+          example: 3
+        generated_schedule_count:
           type: integer
           minimum: 0
-          description: Present for single-date multi-slot creation. Equals generated_schedules.length.
-          example: 3
+          example: 39
 
-    CreatePilatesScheduleRecurringData:
+    CreatePilatesScheduleData:
       type: object
       required:
-        - mode
-        - series
+        - schedule_plan
         - generated_schedules
         - generated_count
         - skipped_dates
       properties:
-        mode:
-          type: string
-          enum:
-            - recurring
-          example: recurring
-        series:
-          $ref: '#/components/schemas/PilatesScheduleSeriesAdminSummary'
+        schedule_plan:
+          $ref: '#/components/schemas/PilatesWeeklySchedulePlanAdminSummary'
         generated_schedules:
           type: array
           items:
@@ -7426,20 +8065,13 @@ components:
         generated_count:
           type: integer
           minimum: 0
-          example: 12
+          example: 39
         skipped_dates:
           type: array
           items:
             type: string
             format: date
-          example:
-            - '2026-07-01'
-
-    CreatePilatesScheduleData:
-      oneOf:
-        - $ref: '#/components/schemas/CreatePilatesScheduleSingleData'
-        - $ref: '#/components/schemas/CreatePilatesScheduleRecurringData'
-
+          example: []
     PilatesScheduleAdminDetailData:
       type: object
       required:
@@ -7545,59 +8177,43 @@ components:
         message: Pilates schedule created successfully.
         timestamp_ms: 1780918065292
         data:
-          mode: single
-          schedule:
-            id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+          schedule_plan:
+            id: 7fa85f64-5717-4562-b3fc-2c963f66afa9
             class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
             trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
             studio: LAFAM Pilates Studio
-            class_date: '2026-06-22'
-            start_time: '09:00'
-            end_time: '10:00'
-            duration_minutes: 60
-            capacity: 8
-            booked_count: 0
-            waitlist_count: 0
+            start_date: '2026-07-01'
+            end_date: '2026-09-30'
+            days_of_week:
+              - 1
+              - 3
+            default_capacity: 8
             price_amount: 15
             currency: KWD
-            status: scheduled
-            created_at: '2026-06-19T09:30:00.000Z'
-            updated_at: '2026-06-19T09:30:00.000Z'
+            time_slot_count: 3
+            generated_schedule_count: 39
           generated_schedules:
             - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
               class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
               trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
               studio: LAFAM Pilates Studio
-              class_date: '2026-06-22'
+              class_date: '2026-07-01'
               start_time: '09:00'
               end_time: '10:00'
               duration_minutes: 60
               capacity: 8
-              booked_count: 0
-              waitlist_count: 0
               price_amount: 15
               currency: KWD
               status: scheduled
+              series_id: 7fa85f64-5717-4562-b3fc-2c963f66afa9
+              series_occurrence_index: 1
+              series_date_index: 1
+              series_slot_index: 1
+              generation_source: recurring
               created_at: '2026-06-19T09:30:00.000Z'
               updated_at: '2026-06-19T09:30:00.000Z'
-            - id: 4fa85f64-5717-4562-b3fc-2c963f66afa7
-              class_id: 9b5b8e3e-8e27-4f5d-a4f8-6f85f8b6f9f1
-              trainer_staff_profile_id: 4df33c73-4fd5-46bb-a7a5-f5a9914de18a
-              studio: LAFAM Pilates Studio
-              class_date: '2026-06-22'
-              start_time: '11:00'
-              end_time: '12:00'
-              duration_minutes: 60
-              capacity: 8
-              booked_count: 0
-              waitlist_count: 0
-              price_amount: 15
-              currency: KWD
-              status: scheduled
-              created_at: '2026-06-19T09:30:00.000Z'
-              updated_at: '2026-06-19T09:30:00.000Z'
-          generated_count: 2
-
+          generated_count: 39
+          skipped_dates: []
     PilatesScheduleAdminDetailSuccessResponse:
       allOf:
         - $ref: '#/components/schemas/ApiSuccessBase'
@@ -7801,7 +8417,7 @@ components:
           example: '2026-06-20'
         start_time:
           type: string
-          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
           example: '11:00'
         duration_minutes:
           type: integer
@@ -7815,14 +8431,11 @@ components:
           maxLength: 120
           default: LAFAM Pilates Studio
           example: LAFAM Pilates Studio
-        payment_required:
-          type: boolean
-          default: true
-          description: Payment-required private bookings start as pending_payment and require checkout before confirmation.
         idempotency_key:
           type: string
           maxLength: 160
           example: private-booking-20260620-1100
+      additionalProperties: false
 
     ReschedulePrivateBookingRequest:
       type: object
@@ -7873,15 +8486,12 @@ components:
           type: string
           format: uuid
           description: Pilates schedule id.
-        payment_required:
-          type: boolean
-          default: true
-          description: Optional controlled payment flag. Payment-required bookings start as pending_payment and require checkout before confirmation.
         idempotency_key:
           type: string
           maxLength: 160
           description: Optional retry/double-click protection key.
           example: customer-click-20260612-001
+      additionalProperties: false
 
     CancelBookingRequest:
       type: object
@@ -8270,6 +8880,7 @@ components:
         - target_kind
         - booking_id
         - private_booking_id
+        - booking_order_id
         - amount
         - discount_amount
         - final_amount
@@ -8302,12 +8913,17 @@ components:
           enum:
             - booking
             - private_booking
+            - booking_order
           example: booking
         booking_id:
           type: string
           format: uuid
           nullable: true
         private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        booking_order_id:
           type: string
           format: uuid
           nullable: true
@@ -8437,6 +9053,7 @@ components:
         - schedule_id
         - class_id
         - trainer_staff_profile_id
+        - booking_order_id
         - status
         - source
         - payment_status
@@ -8475,6 +9092,11 @@ components:
           type: string
           format: uuid
           nullable: true
+        booking_order_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Present when this booking belongs to a bulk booking order.
         status:
           $ref: '#/components/schemas/BookingStatus'
         source:
@@ -9465,8 +10087,9 @@ components:
       enum:
         - booking
         - private_booking
+        - booking_order
         - wallet_top_up
-      example: booking
+      example: booking_order
 
     PaymentMethod:
       type: string
@@ -9643,18 +10266,23 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: Required when target_type is booking.
+          description: Required only when target_type is booking. Forbidden for booking_order, private_booking, and wallet_top_up.
         private_booking_id:
           type: string
           format: uuid
           nullable: true
-          description: Required when target_type is private_booking.
+          description: Required only when target_type is private_booking. Forbidden for booking, booking_order, and wallet_top_up.
+        booking_order_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Required only when target_type is booking_order. Forbidden for booking, private_booking, and wallet_top_up.
         wallet_top_up_amount:
           type: number
           minimum: 1
           maximum: 10000
           nullable: true
-          description: Required when target_type is wallet_top_up.
+          description: Required only when target_type is wallet_top_up. Forbidden for booking, private_booking, and booking_order.
           example: 25
         payment_method:
           $ref: '#/components/schemas/PaymentMethod'
@@ -9677,6 +10305,7 @@ components:
           example: checkout-20260618-001
         metadata:
           $ref: '#/components/schemas/PaymentMetadata'
+      additionalProperties: false
 
     WalletTopUpRequest:
       type: object
@@ -9781,6 +10410,7 @@ components:
         - target_type
         - booking_id
         - private_booking_id
+        - booking_order_id
         - amount
         - discount_amount
         - final_amount
@@ -9820,6 +10450,10 @@ components:
           format: uuid
           nullable: true
         private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        booking_order_id:
           type: string
           format: uuid
           nullable: true
@@ -10012,6 +10646,9 @@ components:
         - receipt_number
         - user_id
         - target_type
+        - booking_id
+        - private_booking_id
+        - booking_order_id
         - amount
         - discount_amount
         - final_amount
@@ -10032,6 +10669,18 @@ components:
           format: uuid
         target_type:
           $ref: '#/components/schemas/PaymentTargetType'
+        booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        booking_order_id:
+          type: string
+          format: uuid
+          nullable: true
         amount:
           type: number
         discount_amount:
@@ -10251,6 +10900,7 @@ components:
         - payment_id
         - booking_id
         - private_booking_id
+        - booking_order_id
         - entry_type
         - entry_status
         - amount
@@ -10278,6 +10928,10 @@ components:
           format: uuid
           nullable: true
         private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        booking_order_id:
           type: string
           format: uuid
           nullable: true
@@ -11046,6 +11700,324 @@ components:
             wallet_summary: null
             calendar_events: null
             generated_at: '2026-06-19T10:52:40.000Z'
+    CreateBulkBookingRequest:
+      type: object
+      required:
+        - schedule_ids
+      properties:
+        schedule_ids:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+          description: Pilates schedule ids selected for one all-or-nothing bulk booking order.
+        idempotency_key:
+          type: string
+          maxLength: 160
+          nullable: true
+          example: customer-cart-20260701-001
+      additionalProperties: false
+
+    CreateAdminBulkBookingRequest:
+      type: object
+      required:
+        - customer_user_id
+        - schedule_ids
+      properties:
+        customer_user_id:
+          type: string
+          format: uuid
+          description: Customer app user id for whom the order is created.
+        schedule_ids:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+          description: Pilates schedule ids selected for one all-or-nothing bulk booking order.
+        idempotency_key:
+          type: string
+          maxLength: 160
+          nullable: true
+          example: admin-cart-20260701-001
+        admin_notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+          example: Booked at front desk.
+      additionalProperties: false
+
+    BookingOrderCreateActionResult:
+      type: string
+      enum:
+        - created_order
+        - existing_order
+      example: created_order
+
+    BookingOrderStatus:
+      type: string
+      enum:
+        - pending_payment
+        - paid
+        - expired
+        - cancelled
+        - refunded
+      example: pending_payment
+
+    BookingOrderItemStatus:
+      type: string
+      enum:
+        - pending_payment
+        - confirmed
+        - expired
+        - cancelled
+        - refunded
+      example: pending_payment
+
+    BookingOrderSummary:
+      type: object
+      required:
+        - id
+        - order_number
+        - customer_user_id
+        - status
+        - payment_status
+        - payment_required
+        - total_amount
+        - currency
+        - booking_count
+        - checkout_required
+        - idempotency_key
+        - created_by_user_id
+        - created_by_admin_id
+        - created_by_staff_profile_id
+        - created_by_role
+        - admin_notes
+        - metadata
+        - expires_at
+        - paid_at
+        - expired_at
+        - cancelled_at
+        - refunded_at
+        - created_at
+        - updated_at
+        - realtime_version
+      properties:
+        id:
+          type: string
+          format: uuid
+        order_number:
+          type: string
+          example: LAFAM-ORDER-20260701-ABC12345
+        customer_user_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/BookingOrderStatus'
+        payment_status:
+          $ref: '#/components/schemas/BookingPaymentStatus'
+        payment_required:
+          type: boolean
+          example: true
+        total_amount:
+          type: number
+          example: 30
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+        booking_count:
+          type: integer
+          minimum: 1
+          example: 2
+        checkout_required:
+          type: boolean
+          example: true
+        idempotency_key:
+          type: string
+          nullable: true
+        created_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_by_admin_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_by_staff_profile_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_by_role:
+          type: string
+          nullable: true
+          example: customer
+        admin_notes:
+          type: string
+          nullable: true
+        metadata:
+          $ref: '#/components/schemas/PaymentMetadata'
+        expires_at:
+          type: string
+          format: date-time
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+        expired_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        refunded_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        realtime_version:
+          type: integer
+          format: int64
+          minimum: 1
+        payment_state:
+          allOf:
+            - $ref: '#/components/schemas/BookingPaymentStateSnapshot'
+          nullable: true
+        latest_payment:
+          allOf:
+            - $ref: '#/components/schemas/BookingPaymentSummary'
+          nullable: true
+        customer:
+          allOf:
+            - $ref: '#/components/schemas/BookingSafeUserSnapshot'
+          nullable: true
+
+    BookingOrderItemSummary:
+      type: object
+      required:
+        - id
+        - booking_order_id
+        - booking_id
+        - schedule_id
+        - class_id
+        - trainer_staff_profile_id
+        - price_amount
+        - currency
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        booking_order_id:
+          type: string
+          format: uuid
+        booking_id:
+          type: string
+          format: uuid
+        schedule_id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        trainer_staff_profile_id:
+          type: string
+          format: uuid
+          nullable: true
+        price_amount:
+          type: number
+          example: 15
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+        status:
+          $ref: '#/components/schemas/BookingOrderItemStatus'
+        created_at:
+          type: string
+          format: date-time
+        booking:
+          allOf:
+            - $ref: '#/components/schemas/BookingListItem'
+          nullable: true
+        class:
+          allOf:
+            - $ref: '#/components/schemas/BookingClassSnapshot'
+          nullable: true
+        schedule:
+          allOf:
+            - $ref: '#/components/schemas/BookingScheduleSnapshot'
+          nullable: true
+        trainer:
+          allOf:
+            - $ref: '#/components/schemas/BookingTrainerSnapshot'
+          nullable: true
+
+    BookingOrderDetail:
+      allOf:
+        - $ref: '#/components/schemas/BookingOrderSummary'
+        - type: object
+          required:
+            - items
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/BookingOrderItemSummary'
+
+    BookingBulkCreateData:
+      type: object
+      required:
+        - result
+        - booking_order
+        - items
+        - checkout_required
+      properties:
+        result:
+          $ref: '#/components/schemas/BookingOrderCreateActionResult'
+        booking_order:
+          $ref: '#/components/schemas/BookingOrderSummary'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookingOrderItemSummary'
+        checkout_required:
+          type: boolean
+          example: true
+
+    BookingBulkCreateSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BookingBulkCreateData'
+
+    BookingOrderDetailData:
+      type: object
+      required:
+        - booking_order
+      properties:
+        booking_order:
+          $ref: '#/components/schemas/BookingOrderDetail'
+
+    BookingOrderDetailSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/BookingOrderDetail'
+
   securitySchemes:
     BearerAuth:
       type: http

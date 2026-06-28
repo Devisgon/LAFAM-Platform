@@ -3,22 +3,26 @@
  * LAFAM admin booking service.
  *
  * Role:
- * - Owns admin-facing Booking Module business flows.
+ * - Owns admin/staff/trainer-facing Booking Module business flows.
  * - Lists and reads bookings across customers.
+ * - Creates backend-owned bulk Pilates booking orders.
  * - Lists, reads, creates, cancels, and reschedules private trainer bookings.
  * - Cancels bookings through the atomic cancellation RPC.
  * - Reschedules bookings through the atomic reschedule RPC.
  * - Performs controlled admin status overrides.
  * - Lists and removes schedule waitlist entries.
+ * - Enforces trainer schedule ownership for scoped booking management.
  *
  * Important:
  * - This service does not calculate seat capacity in TypeScript.
  * - This service does not insert Pilates class bookings directly.
  * - This service does not insert private trainer bookings directly.
  * - Booking RPC functions remain the concurrency authority.
+ * - Booking-order RPC functions remain the all-or-nothing bulk booking authority.
  * - Private booking RPC functions remain the trainer conflict authority.
  * - Admin mutation flows must leave audit/history records.
- * - Controllers must protect this service with admin/super-admin role guards.
+ * - Controller role checks are not enough for trainers.
+ * - Trainer scope must be enforced in this service.
  */
 
 import { Injectable } from '@nestjs/common';
@@ -26,12 +30,21 @@ import { Injectable } from '@nestjs/common';
 import { AppError } from '../../../common/errors/app-error';
 import type {
   AppUserRow,
+  DatabaseJsonObject,
   PilatesClassRow,
   PilatesClassScheduleRow,
 } from '../../../database/database.types';
 import {
+  AUTH_ADMIN_ROLE,
+  AUTH_TRAINER_ROLE,
+  type AuthUserRole,
+} from '../../auth/constants/auth-role.constants';
+import { StaffRepository } from '../../staff/repositories/staff.repository';
+import {
   BOOKING_ADMIN_DEFAULT_LIMIT,
   BOOKING_ADMIN_DEFAULT_OFFSET,
+  BOOKING_ORDER_RPC_ACTION_CREATED_ORDER,
+  BOOKING_ORDER_RPC_ACTION_EXISTING_ORDER,
   BOOKING_PAYMENT_CONFIRMING_STATUSES,
   BOOKING_PAYMENT_FAILURE_STATUSES,
   BOOKING_PAYMENT_PAYABLE_STATUSES,
@@ -46,19 +59,25 @@ import {
   BOOKING_SOURCE_ADMIN_DASHBOARD,
   BOOKING_STATUS_CONFIRMED,
   BOOKING_STATUS_PENDING_PAYMENT,
-  PRIVATE_BOOKING_DEFAULT_DURATION_MINUTES,
   PRIVATE_BOOKING_DEFAULT_CURRENCY,
-  PRIVATE_BOOKING_DEFAULT_PRICE_AMOUNT,
+  PRIVATE_BOOKING_DEFAULT_DURATION_MINUTES,
   PRIVATE_BOOKING_DEFAULT_PAYMENT_REQUIRED,
+  PRIVATE_BOOKING_DEFAULT_PRICE_AMOUNT,
   PRIVATE_BOOKING_DEFAULT_STUDIO,
   WAITLIST_STATUS_WAITING,
+  type BookingPaymentStatus,
   type BookingWaitlistStatus,
 } from '../constants/booking.constants';
+import { BookingAccessPolicy } from '../domain/booking-access.policy';
 import {
   assertAdminCanOverrideBookingStatus,
   assertBookingCanBeCancelled,
   assertBookingCanBeRescheduled,
 } from '../domain/booking-lifecycle.policy';
+import {
+  BookingOrderLifecyclePolicy,
+  type BookingOrderLifecycleRecord,
+} from '../domain/booking-order-lifecycle.policy';
 import { PrivateBookingLifecyclePolicy } from '../domain/private-booking-lifecycle.policy';
 import {
   assertWaitlistCanBeRemoved,
@@ -66,6 +85,7 @@ import {
 } from '../domain/waitlist-fifo.policy';
 import type { AdminCancelBookingDto } from '../dto/admin-cancel-booking.dto';
 import type { AdminOverrideBookingDto } from '../dto/admin-override-booking.dto';
+import type { CreateAdminBulkBookingDto } from '../dto/create-admin-bulk-booking.dto';
 import type { CreateAdminPrivateBookingDto } from '../dto/create-admin-private-booking.dto';
 import type { ListAdminBookingsQueryDto } from '../dto/list-admin-bookings-query.dto';
 import type { ListAdminPrivateBookingsQueryDto } from '../dto/list-private-bookings-query.dto';
@@ -76,6 +96,7 @@ import { BookingAvailabilityService } from './booking-availability.service';
 import type {
   BookingAdminListFilters,
   BookingAvailabilitySnapshot,
+  BookingBulkCreateResult,
   BookingCancelAtomicRpcRow,
   BookingCancelResult,
   BookingClassSnapshot,
@@ -85,6 +106,11 @@ import type {
   BookingHydratedRow,
   BookingListItem,
   BookingListResult,
+  BookingOrderDetail,
+  BookingOrderHydratedRow,
+  BookingOrderItemHydratedRow,
+  BookingOrderItemSummary,
+  BookingOrderSummary,
   BookingPaymentStateSnapshot,
   BookingPaymentSummary,
   BookingPriceSnapshot,
@@ -109,15 +135,37 @@ import type {
   PrivateBookingListResult,
   PrivateBookingRescheduleResult,
   PrivateBookingSafeBooking,
+  ResolvedBookingManagementScope,
 } from '../types/booking.types';
+
+export interface BookingAdminActorContext {
+  readonly user_id: string;
+  readonly role: AuthUserRole;
+}
 
 type BookingHydratedStaffProfile = NonNullable<
   BookingHydratedRow['staff_profiles']
 >;
 
+type BookingOrderHydratedStaffProfile = NonNullable<
+  BookingOrderHydratedRow['staff_profiles']
+>;
+
+type BookingOrderItemHydratedStaffProfile = NonNullable<
+  BookingOrderItemHydratedRow['staff_profiles']
+>;
+
 type PrivateBookingHydratedStaffProfile = NonNullable<
   PrivateBookingHydratedRow['staff_profiles']
 >;
+
+const EMPTY_DATABASE_METADATA: DatabaseJsonObject = {};
+
+const LEGACY_ADMIN_ACTOR_CONTEXT: BookingAdminActorContext = {
+  user_id: 'legacy-admin-context',
+  role: AUTH_ADMIN_ROLE,
+};
+
 function getLatestHydratedPayment(
   payments: readonly BookingHydratedPaymentRow[] | null | undefined,
 ): BookingHydratedPaymentRow | null {
@@ -162,6 +210,7 @@ function toPaymentSummary(
     target_kind: targetKind,
     booking_id: payment.booking_id,
     private_booking_id: payment.private_booking_id,
+    booking_order_id: payment.booking_order_id,
     amount: payment.amount,
     discount_amount: payment.discount_amount,
     final_amount: payment.final_amount,
@@ -183,9 +232,9 @@ function toPaymentSummary(
 }
 
 function buildPaymentStateSnapshot(input: {
-  readonly booking_status: BookingHydratedRow['status'];
+  readonly booking_status: string;
   readonly payment_required: boolean;
-  readonly payment_status: BookingHydratedRow['payment_status'];
+  readonly payment_status: BookingPaymentStatus;
   readonly seat_hold_expires_at: string | null;
   readonly latest_payment: BookingPaymentSummary | null;
 }): BookingPaymentStateSnapshot {
@@ -346,12 +395,15 @@ export class BookingAdminService {
   constructor(
     private readonly bookingRepository: BookingRepository,
     private readonly bookingAvailabilityService: BookingAvailabilityService,
+    private readonly staffRepository: StaffRepository,
   ) {}
 
   async listBookings(
     dto: ListAdminBookingsQueryDto,
+    actor?: BookingAdminActorContext,
   ): Promise<BookingListResult> {
-    const filters = this.buildAdminBookingFilters(dto);
+    const scope = await this.resolveManagementScope(actor);
+    const filters = this.buildAdminBookingFilters(dto, scope);
     const result = await this.bookingRepository.listAdminBookings(filters);
 
     return {
@@ -364,7 +416,11 @@ export class BookingAdminService {
 
   async listPrivateBookings(
     dto: ListAdminPrivateBookingsQueryDto,
+    actor?: BookingAdminActorContext,
   ): Promise<PrivateBookingListResult> {
+    const scope = await this.resolveManagementScope(actor);
+    BookingAccessPolicy.assertFullManagementScope(scope);
+
     const filters = this.buildAdminPrivateBookingFilters(dto);
     const result =
       await this.bookingRepository.listAdminPrivateBookings(filters);
@@ -379,10 +435,93 @@ export class BookingAdminService {
     };
   }
 
+  async createBulkBooking(
+    actor: BookingAdminActorContext,
+    dto: CreateAdminBulkBookingDto,
+  ): Promise<BookingBulkCreateResult> {
+    BookingOrderLifecyclePolicy.assertScheduleSelectionIsValid(
+      dto.schedule_ids,
+    );
+
+    const scope = await this.resolveManagementScope(actor);
+    const scheduleScopes = await this.bookingRepository.findScheduleScopesByIds(
+      {
+        schedule_ids: dto.schedule_ids,
+      },
+    );
+
+    BookingAccessPolicy.assertScheduleScopesWithinManagementScope({
+      scope,
+      requested_schedule_ids: dto.schedule_ids,
+      schedule_scopes: scheduleScopes,
+    });
+
+    await this.bookingAvailabilityService.assertBulkSchedulesHaveAvailableSeats(
+      {
+        schedule_ids: dto.schedule_ids,
+      },
+    );
+
+    const customerUserId = this.requireCustomerUserId(dto.customer_user_id);
+    const createdByStaffProfileId =
+      BookingAccessPolicy.isTrainerScopedManagementScope(scope)
+        ? scope.trainer_staff_profile_id
+        : null;
+
+    const rpcResult = await this.bookingRepository.createBookingOrderAtomic({
+      customer_user_id: customerUserId,
+      schedule_ids: dto.schedule_ids,
+      idempotency_key: dto.idempotency_key ?? null,
+      created_by_user_id: actor.user_id,
+      created_by_admin_id: BookingAccessPolicy.isFullManagementScope(scope)
+        ? actor.user_id
+        : null,
+      created_by_staff_profile_id: createdByStaffProfileId,
+      created_by_role: actor.role,
+      source: BOOKING_SOURCE_ADMIN_DASHBOARD,
+      admin_notes: dto.admin_notes ?? null,
+      metadata: EMPTY_DATABASE_METADATA,
+    });
+
+    BookingOrderLifecyclePolicy.assertRpcCreateResultIsConsistent(
+      rpcResult.rpc,
+    );
+
+    const actionResult = this.resolveBookingOrderCreateActionResult(
+      rpcResult.rpc.action_result,
+    );
+    const bookingOrderId = this.requireReturnedId(
+      rpcResult.rpc.booking_order_id,
+      'create_booking_order_atomic did not return booking_order_id.',
+    );
+    const bookingOrderRow =
+      await this.getRequiredBookingOrderRow(bookingOrderId);
+    const bookingOrder = this.toBookingOrderSummary(bookingOrderRow);
+    const bookingOrderItems = (bookingOrderRow.booking_order_items ?? []).map(
+      (item) => this.toBookingOrderItemSummary(item),
+    );
+
+    return {
+      result: actionResult,
+      booking_order: bookingOrder,
+      items: bookingOrderItems,
+      checkout_required: bookingOrder.checkout_required,
+    };
+  }
+
   async createPrivateBooking(
     adminUserId: string,
     dto: CreateAdminPrivateBookingDto,
+    actor?: BookingAdminActorContext,
   ): Promise<PrivateBookingCreateResult> {
+    const scope = await this.resolveManagementScope(
+      actor ?? {
+        user_id: adminUserId,
+        role: AUTH_ADMIN_ROLE,
+      },
+    );
+    BookingAccessPolicy.assertFullManagementScope(scope);
+
     const customerUserId = this.requireCustomerUserId(dto.user_id);
     const sessionDate = PrivateBookingLifecyclePolicy.normalizeIsoDate(
       dto.session_date,
@@ -406,8 +545,7 @@ export class BookingAdminService {
       start_time: startTime,
       duration_minutes: durationMinutes,
       studio: dto.studio ?? PRIVATE_BOOKING_DEFAULT_STUDIO,
-      payment_required:
-        dto.payment_required ?? PRIVATE_BOOKING_DEFAULT_PAYMENT_REQUIRED,
+      payment_required: PRIVATE_BOOKING_DEFAULT_PAYMENT_REQUIRED,
       idempotency_key: dto.idempotency_key ?? null,
       created_by_admin_id: adminUserId,
       source: BOOKING_SOURCE_ADMIN_DASHBOARD,
@@ -420,6 +558,7 @@ export class BookingAdminService {
       rpcResult.rpc.private_booking_id,
       'create_private_trainer_booking_atomic did not return private_booking_id.',
     );
+
     if (actionResult === 'private_booked') {
       await this.bookingRepository.updatePrivateBookingPrice(
         privateBookingId,
@@ -427,6 +566,7 @@ export class BookingAdminService {
         dto.currency ?? PRIVATE_BOOKING_DEFAULT_CURRENCY,
       );
     }
+
     const privateBooking =
       await this.getRequiredPrivateBookingListItem(privateBookingId);
 
@@ -439,7 +579,11 @@ export class BookingAdminService {
     };
   }
 
-  async getBookingById(bookingId: string): Promise<BookingDetail> {
+  async getBookingById(
+    bookingId: string,
+    actor?: BookingAdminActorContext,
+  ): Promise<BookingDetail> {
+    const scope = await this.resolveManagementScope(actor);
     const lookup = await this.bookingRepository.findBookingById({
       booking_id: bookingId,
       include_deleted: false,
@@ -448,6 +592,8 @@ export class BookingAdminService {
     if (!lookup.booking) {
       throw AppError.bookingNotFound();
     }
+
+    this.assertBookingWithinManagementScope(scope, lookup.booking);
 
     const availability =
       await this.bookingAvailabilityService.getAvailabilitySnapshot({
@@ -461,9 +607,25 @@ export class BookingAdminService {
     );
   }
 
+  async getBookingOrderById(
+    bookingOrderId: string,
+    actor?: BookingAdminActorContext,
+  ): Promise<BookingOrderDetail> {
+    const scope = await this.resolveManagementScope(actor);
+    const bookingOrder = await this.getRequiredBookingOrderRow(bookingOrderId);
+
+    this.assertBookingOrderWithinManagementScope(scope, bookingOrder);
+
+    return this.toBookingOrderDetail(bookingOrder);
+  }
+
   async getPrivateBookingById(
     privateBookingId: string,
+    actor?: BookingAdminActorContext,
   ): Promise<PrivateBookingDetail> {
+    const scope = await this.resolveManagementScope(actor);
+    BookingAccessPolicy.assertFullManagementScope(scope);
+
     const lookup = await this.bookingRepository.findPrivateBookingById({
       private_booking_id: privateBookingId,
       include_deleted: false,
@@ -483,7 +645,14 @@ export class BookingAdminService {
     adminUserId: string,
     bookingId: string,
     dto: AdminCancelBookingDto,
+    actor?: BookingAdminActorContext,
   ): Promise<BookingCancelResult> {
+    const scope = await this.resolveManagementScope(
+      actor ?? {
+        user_id: adminUserId,
+        role: AUTH_ADMIN_ROLE,
+      },
+    );
     const existingLookup = await this.bookingRepository.findBookingById({
       booking_id: bookingId,
       include_deleted: false,
@@ -493,6 +662,7 @@ export class BookingAdminService {
       throw AppError.bookingNotFound();
     }
 
+    this.assertBookingWithinManagementScope(scope, existingLookup.booking);
     assertBookingCanBeCancelled(existingLookup.booking);
 
     const rpcResult = await this.bookingRepository.cancelBookingAtomic({
@@ -535,7 +705,16 @@ export class BookingAdminService {
     adminUserId: string,
     privateBookingId: string,
     dto: AdminCancelBookingDto,
+    actor?: BookingAdminActorContext,
   ): Promise<PrivateBookingCancelResult> {
+    const scope = await this.resolveManagementScope(
+      actor ?? {
+        user_id: adminUserId,
+        role: AUTH_ADMIN_ROLE,
+      },
+    );
+    BookingAccessPolicy.assertFullManagementScope(scope);
+
     const existingLookup = await this.bookingRepository.findPrivateBookingById({
       private_booking_id: privateBookingId,
       include_deleted: false,
@@ -573,7 +752,14 @@ export class BookingAdminService {
     adminUserId: string,
     bookingId: string,
     dto: RescheduleBookingDto,
+    actor?: BookingAdminActorContext,
   ): Promise<BookingRescheduleResult> {
+    const scope = await this.resolveManagementScope(
+      actor ?? {
+        user_id: adminUserId,
+        role: AUTH_ADMIN_ROLE,
+      },
+    );
     const existingLookup = await this.bookingRepository.findBookingById({
       booking_id: bookingId,
       include_deleted: false,
@@ -583,6 +769,11 @@ export class BookingAdminService {
       throw AppError.bookingNotFound();
     }
 
+    this.assertBookingWithinManagementScope(scope, existingLookup.booking);
+    await this.assertScheduleWithinManagementScope(
+      scope,
+      dto.target_schedule_id,
+    );
     assertBookingCanBeRescheduled(existingLookup.booking);
 
     const rpcResult = await this.bookingRepository.rescheduleBookingAtomic({
@@ -641,7 +832,16 @@ export class BookingAdminService {
     adminUserId: string,
     privateBookingId: string,
     dto: ReschedulePrivateBookingDto,
+    actor?: BookingAdminActorContext,
   ): Promise<PrivateBookingRescheduleResult> {
+    const scope = await this.resolveManagementScope(
+      actor ?? {
+        user_id: adminUserId,
+        role: AUTH_ADMIN_ROLE,
+      },
+    );
+    BookingAccessPolicy.assertFullManagementScope(scope);
+
     const existingLookup = await this.bookingRepository.findPrivateBookingById({
       private_booking_id: privateBookingId,
       include_deleted: false,
@@ -666,8 +866,6 @@ export class BookingAdminService {
     const targetDurationMinutes =
       dto.target_duration_minutes ??
       existingLookup.private_booking.duration_minutes;
-    const paymentRequired =
-      dto.payment_required ?? existingLookup.private_booking.payment_required;
 
     PrivateBookingLifecyclePolicy.assertTargetSessionDateIsNotInPast(
       targetSessionDate,
@@ -691,7 +889,7 @@ export class BookingAdminService {
         actor_admin_id: adminUserId,
         reason: dto.reason ?? null,
         idempotency_key: dto.idempotency_key ?? null,
-        payment_required: paymentRequired,
+        payment_required: PRIVATE_BOOKING_DEFAULT_PAYMENT_REQUIRED,
       });
 
     const actionResult = this.resolvePrivateRescheduleActionResult(
@@ -718,7 +916,14 @@ export class BookingAdminService {
     adminUserId: string,
     bookingId: string,
     dto: AdminOverrideBookingDto,
+    actor?: BookingAdminActorContext,
   ): Promise<BookingDetail> {
+    const scope = await this.resolveManagementScope(
+      actor ?? {
+        user_id: adminUserId,
+        role: AUTH_ADMIN_ROLE,
+      },
+    );
     const existingLookup = await this.bookingRepository.findBookingById({
       booking_id: bookingId,
       include_deleted: false,
@@ -727,6 +932,8 @@ export class BookingAdminService {
     if (!existingLookup.booking) {
       throw AppError.bookingNotFound();
     }
+
+    this.assertBookingWithinManagementScope(scope, existingLookup.booking);
 
     assertAdminCanOverrideBookingStatus(
       existingLookup.booking,
@@ -746,7 +953,7 @@ export class BookingAdminService {
       changed_at: new Date().toISOString(),
     });
 
-    return this.getBookingById(bookingId);
+    return this.getBookingById(bookingId, actor);
   }
 
   async listScheduleWaitlist(
@@ -754,7 +961,12 @@ export class BookingAdminService {
     status: BookingWaitlistStatus | null = WAITLIST_STATUS_WAITING,
     limit = BOOKING_ADMIN_DEFAULT_LIMIT,
     offset = BOOKING_ADMIN_DEFAULT_OFFSET,
+    actor?: BookingAdminActorContext,
   ): Promise<BookingWaitlistListResult> {
+    const scope = await this.resolveManagementScope(actor);
+
+    await this.assertScheduleWithinManagementScope(scope, scheduleId);
+
     const result = await this.bookingRepository.listAdminScheduleWaitlist({
       schedule_id: scheduleId,
       status,
@@ -773,12 +985,15 @@ export class BookingAdminService {
   async removeWaitlistEntry(
     waitlistId: string,
     reason: string | null = null,
+    actor?: BookingAdminActorContext,
   ): Promise<BookingWaitlistListItem> {
+    const scope = await this.resolveManagementScope(actor);
     const lookup = await this.bookingRepository.findWaitlistById({
       waitlist_id: waitlistId,
     });
 
     assertWaitlistEntryExists(lookup.waitlist);
+    this.assertWaitlistWithinManagementScope(scope, lookup.waitlist);
     assertWaitlistCanBeRemoved(lookup.waitlist);
 
     await this.bookingRepository.removeWaitlistEntry({
@@ -802,6 +1017,20 @@ export class BookingAdminService {
     }
 
     return this.toBookingListItem(lookup.booking);
+  }
+
+  private async getRequiredBookingOrderRow(
+    bookingOrderId: string,
+  ): Promise<BookingOrderHydratedRow> {
+    const lookup = await this.bookingRepository.findBookingOrderById({
+      booking_order_id: bookingOrderId,
+    });
+
+    if (!lookup.booking_order) {
+      throw AppError.bookingOrderNotFound();
+    }
+
+    return lookup.booking_order;
   }
 
   private async getRequiredPrivateBookingListItem(
@@ -835,6 +1064,7 @@ export class BookingAdminService {
 
   private buildAdminBookingFilters(
     dto: ListAdminBookingsQueryDto,
+    scope: ResolvedBookingManagementScope,
   ): BookingAdminListFilters {
     return {
       search: dto.search ?? null,
@@ -842,8 +1072,12 @@ export class BookingAdminService {
       payment_status: dto.payment_status ?? null,
       schedule_id: dto.schedule_id ?? null,
       class_id: dto.class_id ?? null,
-      trainer_staff_profile_id: dto.trainer_staff_profile_id ?? null,
+      trainer_staff_profile_id:
+        BookingAccessPolicy.isTrainerScopedManagementScope(scope)
+          ? scope.trainer_staff_profile_id
+          : (dto.trainer_staff_profile_id ?? null),
       user_id: dto.user_id ?? null,
+      booking_order_id: null,
       from_date: dto.from_date ?? null,
       to_date: dto.to_date ?? null,
       limit: dto.limit,
@@ -883,6 +1117,17 @@ export class BookingAdminService {
     };
   }
 
+  private toBookingOrderDetail(
+    row: BookingOrderHydratedRow,
+  ): BookingOrderDetail {
+    return {
+      ...this.toBookingOrderSummary(row),
+      items: (row.booking_order_items ?? []).map((item) =>
+        this.toBookingOrderItemSummary(item),
+      ),
+    };
+  }
+
   private toPrivateBookingDetail(
     row: PrivateBookingHydratedRow,
     history: readonly PrivateBookingHistoryEntry[],
@@ -900,6 +1145,78 @@ export class BookingAdminService {
       class: this.toClassSnapshot(row.pilates_classes ?? null),
       schedule: this.toScheduleSnapshot(row.pilates_class_schedules ?? null),
       trainer: this.toTrainerSnapshot(row.staff_profiles ?? null),
+    };
+  }
+
+  private toBookingOrderSummary(
+    row: BookingOrderHydratedRow,
+  ): BookingOrderSummary {
+    const latestPayment = toPaymentSummary(
+      getLatestHydratedPayment(row.payments),
+      'booking_order',
+    );
+    const lifecycleRecord = this.toBookingOrderLifecycleRecord(row);
+    const paymentState = buildPaymentStateSnapshot({
+      booking_status: row.status,
+      payment_required: row.payment_required,
+      payment_status: row.payment_status,
+      seat_hold_expires_at: row.expires_at,
+      latest_payment: latestPayment,
+    });
+
+    return {
+      id: row.id,
+      order_number: row.order_number,
+      customer_user_id: row.customer_user_id,
+      status: row.status,
+      payment_status: row.payment_status,
+      payment_required: row.payment_required,
+      total_amount: row.total_amount,
+      currency: row.currency,
+      booking_count: row.booking_count,
+      checkout_required:
+        BookingOrderLifecyclePolicy.resolveCheckoutRequired(lifecycleRecord),
+      idempotency_key: row.idempotency_key,
+      created_by_user_id: row.created_by_user_id,
+      created_by_admin_id: row.created_by_admin_id,
+      created_by_staff_profile_id: row.created_by_staff_profile_id,
+      created_by_role: row.created_by_role,
+      admin_notes: row.admin_notes,
+      metadata: row.metadata,
+      expires_at: row.expires_at,
+      paid_at: row.paid_at,
+      expired_at: row.expired_at,
+      cancelled_at: row.cancelled_at,
+      refunded_at: row.refunded_at,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      realtime_version: row.realtime_version,
+      payment_state: paymentState,
+      latest_payment: latestPayment,
+      customer: this.toSafeUserSnapshot(row.app_users ?? null),
+    };
+  }
+
+  private toBookingOrderItemSummary(
+    row: BookingOrderItemHydratedRow,
+  ): BookingOrderItemSummary {
+    return {
+      id: row.id,
+      booking_order_id: row.booking_order_id,
+      booking_id: row.booking_id,
+      schedule_id: row.schedule_id,
+      class_id: row.class_id,
+      trainer_staff_profile_id: row.trainer_staff_profile_id,
+      price_amount: row.price_amount,
+      currency: row.currency,
+      status: row.status,
+      created_at: row.created_at,
+      booking: row.bookings ? this.toBookingListItem(row.bookings) : null,
+      class: this.toClassSnapshot(row.pilates_classes ?? null),
+      schedule: this.toScheduleSnapshot(row.pilates_class_schedules ?? null),
+      trainer: this.toBookingOrderItemTrainerSnapshot(
+        row.staff_profiles ?? null,
+      ),
     };
   }
 
@@ -933,6 +1250,7 @@ export class BookingAdminService {
       schedule_id: row.schedule_id,
       class_id: row.class_id,
       trainer_staff_profile_id: row.trainer_staff_profile_id,
+      booking_order_id: row.booking_order_id,
       status: row.status,
       source: row.source,
       payment_status: row.payment_status,
@@ -1159,6 +1477,42 @@ export class BookingAdminService {
     };
   }
 
+  private toBookingOrderStaffSnapshot(
+    row: BookingOrderHydratedStaffProfile | null,
+  ): BookingTrainerSnapshot | null {
+    if (!row) {
+      return null;
+    }
+
+    return {
+      staff_profile_id: row.id,
+      app_user_id: row.app_user_id,
+      display_name: row.display_name,
+      post_title: row.post_title,
+      email: row.app_users?.email ?? null,
+      phone: row.app_users?.phone ?? null,
+      avatar_path: row.app_users?.avatar_path ?? null,
+    };
+  }
+
+  private toBookingOrderItemTrainerSnapshot(
+    row: BookingOrderItemHydratedStaffProfile | null,
+  ): BookingTrainerSnapshot | null {
+    if (!row) {
+      return null;
+    }
+
+    return {
+      staff_profile_id: row.id,
+      app_user_id: row.app_user_id,
+      display_name: row.display_name,
+      post_title: row.post_title,
+      email: row.app_users?.email ?? null,
+      phone: row.app_users?.phone ?? null,
+      avatar_path: row.app_users?.avatar_path ?? null,
+    };
+  }
+
   private toPrivateTrainerSnapshot(
     row: PrivateBookingHydratedStaffProfile | null,
   ): BookingTrainerSnapshot | null {
@@ -1193,6 +1547,130 @@ export class BookingAdminService {
     };
   }
 
+  private toBookingOrderLifecycleRecord(
+    row: BookingOrderHydratedRow,
+  ): BookingOrderLifecycleRecord {
+    return {
+      id: row.id,
+      order_number: row.order_number,
+      customer_user_id: row.customer_user_id,
+      status: row.status,
+      payment_status: row.payment_status,
+      payment_required: row.payment_required,
+      total_amount: row.total_amount,
+      currency: row.currency,
+      booking_count: row.booking_count,
+      expires_at: row.expires_at,
+      paid_at: row.paid_at,
+      expired_at: row.expired_at,
+      cancelled_at: row.cancelled_at,
+      refunded_at: row.refunded_at,
+    };
+  }
+
+  private async resolveManagementScope(
+    actor?: BookingAdminActorContext,
+  ): Promise<ResolvedBookingManagementScope> {
+    const effectiveActor = actor ?? LEGACY_ADMIN_ACTOR_CONTEXT;
+
+    if (effectiveActor.role === AUTH_TRAINER_ROLE) {
+      const trainer =
+        await this.staffRepository.getActiveTrainerStaffProfileByAppUserId({
+          appUserId: effectiveActor.user_id,
+        });
+
+      return BookingAccessPolicy.resolveManagementScope({
+        actor_user_id: effectiveActor.user_id,
+        actor_role: effectiveActor.role,
+        trainer_staff_profile_id: trainer.profile.id,
+      });
+    }
+
+    return BookingAccessPolicy.resolveManagementScope({
+      actor_user_id: effectiveActor.user_id,
+      actor_role: effectiveActor.role,
+      trainer_staff_profile_id: null,
+    });
+  }
+
+  private assertBookingWithinManagementScope(
+    scope: ResolvedBookingManagementScope,
+    booking: BookingHydratedRow,
+  ): void {
+    BookingAccessPolicy.assertBookingTargetWithinManagementScope({
+      scope,
+      target: {
+        booking_id: booking.id,
+        schedule_id: booking.schedule_id,
+        trainer_staff_profile_id: booking.trainer_staff_profile_id,
+      },
+    });
+  }
+
+  private assertBookingOrderWithinManagementScope(
+    scope: ResolvedBookingManagementScope,
+    bookingOrder: BookingOrderHydratedRow,
+  ): void {
+    if (BookingAccessPolicy.isFullManagementScope(scope)) {
+      return;
+    }
+
+    const orderItems = bookingOrder.booking_order_items ?? [];
+
+    BookingAccessPolicy.assertScheduleScopesWithinManagementScope({
+      scope,
+      requested_schedule_ids: orderItems.map((item) => item.schedule_id),
+      schedule_scopes: orderItems.map((item) => ({
+        schedule_id: item.schedule_id,
+        trainer_staff_profile_id: item.trainer_staff_profile_id,
+      })),
+    });
+  }
+
+  private async assertScheduleWithinManagementScope(
+    scope: ResolvedBookingManagementScope,
+    scheduleId: string,
+  ): Promise<void> {
+    if (BookingAccessPolicy.isFullManagementScope(scope)) {
+      return;
+    }
+
+    const scheduleScopes = await this.bookingRepository.findScheduleScopesByIds(
+      {
+        schedule_ids: [scheduleId],
+      },
+    );
+
+    if (scheduleScopes.length === 0) {
+      throw AppError.bookingScheduleNotFound(
+        'The requested Pilates schedule was not found.',
+        {
+          schedule_id: scheduleId,
+        },
+      );
+    }
+
+    BookingAccessPolicy.assertCalendarScheduleWithinManagementScope(
+      scope,
+      scheduleScopes[0],
+    );
+  }
+
+  private assertWaitlistWithinManagementScope(
+    scope: ResolvedBookingManagementScope,
+    waitlist: BookingWaitlistHydratedRow,
+  ): void {
+    BookingAccessPolicy.assertWaitlistTargetWithinManagementScope({
+      scope,
+      target: {
+        waitlist_id: waitlist.id,
+        schedule_id: waitlist.schedule_id,
+        trainer_staff_profile_id:
+          waitlist.pilates_class_schedules?.trainer_staff_profile_id ?? null,
+      },
+    });
+  }
+
   private resolveCancelActionResult(
     value: string,
   ): BookingCancelResult['result'] {
@@ -1220,6 +1698,21 @@ export class BookingAdminService {
 
     throw AppError.bookingDatabaseTransactionFailed(
       new Error(`Unexpected reschedule booking RPC action result: ${value}`),
+    );
+  }
+
+  private resolveBookingOrderCreateActionResult(
+    value: string,
+  ): BookingBulkCreateResult['result'] {
+    if (
+      value === BOOKING_ORDER_RPC_ACTION_CREATED_ORDER ||
+      value === BOOKING_ORDER_RPC_ACTION_EXISTING_ORDER
+    ) {
+      return value;
+    }
+
+    throw AppError.bookingDatabaseTransactionFailed(
+      new Error(`Unexpected create booking order RPC action result: ${value}`),
     );
   }
 
@@ -1292,7 +1785,7 @@ export class BookingAdminService {
     }
 
     throw AppError.invalidRequest(
-      'user_id is required for admin-created private trainer booking.',
+      'customer_user_id is required for admin-created booking.',
     );
   }
 }

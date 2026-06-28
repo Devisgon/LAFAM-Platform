@@ -346,6 +346,114 @@ export type AdminReschedulePrivateBookingPayload = {
   target_start_time: string;
 };
 
+export type CreateAdminBulkBookingPayload = {
+  customer_user_id: string;
+  schedule_ids: string[];
+  idempotency_key?: string;
+  admin_notes?: string;
+};
+
+export type AdminBookingOrderStatus =
+  | "pending_payment"
+  | "confirmed"
+  | "cancelled"
+  | "expired"
+  | "refunded";
+
+export type AdminBookingOrderItemStatus =
+  | "pending_payment"
+  | "confirmed"
+  | "cancelled"
+  | "expired";
+
+export type AdminBookingOrderItem = {
+  id: string;
+  booking_order_id: string;
+  booking_id: string;
+  schedule_id: string;
+  class_id: string;
+  trainer_staff_profile_id: string | null;
+  price_amount: number;
+  currency: "KWD";
+  status: AdminBookingOrderItemStatus | string;
+  created_at: string;
+  booking?: AdminBooking | null;
+  class?: AdminBookingClass | null;
+  schedule?: AdminBookingSchedule | null;
+  trainer?: AdminBookingTrainer | null;
+};
+
+export type AdminBookingOrderSummary = {
+  id: string;
+  order_number: string;
+  customer_user_id: string;
+  status: AdminBookingOrderStatus | string;
+  payment_status: AdminBookingPaymentStatus;
+  payment_required: boolean;
+  total_amount: number;
+  currency: "KWD";
+  booking_count: number;
+  checkout_required: boolean;
+  idempotency_key: string | null;
+  admin_notes: string | null;
+  expires_at: string;
+  paid_at: string | null;
+  expired_at: string | null;
+  cancelled_at: string | null;
+  refunded_at: string | null;
+  created_at: string;
+  updated_at: string;
+  realtime_version: number;
+  customer?: AdminBookingCustomer | null;
+};
+
+export type AdminBookingOrderDetail = AdminBookingOrderSummary & {
+  items: AdminBookingOrderItem[];
+};
+
+export type AdminBulkBookingResult = {
+  result: string;
+  booking_order: AdminBookingOrderSummary;
+  items: AdminBookingOrderItem[];
+  checkout_required: boolean;
+};
+
+export type AdminWaitlistEntryStatus =
+  | "waiting"
+  | "promoted"
+  | "converted"
+  | "cancelled"
+  | "expired"
+  | "removed";
+
+export type AdminWaitlistEntry = {
+  id: string;
+  user_id: string;
+  schedule_id: string;
+  class_id: string;
+  trainer_staff_profile_id: string | null;
+  status: AdminWaitlistEntryStatus | string;
+  position: number;
+  joined_at: string;
+  promoted_at: string | null;
+  converted_booking_id: string | null;
+  promotion_expires_at: string | null;
+  cancelled_at: string | null;
+  expired_at: string | null;
+  removed_at: string | null;
+  customer: AdminBookingCustomer | null;
+  class: AdminBookingClass | null;
+  schedule: AdminBookingSchedule | null;
+  trainer: AdminBookingTrainer | null;
+};
+
+export type AdminWaitlistResult = {
+  waitlist: AdminWaitlistEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 function appendOptionalParams(
   params: URLSearchParams,
   filters: Array<[string, string | undefined]>,
@@ -507,6 +615,49 @@ export const adminBookingsClient = {
       method: "POST",
       body: JSON.stringify(payload),
     });
+
+    return response.data;
+  },
+
+  async createBulkBooking(
+    payload: CreateAdminBulkBookingPayload,
+  ): Promise<AdminBulkBookingResult> {
+    const response = await authFetch<ApiResponse<AdminBulkBookingResult>>(
+      "/admin/bookings/bulk",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    );
+
+    return response.data;
+  },
+
+  async getBookingOrder(
+    bookingOrderId: string,
+  ): Promise<AdminBookingOrderDetail> {
+    const response = await authFetch<ApiResponse<AdminBookingOrderDetail>>(
+      `/admin/bookings/orders/${encodeURIComponent(bookingOrderId)}`,
+      { method: "GET" },
+    );
+
+    return response.data;
+  },
+
+  async listScheduleWaitlist(scheduleId: string): Promise<AdminWaitlistResult> {
+    const response = await authFetch<ApiResponse<AdminWaitlistResult>>(
+      `/admin/pilates/schedules/${encodeURIComponent(scheduleId)}/waitlist`,
+      { method: "GET" },
+    );
+
+    return response.data;
+  },
+
+  async removeWaitlistEntry(waitlistId: string): Promise<AdminWaitlistEntry> {
+    const response = await authFetch<ApiResponse<AdminWaitlistEntry>>(
+      `/admin/bookings/waitlist/${encodeURIComponent(waitlistId)}`,
+      { method: "DELETE" },
+    );
 
     return response.data;
   },

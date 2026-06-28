@@ -1,3 +1,10 @@
-import { RoleGuard } from "@/components/guards";
+import { PermissionGuard } from "@/components/guards/PermissionGuard";
 import { StaffDirectory } from "@/modules/staff";
-export default function StaffPage() { return <RoleGuard allowedRoles={["admin", "super_admin"]}><StaffDirectory /></RoleGuard>; }
+
+export default function StaffPage() {
+  return (
+    <PermissionGuard route="/staff">
+      <StaffDirectory />
+    </PermissionGuard>
+  );
+}

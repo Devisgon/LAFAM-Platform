@@ -14,6 +14,12 @@ export type ClassCardItem = {
   status?: string;
 };
 
+export type ClassCardBookingSummary = {
+  availableSeats: number;
+  bookedCount: number;
+  capacity: number;
+};
+
 function label(value: string): string {
   return value
     .replaceAll("_", " ")
@@ -37,10 +43,12 @@ function price(item: ClassCardItem): string {
 export function ClassCard({
   actionHref,
   actionLabel,
+  bookingSummary,
   item,
 }: {
   actionHref: string;
   actionLabel: string;
+  bookingSummary?: ClassCardBookingSummary;
   item: ClassCardItem;
 }) {
   return (
@@ -74,6 +82,17 @@ export function ClassCard({
               <Badge tone="success">Available</Badge>
             )}
             <span className="text-xs text-txt-secondary">Pilates</span>
+            {bookingSummary ? (
+              <>
+                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-txt-primary">
+                  {bookingSummary.availableSeats}{" "}
+                  {bookingSummary.availableSeats === 1 ? "seat" : "seats"} left
+                </span>
+                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-txt-primary">
+                  {bookingSummary.bookedCount}/{bookingSummary.capacity} booked
+                </span>
+              </>
+            ) : null}
           </div>
           <h3 className="mt-2 text-xl font-bold text-txt-primary">{item.title}</h3>
           <p className="mt-1 line-clamp-2 text-sm text-txt-secondary">

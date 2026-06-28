@@ -5,6 +5,7 @@
  * Role:
  * - Resolves trusted backend-owned payment amounts.
  * - Resolves payable booking targets.
+ * - Resolves payable booking-order targets for bulk Pilates bookings.
  * - Resolves payable private trainer booking targets.
  * - Validates wallet top-up amount boundaries.
  * - Applies basic promo-code discounts server-side.
@@ -13,6 +14,7 @@
  * Important:
  * - Frontend amount is never trusted.
  * - Booking prices come from the booked schedule/class snapshot.
+ * - Booking-order prices come from backend-created booking_order_items.
  * - Private booking prices come from the private booking row.
  * - Wallet top-up amount is customer-provided but strictly bounded.
  * - Promo code discount is recalculated by the backend.
@@ -24,6 +26,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import { AppError } from '../../../common/errors/app-error';
 import { SUPABASE_ADMIN_CLIENT } from '../../../database/database.constants';
 import type {
+  BookingOrderItemRow,
+  BookingOrderRow,
   BookingRow,
   DatabaseJsonObject,
   LAFAMSupabaseClient,
@@ -32,6 +36,8 @@ import type {
   PrivateTrainerBookingRow,
 } from '../../../database/database.types';
 import {
+  BOOKING_ORDER_ITEM_STATUS_PENDING_PAYMENT,
+  BOOKING_ORDER_STATUS_PENDING_PAYMENT,
   BOOKING_PAYMENT_STATUS_FAILED,
   BOOKING_PAYMENT_STATUS_PAID,
   BOOKING_PAYMENT_STATUS_PENDING,
@@ -47,6 +53,7 @@ import {
   PAYMENT_AMOUNT_MIN,
   PAYMENT_DEFAULT_CURRENCY,
   PAYMENT_TARGET_TYPE_BOOKING,
+  PAYMENT_TARGET_TYPE_BOOKING_ORDER,
   PAYMENT_TARGET_TYPE_PRIVATE_BOOKING,
   PAYMENT_TARGET_TYPE_WALLET_TOP_UP,
   PROMO_CODE_PERCENTAGE_MAX,
@@ -84,6 +91,11 @@ interface BookingTargetPricingContext {
   readonly booking: BookingRow;
   readonly schedule: PilatesClassScheduleRow;
   readonly pilates_class: PilatesClassRow;
+}
+
+interface BookingOrderTargetPricingContext {
+  readonly booking_order: BookingOrderRow;
+  readonly items: readonly BookingOrderItemRow[];
 }
 
 const PAYMENT_AMOUNT_SCALE = 10 ** PAYMENT_AMOUNT_DECIMAL_PLACES;
@@ -288,6 +300,76 @@ function calculatePromoDiscount(
   });
 }
 
+function sumBookingOrderItems(
+  bookingOrder: BookingOrderRow,
+  items: readonly BookingOrderItemRow[],
+): number {
+  if (items.length === 0) {
+    throw AppError.paymentTargetInvalid(
+      'Booking order payment target has no order items.',
+      {
+        booking_order_id: bookingOrder.id,
+      },
+    );
+  }
+
+  const totalAmount = items.reduce((sum, item) => {
+    if (item.booking_order_id !== bookingOrder.id) {
+      throw AppError.paymentTargetInvalid(
+        'Booking order item does not belong to the requested booking order.',
+        {
+          booking_order_id: bookingOrder.id,
+          item_id: item.id,
+          item_booking_order_id: item.booking_order_id,
+        },
+      );
+    }
+
+    if (item.status !== BOOKING_ORDER_ITEM_STATUS_PENDING_PAYMENT) {
+      throw AppError.paymentNotPayable(
+        'Only pending-payment booking order items can be paid.',
+        {
+          booking_order_id: bookingOrder.id,
+          item_id: item.id,
+          item_status: item.status,
+        },
+      );
+    }
+
+    const itemCurrency = normalizeCurrency(item.currency, {
+      booking_order_id: bookingOrder.id,
+      item_id: item.id,
+      schedule_id: item.schedule_id,
+    });
+
+    const orderCurrency = normalizeCurrency(bookingOrder.currency, {
+      booking_order_id: bookingOrder.id,
+    });
+
+    if (itemCurrency !== orderCurrency) {
+      throw AppError.paymentCurrencyUnsupported(
+        'Booking order item currency does not match order currency.',
+        {
+          booking_order_id: bookingOrder.id,
+          item_id: item.id,
+          item_currency: itemCurrency,
+          order_currency: orderCurrency,
+        },
+      );
+    }
+
+    assertAmountRange(item.price_amount, {
+      booking_order_id: bookingOrder.id,
+      item_id: item.id,
+      schedule_id: item.schedule_id,
+    });
+
+    return sum + item.price_amount;
+  }, 0);
+
+  return roundPaymentAmount(totalAmount);
+}
+
 @Injectable()
 export class PaymentPricingService {
   constructor(
@@ -349,6 +431,10 @@ export class PaymentPricingService {
       return this.resolvePrivateBookingTargetAmount(input);
     }
 
+    if (input.target_type === PAYMENT_TARGET_TYPE_BOOKING_ORDER) {
+      return this.resolveBookingOrderTargetAmount(input);
+    }
+
     if (input.target_type === PAYMENT_TARGET_TYPE_WALLET_TOP_UP) {
       return this.resolveWalletTopUpTargetAmount(input);
     }
@@ -370,13 +456,14 @@ export class PaymentPricingService {
       );
     }
 
-    if (hasText(input.private_booking_id)) {
+    if (hasText(input.private_booking_id) || hasText(input.booking_order_id)) {
       throw AppError.paymentTargetInvalid(
-        'private_booking_id is not allowed for booking payment.',
+        'Only booking_id is allowed for booking payment.',
         {
           target_type: input.target_type,
           booking_id: input.booking_id,
-          private_booking_id: input.private_booking_id,
+          private_booking_id: input.private_booking_id ?? null,
+          booking_order_id: input.booking_order_id ?? null,
         },
       );
     }
@@ -414,6 +501,7 @@ export class PaymentPricingService {
         target_type: PAYMENT_TARGET_TYPE_BOOKING,
         booking_id: context.booking.id,
         private_booking_id: null,
+        booking_order_id: null,
       },
       amount,
       currency,
@@ -432,13 +520,14 @@ export class PaymentPricingService {
       );
     }
 
-    if (hasText(input.booking_id)) {
+    if (hasText(input.booking_id) || hasText(input.booking_order_id)) {
       throw AppError.paymentTargetInvalid(
-        'booking_id is not allowed for private booking payment.',
+        'Only private_booking_id is allowed for private booking payment.',
         {
           target_type: input.target_type,
-          booking_id: input.booking_id,
+          booking_id: input.booking_id ?? null,
           private_booking_id: input.private_booking_id,
+          booking_order_id: input.booking_order_id ?? null,
         },
       );
     }
@@ -466,6 +555,77 @@ export class PaymentPricingService {
         target_type: PAYMENT_TARGET_TYPE_PRIVATE_BOOKING,
         booking_id: null,
         private_booking_id: privateBooking.id,
+        booking_order_id: null,
+      },
+      amount,
+      currency,
+    };
+  }
+
+  private async resolveBookingOrderTargetAmount(
+    input: PaymentPriceResolutionInput,
+  ): Promise<PaymentTargetAmountResolution> {
+    if (!hasText(input.booking_order_id)) {
+      throw AppError.paymentTargetInvalid(
+        'booking_order_id is required for booking order payment.',
+        {
+          target_type: input.target_type,
+        },
+      );
+    }
+
+    if (hasText(input.booking_id) || hasText(input.private_booking_id)) {
+      throw AppError.paymentTargetInvalid(
+        'Only booking_order_id is allowed for booking order payment.',
+        {
+          target_type: input.target_type,
+          booking_id: input.booking_id ?? null,
+          private_booking_id: input.private_booking_id ?? null,
+          booking_order_id: input.booking_order_id,
+        },
+      );
+    }
+
+    const context = await this.getBookingOrderPricingContext(
+      input.booking_order_id,
+    );
+
+    this.assertBookingOrderPayable(context.booking_order, input.user_id);
+
+    const currency = normalizeCurrency(context.booking_order.currency, {
+      target_type: input.target_type,
+      booking_order_id: context.booking_order.id,
+    });
+
+    const amount = sumBookingOrderItems(context.booking_order, context.items);
+
+    assertAmountRange(amount, {
+      target_type: input.target_type,
+      booking_order_id: context.booking_order.id,
+    });
+
+    const orderTotalAmount = roundPaymentAmount(
+      context.booking_order.total_amount,
+    );
+
+    if (orderTotalAmount !== amount) {
+      throw AppError.paymentAmountInvalid(
+        'Booking order total does not match its order items.',
+        {
+          target_type: input.target_type,
+          booking_order_id: context.booking_order.id,
+          order_total_amount: orderTotalAmount,
+          item_total_amount: amount,
+        },
+      );
+    }
+
+    return {
+      target: {
+        target_type: PAYMENT_TARGET_TYPE_BOOKING_ORDER,
+        booking_id: null,
+        private_booking_id: null,
+        booking_order_id: context.booking_order.id,
       },
       amount,
       currency,
@@ -475,13 +635,18 @@ export class PaymentPricingService {
   private resolveWalletTopUpTargetAmount(
     input: PaymentPriceResolutionInput,
   ): PaymentTargetAmountResolution {
-    if (hasText(input.booking_id) || hasText(input.private_booking_id)) {
+    if (
+      hasText(input.booking_id) ||
+      hasText(input.private_booking_id) ||
+      hasText(input.booking_order_id)
+    ) {
       throw AppError.paymentTargetInvalid(
         'Booking identifiers are not allowed for wallet top-up payment.',
         {
           target_type: input.target_type,
           booking_id: input.booking_id ?? null,
           private_booking_id: input.private_booking_id ?? null,
+          booking_order_id: input.booking_order_id ?? null,
         },
       );
     }
@@ -516,6 +681,7 @@ export class PaymentPricingService {
         target_type: PAYMENT_TARGET_TYPE_WALLET_TOP_UP,
         booking_id: null,
         private_booking_id: null,
+        booking_order_id: null,
       },
       amount,
       currency,
@@ -548,6 +714,18 @@ export class PaymentPricingService {
     };
   }
 
+  private async getBookingOrderPricingContext(
+    bookingOrderId: string,
+  ): Promise<BookingOrderTargetPricingContext> {
+    const bookingOrder = await this.getBookingOrder(bookingOrderId);
+    const items = await this.getBookingOrderItems(bookingOrderId);
+
+    return {
+      booking_order: bookingOrder,
+      items,
+    };
+  }
+
   private async getBooking(bookingId: string): Promise<BookingRow> {
     const { data, error } = await this.adminClient
       .from('bookings')
@@ -569,6 +747,49 @@ export class PaymentPricingService {
     }
 
     return data;
+  }
+
+  private async getBookingOrder(
+    bookingOrderId: string,
+  ): Promise<BookingOrderRow> {
+    const { data, error } = await this.adminClient
+      .from('booking_orders')
+      .select('*')
+      .eq('id', bookingOrderId)
+      .maybeSingle();
+
+    if (error) {
+      throw AppError.databaseOperationFailed(error);
+    }
+
+    if (!data) {
+      throw AppError.paymentTargetInvalid(
+        'Booking order payment target was not found.',
+        {
+          booking_order_id: bookingOrderId,
+        },
+      );
+    }
+
+    return data;
+  }
+
+  private async getBookingOrderItems(
+    bookingOrderId: string,
+  ): Promise<readonly BookingOrderItemRow[]> {
+    const { data, error } = await this.adminClient
+      .from('booking_order_items')
+      .select('*')
+      .eq('booking_order_id', bookingOrderId)
+      .order('created_at', {
+        ascending: true,
+      });
+
+    if (error) {
+      throw AppError.databaseOperationFailed(error);
+    }
+
+    return data ?? [];
   }
 
   private async getPrivateBooking(
@@ -706,6 +927,71 @@ export class PaymentPricingService {
     assertSeatHoldStillValid(booking.seat_hold_expires_at, {
       booking_id: booking.id,
       target_type: PAYMENT_TARGET_TYPE_BOOKING,
+    });
+  }
+
+  private assertBookingOrderPayable(
+    bookingOrder: BookingOrderRow,
+    userId: string,
+  ): void {
+    if (bookingOrder.customer_user_id !== userId) {
+      throw AppError.paymentAccessDenied(
+        'You are not allowed to pay for this booking order.',
+        {
+          booking_order_id: bookingOrder.id,
+          user_id: userId,
+        },
+      );
+    }
+
+    if (!bookingOrder.payment_required) {
+      throw AppError.paymentNotPayable(
+        'This booking order does not require payment.',
+        {
+          booking_order_id: bookingOrder.id,
+          payment_required: bookingOrder.payment_required,
+          payment_status: bookingOrder.payment_status,
+        },
+      );
+    }
+
+    if (bookingOrder.status !== BOOKING_ORDER_STATUS_PENDING_PAYMENT) {
+      throw AppError.paymentNotPayable(
+        'Only pending-payment booking orders can be paid.',
+        {
+          booking_order_id: bookingOrder.id,
+          booking_order_status: bookingOrder.status,
+          payment_status: bookingOrder.payment_status,
+        },
+      );
+    }
+
+    if (bookingOrder.payment_status === BOOKING_PAYMENT_STATUS_PAID) {
+      throw AppError.paymentAlreadyPaid(
+        'This booking order has already been paid.',
+        {
+          booking_order_id: bookingOrder.id,
+          payment_status: bookingOrder.payment_status,
+        },
+      );
+    }
+
+    if (
+      bookingOrder.payment_status !== BOOKING_PAYMENT_STATUS_PENDING &&
+      bookingOrder.payment_status !== BOOKING_PAYMENT_STATUS_FAILED
+    ) {
+      throw AppError.paymentNotPayable(
+        'Booking order payment status is not payable.',
+        {
+          booking_order_id: bookingOrder.id,
+          payment_status: bookingOrder.payment_status,
+        },
+      );
+    }
+
+    assertSeatHoldStillValid(bookingOrder.expires_at, {
+      booking_order_id: bookingOrder.id,
+      target_type: PAYMENT_TARGET_TYPE_BOOKING_ORDER,
     });
   }
 
