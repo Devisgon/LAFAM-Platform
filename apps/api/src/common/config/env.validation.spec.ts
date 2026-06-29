@@ -15,6 +15,15 @@ function createValidEnvironment(
     SUPABASE_SECRET_KEY: 'test-secret-key',
     SENTRY_ENVIRONMENT: 'development',
     SENTRY_TRACES_SAMPLE_RATE: '0.1',
+    REDIS_URL: 'redis://localhost:6379/0',
+    REDIS_QUEUE_PREFIX: 'lafam-api',
+    EMAIL_NOTIFICATIONS_ENABLED: 'false',
+    EMAIL_PROVIDER: 'brevo',
+    EMAIL_OUTBOX_ENABLED: 'true',
+    EMAIL_DEFAULT_LOCALE: 'en',
+    EMAIL_PUBLIC_APP_BASE_URL: 'http://localhost:3000',
+    CUSTOMER_INVITE_TOKEN_TTL_HOURS: '72',
+    CUSTOMER_INVITE_EXPIRING_SOON_HOURS: '24',
     BREVO_SENDER_NAME: 'LAFAM',
     JWT_CLOCK_TOLERANCE_SECONDS: '30',
     REQUEST_BODY_LIMIT: '1mb',
@@ -53,6 +62,19 @@ describe('validateEnvironment', () => {
         dsn: '',
         environment: 'development',
         tracesSampleRate: 0.1,
+      },
+      redis: {
+        url: 'redis://localhost:6379/0',
+        queuePrefix: 'lafam-api',
+      },
+      email: {
+        notificationsEnabled: false,
+        provider: 'brevo',
+        outboxEnabled: true,
+        defaultLocale: 'en',
+        publicAppBaseUrl: 'http://localhost:3000',
+        customerInviteTokenTtlHours: 72,
+        customerInviteExpiringSoonHours: 24,
       },
       brevo: {
         apiKey: '',
@@ -122,6 +144,67 @@ describe('validateEnvironment', () => {
 
     expect(result.auth.guestRequireCaptcha).toBe(true);
     expect(result.auth.guestCleanupEnabled).toBe(false);
+  });
+
+  it('parses Redis configuration', () => {
+    const result = validateEnvironment(
+      createValidEnvironment({
+        REDIS_URL: 'rediss://default:test-password@redis.lafam.test:6380/2',
+        REDIS_QUEUE_PREFIX: 'lafam-api:staging',
+      }),
+    );
+
+    expect(result.redis).toEqual({
+      url: 'rediss://default:test-password@redis.lafam.test:6380/2',
+      queuePrefix: 'lafam-api:staging',
+    });
+  });
+
+  it('parses email notification configuration', () => {
+    const result = validateEnvironment(
+      createValidEnvironment({
+        EMAIL_NOTIFICATIONS_ENABLED: 'true',
+        EMAIL_PROVIDER: 'brevo',
+        EMAIL_OUTBOX_ENABLED: 'false',
+        EMAIL_DEFAULT_LOCALE: 'ar-kw',
+        EMAIL_PUBLIC_APP_BASE_URL: 'https://app.lafam.com',
+        CUSTOMER_INVITE_TOKEN_TTL_HOURS: '96',
+        CUSTOMER_INVITE_EXPIRING_SOON_HOURS: '12',
+        BREVO_API_KEY: 'test-brevo-api-key',
+        BREVO_SENDER_EMAIL: 'notifications@lafam.com',
+        BREVO_SENDER_NAME: 'LAFAM Studio',
+      }),
+    );
+
+    expect(result.email).toEqual({
+      notificationsEnabled: true,
+      provider: 'brevo',
+      outboxEnabled: false,
+      defaultLocale: 'ar-kw',
+      publicAppBaseUrl: 'https://app.lafam.com',
+      customerInviteTokenTtlHours: 96,
+      customerInviteExpiringSoonHours: 12,
+    });
+
+    expect(result.brevo).toEqual({
+      apiKey: 'test-brevo-api-key',
+      senderEmail: 'notifications@lafam.com',
+      senderName: 'LAFAM Studio',
+    });
+  });
+
+  it('allows Brevo credentials to be empty when email notifications are disabled', () => {
+    const result = validateEnvironment(
+      createValidEnvironment({
+        EMAIL_NOTIFICATIONS_ENABLED: 'false',
+        BREVO_API_KEY: '',
+        BREVO_SENDER_EMAIL: '',
+      }),
+    );
+
+    expect(result.email.notificationsEnabled).toBe(false);
+    expect(result.brevo.apiKey).toBe('');
+    expect(result.brevo.senderEmail).toBe('');
   });
 
   it('uses safe Payment defaults for local mock development', () => {
@@ -253,6 +336,157 @@ describe('validateEnvironment', () => {
     ).toThrow('SUPABASE_URL is required.');
   });
 
+  it('rejects missing Redis URL', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          REDIS_URL: '',
+        }),
+      ),
+    ).toThrow('REDIS_URL is required.');
+  });
+
+  it('rejects invalid Redis URL values', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          REDIS_URL: 'not-a-redis-url',
+        }),
+      ),
+    ).toThrow('REDIS_URL must be a valid Redis URL.');
+  });
+
+  it('rejects unsupported Redis URL protocols', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          REDIS_URL: 'http://localhost:6379',
+        }),
+      ),
+    ).toThrow('REDIS_URL must use redis or rediss.');
+  });
+
+  it('rejects empty Redis queue prefixes', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          REDIS_QUEUE_PREFIX: '',
+        }),
+      ),
+    ).toThrow('REDIS_QUEUE_PREFIX is required.');
+  });
+
+  it('rejects invalid Redis queue prefixes', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          REDIS_QUEUE_PREFIX: 'lafam api',
+        }),
+      ),
+    ).toThrow(
+      'REDIS_QUEUE_PREFIX may only contain letters, numbers, colons, underscores, and hyphens.',
+    );
+  });
+
+  it('rejects overly long Redis queue prefixes', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          REDIS_QUEUE_PREFIX: 'a'.repeat(81),
+        }),
+      ),
+    ).toThrow('REDIS_QUEUE_PREFIX must be 80 characters or fewer.');
+  });
+
+  it('rejects invalid email notification enabled boolean value', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          EMAIL_NOTIFICATIONS_ENABLED: 'yes',
+        }),
+      ),
+    ).toThrow('EMAIL_NOTIFICATIONS_ENABLED must be either true or false.');
+  });
+
+  it('rejects invalid email provider values', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          EMAIL_PROVIDER: 'smtp',
+        }),
+      ),
+    ).toThrow('EMAIL_PROVIDER must be one of: brevo.');
+  });
+
+  it('rejects invalid email outbox enabled boolean value', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          EMAIL_OUTBOX_ENABLED: '1',
+        }),
+      ),
+    ).toThrow('EMAIL_OUTBOX_ENABLED must be either true or false.');
+  });
+
+  it('rejects invalid email default locale values', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          EMAIL_DEFAULT_LOCALE: 'english',
+        }),
+      ),
+    ).toThrow(
+      'EMAIL_DEFAULT_LOCALE must be a locale like en, ar, en-us, or ar-kw.',
+    );
+  });
+
+  it('rejects invalid email public app base URL values', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          EMAIL_PUBLIC_APP_BASE_URL: 'not-a-url',
+        }),
+      ),
+    ).toThrow('EMAIL_PUBLIC_APP_BASE_URL must be a valid URL.');
+  });
+
+  it('rejects invalid customer invite token ttl values', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          CUSTOMER_INVITE_TOKEN_TTL_HOURS: '0',
+        }),
+      ),
+    ).toThrow(
+      'CUSTOMER_INVITE_TOKEN_TTL_HOURS must be an integer between 1 and 720.',
+    );
+  });
+
+  it('rejects invalid customer invite expiring-soon values', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          CUSTOMER_INVITE_EXPIRING_SOON_HOURS: '0',
+        }),
+      ),
+    ).toThrow(
+      'CUSTOMER_INVITE_EXPIRING_SOON_HOURS must be an integer between 1 and 168.',
+    );
+  });
+
+  it('rejects customer invite expiring-soon value greater than or equal to invite ttl', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          CUSTOMER_INVITE_TOKEN_TTL_HOURS: '24',
+          CUSTOMER_INVITE_EXPIRING_SOON_HOURS: '24',
+        }),
+      ),
+    ).toThrow(
+      'CUSTOMER_INVITE_EXPIRING_SOON_HOURS must be less than CUSTOMER_INVITE_TOKEN_TTL_HOURS.',
+    );
+  });
+
   it('rejects partial Brevo setup', () => {
     expect(() =>
       validateEnvironment(
@@ -264,6 +498,55 @@ describe('validateEnvironment', () => {
     ).toThrow(
       'BREVO_API_KEY and BREVO_SENDER_EMAIL must be configured together.',
     );
+  });
+
+  it('rejects missing Brevo API key when email notifications are enabled', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          EMAIL_NOTIFICATIONS_ENABLED: 'true',
+          BREVO_API_KEY: '',
+          BREVO_SENDER_EMAIL: 'notifications@lafam.com',
+        }),
+      ),
+    ).toThrow(
+      'BREVO_API_KEY is required when EMAIL_NOTIFICATIONS_ENABLED is true and EMAIL_PROVIDER is brevo.',
+    );
+  });
+
+  it('rejects missing Brevo sender email when email notifications are enabled', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          EMAIL_NOTIFICATIONS_ENABLED: 'true',
+          BREVO_API_KEY: 'test-brevo-key',
+          BREVO_SENDER_EMAIL: '',
+        }),
+      ),
+    ).toThrow(
+      'BREVO_API_KEY and BREVO_SENDER_EMAIL must be configured together.',
+    );
+  });
+
+  it('rejects invalid Brevo sender email values', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          BREVO_API_KEY: 'test-brevo-key',
+          BREVO_SENDER_EMAIL: 'invalid-email',
+        }),
+      ),
+    ).toThrow('BREVO_SENDER_EMAIL must be a valid email address.');
+  });
+
+  it('rejects overly long Brevo sender names', () => {
+    expect(() =>
+      validateEnvironment(
+        createValidEnvironment({
+          BREVO_SENDER_NAME: 'A'.repeat(101),
+        }),
+      ),
+    ).toThrow('BREVO_SENDER_NAME must be 100 characters or fewer.');
   });
 
   it('rejects short Auth access token hash pepper', () => {

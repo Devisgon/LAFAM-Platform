@@ -38,6 +38,8 @@ tags:
     description: Authenticated frontend bootstrapping context endpoint
   - name: Customers - Admin
     description: Protected customer management endpoints for admin, super_admin, staff, and trainer roles.
+  - name: Customers - Public
+    description: Public customer invitation acceptance endpoints.
   - name: Staff - Admin
     description: Protected admin staff and trainer management endpoints
   - name: Pilates - Public
@@ -842,10 +844,49 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/AuthenticationRequired'
+  /customers/invitations/accept:
+    post:
+      summary: Accept customer invitation
+      description: Public endpoint used by an invited customer to set their password and activate their account. The raw invite token is accepted in the request body, hashed by the backend, and never stored.
+      operationId: customerInvitePublicAcceptInvitation
+      tags:
+        - Customers - Public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptCustomerInvitationRequest'
+      responses:
+        '200':
+          description: Customer invitation accepted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInvitationAcceptSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          description: Customer invitation has expired or is no longer usable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Customer invitation acceptance failed because the authentication or notification provider is temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /admin/customers:
     get:
       summary: List customers
-      description: Lists customer records for the admin dashboard. Supports broad search, auth-status filtering, soft-deleted inclusion, and pagination. Requires admin or super_admin.
+      description: Lists customer records for the admin dashboard. Supports broad search, auth-status filtering, soft-deleted inclusion, and pagination. Requires admin, super_admin, staff, or trainer.
       operationId: customerAdminListCustomers
       tags:
         - Customers - Admin
@@ -901,8 +942,8 @@ paths:
         '403':
           $ref: '#/components/responses/AuthorizationDenied'
     post:
-      summary: Create customer
-      description: Creates an active and verified customer account from the admin dashboard. Admin-created customers can log in immediately and do not require email OTP verification.
+      summary: Create customer or invite customer
+      description: Creates a customer from the admin dashboard. If password and confirm_password are provided, the customer is created active/verified and receives a welcome email. If both password fields are omitted, the customer is created with invited status, a customer invitation record is created, and an invite email is queued. Password fields must be provided together or omitted together.
       operationId: customerAdminCreateCustomer
       tags:
         - Customers - Admin
@@ -916,11 +957,11 @@ paths:
               $ref: '#/components/schemas/CreateCustomerRequest'
       responses:
         '201':
-          description: Customer created successfully. The customer can log in immediately.
+          description: Customer created directly or customer invitation created successfully.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomerMutationSuccessResponse'
+                $ref: '#/components/schemas/CustomerCreateSuccessResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -930,7 +971,7 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
         '503':
-          description: Customer login account creation failed because the authentication provider is temporarily unavailable.
+          description: Customer login account creation or notification provider operation failed because a provider is temporarily unavailable.
           content:
             application/json:
               schema:
@@ -979,6 +1020,94 @@ paths:
           $ref: '#/components/responses/AuthorizationDenied'
         '409':
           $ref: '#/components/responses/Conflict'
+
+  /admin/customers/invitations/{invitationId}/resend:
+    post:
+      summary: Resend customer invitation
+      description: Resends a pending or expired customer invitation. If the current pending invite has not expired, it is revoked before a new invitation token is generated. Raw invite tokens are never returned by this API.
+      operationId: customerAdminResendCustomerInvitation
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Customer invitation id from public.customer_invitations.id.
+      responses:
+        '200':
+          description: Customer invitation resent successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInvitationMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          description: Customer invitation cannot be resent because the invite or related customer is no longer usable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Customer invitation resend failed because the notification provider is temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/customers/invitations/{invitationId}/revoke:
+    post:
+      summary: Revoke customer invitation
+      description: Revokes a pending customer invitation. Accepted, expired, or already revoked invitations cannot be revoked again.
+      operationId: customerAdminRevokeCustomerInvitation
+      tags:
+        - Customers - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Customer invitation id from public.customer_invitations.id.
+      responses:
+        '200':
+          description: Customer invitation revoked successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInvitationMutationSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          description: Customer invitation cannot be revoked because it has expired or is no longer usable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /admin/customers/{customerId}:
     get:
@@ -4950,6 +5079,7 @@ components:
       enum:
         - guest_active
         - pending_email_verification
+        - invited
         - active
         - deactivated
         - deleted
@@ -6505,6 +6635,7 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/StaffDeleteData'
+
     CustomerProfile:
       type: object
       required:
@@ -6553,7 +6684,7 @@ components:
           type: string
           maxLength: 32
           example: '2990-1011-2345'
-          description: Admin-visible Civil ID. This value must not be logged or written to audit metadata.
+          description: Admin-visible Civil ID. This value must not be logged or written to audit metadata or notification metadata.
         role:
           type: string
           enum:
@@ -6597,15 +6728,87 @@ components:
           format: date-time
           nullable: true
 
+    CustomerInvitationStatus:
+      type: string
+      enum:
+        - pending
+        - accepted
+        - expired
+        - revoked
+      example: pending
+
+    CustomerInvitation:
+      type: object
+      required:
+        - id
+        - app_user_id
+        - email
+        - status
+        - expires_at
+        - accepted_at
+        - expired_at
+        - revoked_at
+        - created_by_admin_id
+        - accepted_by_app_user_id
+        - revoked_by_admin_id
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Customer invitation id from public.customer_invitations.id.
+        app_user_id:
+          type: string
+          format: uuid
+          description: Related invited customer app user id.
+        email:
+          type: string
+          format: email
+          example: customer@example.com
+        status:
+          $ref: '#/components/schemas/CustomerInvitationStatus'
+        expires_at:
+          type: string
+          format: date-time
+        accepted_at:
+          type: string
+          format: date-time
+          nullable: true
+        expired_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_by_admin_id:
+          type: string
+          format: uuid
+        accepted_by_app_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        revoked_by_admin_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
     CreateCustomerRequest:
       type: object
+      description: Admin customer creation payload. Provide both password and confirm_password to create an active customer immediately. Omit both password fields to create an invited customer and send a password-set invite email.
       required:
         - full_name
         - email
         - phone
         - civil_id
-        - password
-        - confirm_password
       properties:
         full_name:
           type: string
@@ -6635,6 +6838,7 @@ components:
           maxLength: 128
           writeOnly: true
           example: StrongPass123!
+          description: Required together with confirm_password for direct active customer creation. Omit both password fields for invited customer creation.
         confirm_password:
           type: string
           format: password
@@ -6642,11 +6846,41 @@ components:
           maxLength: 128
           writeOnly: true
           example: StrongPass123!
+          description: Must be provided with password and must match password. Omit both password fields for invited customer creation.
         timezone:
           type: string
           nullable: true
           maxLength: 64
           example: Asia/Kuwait
+
+    AcceptCustomerInvitationRequest:
+      type: object
+      required:
+        - token
+        - password
+        - confirm_password
+      properties:
+        token:
+          type: string
+          minLength: 32
+          maxLength: 256
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: Raw customer invitation token from the invite URL. The backend hashes this token before lookup. The raw token is never stored.
+          example: nY0lX3r9PpB6c2YkE3QzZ2wQ6dR8mV1sA9bT4xC7hJ0
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          writeOnly: true
+          example: StrongPass123!
+        confirm_password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          writeOnly: true
+          example: StrongPass123!
 
     UpdateCustomerRequest:
       type: object
@@ -6704,6 +6938,17 @@ components:
         customer:
           $ref: '#/components/schemas/CustomerProfile'
 
+    CustomerInvitationMutationData:
+      type: object
+      required:
+        - customer
+        - invitation
+      properties:
+        customer:
+          $ref: '#/components/schemas/CustomerProfile'
+        invitation:
+          $ref: '#/components/schemas/CustomerInvitation'
+
     CustomerLookupData:
       type: object
       required:
@@ -6752,6 +6997,32 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/CustomerMutationData'
+
+    CustomerInvitationMutationSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CustomerInvitationMutationData'
+
+    CustomerInvitationAcceptSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CustomerInvitationMutationData'
+
+    CustomerCreateSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              oneOf:
+                - $ref: '#/components/schemas/CustomerMutationData'
+                - $ref: '#/components/schemas/CustomerInvitationMutationData'
 
     CustomerLookupSuccessResponse:
       allOf:

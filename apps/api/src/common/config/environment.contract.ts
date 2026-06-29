@@ -22,6 +22,10 @@ export const NODE_ENV_VALUES = [
 
 export type NodeEnvironment = (typeof NODE_ENV_VALUES)[number];
 
+export const EMAIL_PROVIDER_VALUES = ['brevo'] as const;
+
+export type EmailProvider = (typeof EMAIL_PROVIDER_VALUES)[number];
+
 export const PAYMENT_PROVIDER_VALUES = [
   'mock',
   'knet',
@@ -47,6 +51,15 @@ export type EnvironmentVariableName =
   | 'SENTRY_DSN'
   | 'SENTRY_ENVIRONMENT'
   | 'SENTRY_TRACES_SAMPLE_RATE'
+  | 'REDIS_URL'
+  | 'REDIS_QUEUE_PREFIX'
+  | 'EMAIL_NOTIFICATIONS_ENABLED'
+  | 'EMAIL_PROVIDER'
+  | 'EMAIL_OUTBOX_ENABLED'
+  | 'EMAIL_DEFAULT_LOCALE'
+  | 'EMAIL_PUBLIC_APP_BASE_URL'
+  | 'CUSTOMER_INVITE_TOKEN_TTL_HOURS'
+  | 'CUSTOMER_INVITE_EXPIRING_SOON_HOURS'
   | 'BREVO_API_KEY'
   | 'BREVO_SENDER_EMAIL'
   | 'BREVO_SENDER_NAME'
@@ -98,6 +111,21 @@ export interface SentryEnvironment {
   readonly tracesSampleRate: number;
 }
 
+export interface RedisEnvironment {
+  readonly url: string;
+  readonly queuePrefix: string;
+}
+
+export interface EmailEnvironment {
+  readonly notificationsEnabled: boolean;
+  readonly provider: EmailProvider;
+  readonly outboxEnabled: boolean;
+  readonly defaultLocale: string;
+  readonly publicAppBaseUrl: string;
+  readonly customerInviteTokenTtlHours: number;
+  readonly customerInviteExpiringSoonHours: number;
+}
+
 export interface BrevoEnvironment {
   readonly apiKey: string;
   readonly senderEmail: string;
@@ -141,6 +169,8 @@ export interface ValidatedEnvironment {
   readonly app: AppEnvironment;
   readonly supabase: SupabaseEnvironment;
   readonly sentry: SentryEnvironment;
+  readonly redis: RedisEnvironment;
+  readonly email: EmailEnvironment;
   readonly brevo: BrevoEnvironment;
   readonly security: SecurityEnvironment;
   readonly auth: AuthEnvironment;
@@ -158,6 +188,15 @@ export const ENVIRONMENT_VARIABLE_NAMES = [
   'SENTRY_DSN',
   'SENTRY_ENVIRONMENT',
   'SENTRY_TRACES_SAMPLE_RATE',
+  'REDIS_URL',
+  'REDIS_QUEUE_PREFIX',
+  'EMAIL_NOTIFICATIONS_ENABLED',
+  'EMAIL_PROVIDER',
+  'EMAIL_OUTBOX_ENABLED',
+  'EMAIL_DEFAULT_LOCALE',
+  'EMAIL_PUBLIC_APP_BASE_URL',
+  'CUSTOMER_INVITE_TOKEN_TTL_HOURS',
+  'CUSTOMER_INVITE_EXPIRING_SOON_HOURS',
   'BREVO_API_KEY',
   'BREVO_SENDER_EMAIL',
   'BREVO_SENDER_NAME',
@@ -197,6 +236,15 @@ export const REQUIRED_ENVIRONMENT_VARIABLE_NAMES = [
   'SUPABASE_SECRET_KEY',
   'SENTRY_ENVIRONMENT',
   'SENTRY_TRACES_SAMPLE_RATE',
+  'REDIS_URL',
+  'REDIS_QUEUE_PREFIX',
+  'EMAIL_NOTIFICATIONS_ENABLED',
+  'EMAIL_PROVIDER',
+  'EMAIL_OUTBOX_ENABLED',
+  'EMAIL_DEFAULT_LOCALE',
+  'EMAIL_PUBLIC_APP_BASE_URL',
+  'CUSTOMER_INVITE_TOKEN_TTL_HOURS',
+  'CUSTOMER_INVITE_EXPIRING_SOON_HOURS',
   'BREVO_SENDER_NAME',
   'JWT_CLOCK_TOLERANCE_SECONDS',
   'REQUEST_BODY_LIMIT',
@@ -234,6 +282,7 @@ export const SENSITIVE_ENVIRONMENT_VARIABLE_NAMES = [
   'SUPABASE_PUBLISHABLE_KEY',
   'SUPABASE_SECRET_KEY',
   'SENTRY_DSN',
+  'REDIS_URL',
   'BREVO_API_KEY',
   'AUTH_ACCESS_TOKEN_HASH_PEPPER',
   'KNET_MERCHANT_ID',

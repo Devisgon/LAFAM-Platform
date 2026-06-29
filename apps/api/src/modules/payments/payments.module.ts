@@ -14,7 +14,10 @@
  * Important:
  * - This module is the backend composition boundary for payments and wallets.
  * - DatabaseModule provides the Supabase admin client used by repositories/services.
- * - AuthModule provides guards/session enforcement used by protected controllers.
+ * - AuthModule provides guards/session enforcement and user lookup support used by
+ *   protected controllers and payment notification recipient resolution.
+ * - NotificationsModule provides the email outbox/template/provider boundary used
+ *   by verified payment, refund, and wallet-debit state transitions.
  * - Booking-order payment support is handled through PaymentRepository, WalletRepository,
  *   PaymentPricingService, PaymentCheckoutService, and payment/wallet database RPCs.
  * - This module does not import BookingsModule because current payment services do not
@@ -36,6 +39,7 @@ import { Module } from '@nestjs/common';
 
 import { DatabaseModule } from '../../database/database.module';
 import { AuthModule } from '../auth/auth.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { KnetPaymentProviderService } from './application/knet-payment-provider.service';
 import { MockPaymentProviderService } from './application/mock-payment-provider.service';
 import { PaymentAdminService } from './application/payment-admin.service';
@@ -58,7 +62,7 @@ import { PaymentRepository } from './repositories/payment.repository';
 import { WalletRepository } from './repositories/wallet.repository';
 
 @Module({
-  imports: [DatabaseModule, AuthModule],
+  imports: [DatabaseModule, AuthModule, NotificationsModule],
   controllers: [
     PaymentCustomerController,
     PaymentPublicController,

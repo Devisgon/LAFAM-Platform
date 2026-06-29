@@ -29,6 +29,7 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const loginError = error ? "Invalid username or password." : null;
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -51,9 +52,7 @@ function LoginForm() {
 
   return (
     <main className="relative flex h-screen w-full items-center justify-center overflow-hidden px-4 py-10 font-sans text-black">
-      <div
-        className="auth-page-background absolute inset-0 scale-100 bg-cover bg-center blur-sm"
-      />
+      <div className="auth-page-background absolute inset-0 scale-100 bg-cover bg-center blur-sm" />
 
       <div className="absolute inset-0 bg-black/55" />
 
@@ -162,9 +161,9 @@ function LoginForm() {
               </div>
             </div>
 
-            {error ? (
+            {loginError ? (
               <p className="border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-600">
-                {error}
+                {loginError}
               </p>
             ) : null}
 

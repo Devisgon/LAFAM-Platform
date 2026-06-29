@@ -12,8 +12,14 @@
  * - This service does not implement WebSocket/SSE.
  * - This service does not publish events to clients yet.
  * - This service does not mutate booking capacity or lifecycle state.
+ * - This service does not send email notifications directly.
  * - Booking RPC functions already create core database-side events.
  * - Booking-order RPC functions remain the source of truth for order lifecycle state.
+ * - Customer/admin booking services own immediate booking/waitlist/private-booking
+ *   notification outbox side effects after committed mutations.
+ * - Payment receipt, payment success, refund, wallet, and verified payment-state
+ *   emails must be wired from payment/wallet state-transition services, not from
+ *   generic domain-event envelope creation.
  * - Use this service for application-created events and future publisher flows.
  */
 

@@ -107,6 +107,19 @@ export interface CreateCustomerAuthUserWithPasswordInput {
   readonly createdByAdminId: string;
 }
 
+export interface CreateCustomerAuthUserForInviteInput {
+  readonly email: string;
+  readonly fullName: string;
+  readonly phone: string;
+  readonly timezone: string | null;
+  readonly createdByAdminId: string;
+}
+
+export interface SetCustomerInviteAuthUserPasswordInput {
+  readonly authUserId: string;
+  readonly password: string;
+}
+
 export interface VerifyEmailOtpInput {
   readonly email: string;
   readonly otp: string;
@@ -341,6 +354,15 @@ function mapCustomerAuthCreationError(error: unknown): AppError {
   return AppError.customerAuthUserCreationFailed(mappedError);
 }
 
+function mapCustomerInvitePasswordSetError(error: unknown): AppError {
+  const mappedError = mapAuthProviderErrorToAppError({
+    error,
+    flow: 'admin_user_operation',
+  });
+
+  return AppError.customerInviteAcceptFailed(mappedError);
+}
+
 function isMissingAuthUserDuringSoftDelete(error: unknown): boolean {
   const providerError = normalizeAuthProviderError(error);
   const searchText = [
@@ -439,6 +461,32 @@ export class SupabaseAuthRepository {
         phone: input.phone,
         timezone: input.timezone,
         source: 'lafam_admin_customer_create',
+        created_by_admin_id: input.createdByAdminId,
+      },
+    });
+
+    if (error) {
+      throw mapCustomerAuthCreationError(error);
+    }
+
+    return {
+      user: assertSupabaseUser(data.user, 'admin_user_operation'),
+    };
+  }
+
+  async createCustomerAuthUserForInvite(
+    input: CreateCustomerAuthUserForInviteInput,
+  ): Promise<SupabaseAuthUserResult> {
+    const { data, error } = await this.adminClient.auth.admin.createUser({
+      email: input.email,
+      phone: input.phone,
+      email_confirm: true,
+      phone_confirm: true,
+      user_metadata: {
+        full_name: input.fullName,
+        phone: input.phone,
+        timezone: input.timezone,
+        source: 'lafam_admin_customer_invite',
         created_by_admin_id: input.createdByAdminId,
       },
     });
@@ -599,6 +647,25 @@ export class SupabaseAuthRepository {
 
     return {
       user: assertSupabaseUser(data.user, 'reset_password'),
+    };
+  }
+
+  async setCustomerInviteAuthUserPassword(
+    input: SetCustomerInviteAuthUserPasswordInput,
+  ): Promise<SupabaseAuthUserResult> {
+    const { data, error } = await this.adminClient.auth.admin.updateUserById(
+      input.authUserId,
+      {
+        password: input.password,
+      },
+    );
+
+    if (error) {
+      throw mapCustomerInvitePasswordSetError(error);
+    }
+
+    return {
+      user: assertSupabaseUser(data.user, 'admin_user_operation'),
     };
   }
 

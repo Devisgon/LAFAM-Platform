@@ -45,6 +45,7 @@ export type DatabaseAppUserRole =
 export type DatabaseAppUserStatus =
   | 'guest_active'
   | 'pending_email_verification'
+  | 'invited'
   | 'active'
   | 'deactivated'
   | 'deleted';
@@ -230,6 +231,94 @@ export type DatabasePromoCodeStatus =
   | 'inactive'
   | 'expired'
   | 'deleted';
+
+export type DatabaseCustomerInvitationStatus =
+  | 'pending'
+  | 'accepted'
+  | 'expired'
+  | 'revoked';
+
+export type DatabaseEmailNotificationStatus =
+  | 'pending'
+  | 'sending'
+  | 'sent'
+  | 'failed'
+  | 'skipped'
+  | 'cancelled';
+
+export type DatabaseEmailDeliveryAttemptStatus =
+  | 'succeeded'
+  | 'failed'
+  | 'skipped';
+
+export type DatabaseEmailRecipientRole =
+  | 'customer'
+  | 'admin'
+  | 'trainer'
+  | 'staff'
+  | 'system';
+
+export type DatabaseEmailNotificationEvent =
+  | 'customer_invite_created'
+  | 'customer_invite_resent'
+  | 'customer_invite_expiring_soon'
+  | 'customer_invite_expired'
+  | 'customer_invite_accepted'
+  | 'admin_created_customer_with_password_welcome'
+  | 'password_changed'
+  | 'account_deactivated_by_admin'
+  | 'account_reactivated_by_admin'
+  | 'account_deleted_or_closed'
+  | 'booking_created_pending_payment'
+  | 'booking_confirmed_after_payment'
+  | 'booking_cancelled_by_customer'
+  | 'booking_cancelled_by_admin'
+  | 'booking_rescheduled_by_customer'
+  | 'booking_rescheduled_by_admin'
+  | 'booking_completed'
+  | 'booking_marked_no_show'
+  | 'booking_expired_due_to_unpaid_payment'
+  | 'waitlist_joined'
+  | 'waitlist_cancelled_by_customer'
+  | 'waitlist_removed_by_admin'
+  | 'waitlist_promoted_to_booking'
+  | 'waitlist_promotion_payment_required'
+  | 'waitlist_promotion_expiring_soon'
+  | 'waitlist_promotion_expired'
+  | 'class_space_available'
+  | 'payment_checkout_created_optional'
+  | 'payment_success_receipt'
+  | 'payment_failed'
+  | 'payment_cancelled'
+  | 'payment_expired'
+  | 'payment_refunded'
+  | 'payment_refund_failed_or_manual_review_required'
+  | 'payment_duplicate_callback_ignored_admin_only_if_suspicious'
+  | 'wallet_top_up_success'
+  | 'wallet_top_up_failed'
+  | 'wallet_top_up_expired'
+  | 'wallet_booking_debit_success'
+  | 'wallet_refund_credit_success'
+  | 'wallet_admin_adjustment_credit'
+  | 'wallet_admin_adjustment_debit'
+  | 'wallet_low_balance_optional'
+  | 'private_booking_created_pending_payment'
+  | 'private_booking_confirmed_after_payment'
+  | 'private_booking_cancelled_by_customer'
+  | 'private_booking_cancelled_by_admin'
+  | 'private_booking_rescheduled_by_customer'
+  | 'private_booking_rescheduled_by_admin'
+  | 'private_booking_reminder_24_hours_before'
+  | 'private_booking_reminder_2_hours_before'
+  | 'private_booking_refunded'
+  | 'private_booking_expired_due_to_unpaid_payment'
+  | 'trainer_account_created_with_password'
+  | 'trainer_availability_updated'
+  | 'trainer_assigned_to_class'
+  | 'trainer_removed_from_class'
+  | 'trainer_schedule_changed'
+  | 'trainer_booking_cancelled'
+  | 'trainer_daily_schedule_summary';
 
 export interface Database {
   public: {
@@ -524,6 +613,264 @@ export interface Database {
             columns: ['updated_by_admin_id'];
             isOneToOne: false;
             referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      customer_invitations: {
+        Row: {
+          id: string;
+          app_user_id: string;
+          customer_profile_id: string;
+          email: string;
+          token_hash: string;
+          status: DatabaseCustomerInvitationStatus;
+          invited_by_admin_id: string | null;
+          revoked_by_admin_id: string | null;
+          invited_at: string;
+          expires_at: string;
+          accepted_at: string | null;
+          expired_at: string | null;
+          revoked_at: string | null;
+          resend_count: number;
+          last_sent_at: string | null;
+          revoked_reason: string | null;
+          metadata: DatabaseJsonObject;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          app_user_id: string;
+          customer_profile_id: string;
+          email: string;
+          token_hash: string;
+          status?: DatabaseCustomerInvitationStatus;
+          invited_by_admin_id?: string | null;
+          revoked_by_admin_id?: string | null;
+          invited_at?: string;
+          expires_at: string;
+          accepted_at?: string | null;
+          expired_at?: string | null;
+          revoked_at?: string | null;
+          resend_count?: number;
+          last_sent_at?: string | null;
+          revoked_reason?: string | null;
+          metadata?: DatabaseJsonObject;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          app_user_id?: string;
+          customer_profile_id?: string;
+          email?: string;
+          token_hash?: string;
+          status?: DatabaseCustomerInvitationStatus;
+          invited_by_admin_id?: string | null;
+          revoked_by_admin_id?: string | null;
+          invited_at?: string;
+          expires_at?: string;
+          accepted_at?: string | null;
+          expired_at?: string | null;
+          revoked_at?: string | null;
+          resend_count?: number;
+          last_sent_at?: string | null;
+          revoked_reason?: string | null;
+          metadata?: DatabaseJsonObject;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'customer_invitations_app_user_id_fkey';
+            columns: ['app_user_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'customer_invitations_customer_profile_id_fkey';
+            columns: ['customer_profile_id'];
+            isOneToOne: false;
+            referencedRelation: 'customer_profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'customer_invitations_invited_by_admin_id_fkey';
+            columns: ['invited_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'customer_invitations_revoked_by_admin_id_fkey';
+            columns: ['revoked_by_admin_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      email_notifications: {
+        Row: {
+          id: string;
+          event_type: DatabaseEmailNotificationEvent;
+          recipient_role: DatabaseEmailRecipientRole;
+          recipient_app_user_id: string | null;
+          recipient_email: string;
+          recipient_name: string | null;
+          subject: string;
+          html_content: string;
+          text_content: string;
+          status: DatabaseEmailNotificationStatus;
+          provider: string;
+          entity_type: string | null;
+          entity_id: string | null;
+          idempotency_key: string | null;
+          scheduled_for: string;
+          locked_at: string | null;
+          locked_by: string | null;
+          attempt_count: number;
+          max_attempts: number;
+          sent_at: string | null;
+          failed_at: string | null;
+          skipped_at: string | null;
+          cancelled_at: string | null;
+          provider_message_id: string | null;
+          failure_code: string | null;
+          failure_message: string | null;
+          metadata: DatabaseJsonObject;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          event_type: DatabaseEmailNotificationEvent;
+          recipient_role: DatabaseEmailRecipientRole;
+          recipient_app_user_id?: string | null;
+          recipient_email: string;
+          recipient_name?: string | null;
+          subject: string;
+          html_content: string;
+          text_content: string;
+          status?: DatabaseEmailNotificationStatus;
+          provider?: string;
+          entity_type?: string | null;
+          entity_id?: string | null;
+          idempotency_key?: string | null;
+          scheduled_for?: string;
+          locked_at?: string | null;
+          locked_by?: string | null;
+          attempt_count?: number;
+          max_attempts?: number;
+          sent_at?: string | null;
+          failed_at?: string | null;
+          skipped_at?: string | null;
+          cancelled_at?: string | null;
+          provider_message_id?: string | null;
+          failure_code?: string | null;
+          failure_message?: string | null;
+          metadata?: DatabaseJsonObject;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          event_type?: DatabaseEmailNotificationEvent;
+          recipient_role?: DatabaseEmailRecipientRole;
+          recipient_app_user_id?: string | null;
+          recipient_email?: string;
+          recipient_name?: string | null;
+          subject?: string;
+          html_content?: string;
+          text_content?: string;
+          status?: DatabaseEmailNotificationStatus;
+          provider?: string;
+          entity_type?: string | null;
+          entity_id?: string | null;
+          idempotency_key?: string | null;
+          scheduled_for?: string;
+          locked_at?: string | null;
+          locked_by?: string | null;
+          attempt_count?: number;
+          max_attempts?: number;
+          sent_at?: string | null;
+          failed_at?: string | null;
+          skipped_at?: string | null;
+          cancelled_at?: string | null;
+          provider_message_id?: string | null;
+          failure_code?: string | null;
+          failure_message?: string | null;
+          metadata?: DatabaseJsonObject;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'email_notifications_recipient_app_user_id_fkey';
+            columns: ['recipient_app_user_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      email_delivery_attempts: {
+        Row: {
+          id: string;
+          email_notification_id: string;
+          attempt_number: number;
+          provider: string;
+          status: DatabaseEmailDeliveryAttemptStatus;
+          provider_message_id: string | null;
+          provider_request_id: string | null;
+          provider_status_code: number | null;
+          error_code: string | null;
+          error_message: string | null;
+          safe_response_metadata: DatabaseJsonObject;
+          attempted_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          email_notification_id: string;
+          attempt_number: number;
+          provider?: string;
+          status: DatabaseEmailDeliveryAttemptStatus;
+          provider_message_id?: string | null;
+          provider_request_id?: string | null;
+          provider_status_code?: number | null;
+          error_code?: string | null;
+          error_message?: string | null;
+          safe_response_metadata?: DatabaseJsonObject;
+          attempted_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          email_notification_id?: string;
+          attempt_number?: number;
+          provider?: string;
+          status?: DatabaseEmailDeliveryAttemptStatus;
+          provider_message_id?: string | null;
+          provider_request_id?: string | null;
+          provider_status_code?: number | null;
+          error_code?: string | null;
+          error_message?: string | null;
+          safe_response_metadata?: DatabaseJsonObject;
+          attempted_at?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'email_delivery_attempts_email_notification_id_fkey';
+            columns: ['email_notification_id'];
+            isOneToOne: false;
+            referencedRelation: 'email_notifications';
             referencedColumns: ['id'];
           },
         ];
@@ -2775,6 +3122,11 @@ export interface Database {
       wallet_ledger_entry_status: DatabaseWalletLedgerEntryStatus;
       promo_discount_type: DatabasePromoDiscountType;
       promo_code_status: DatabasePromoCodeStatus;
+      customer_invitation_status: DatabaseCustomerInvitationStatus;
+      email_notification_status: DatabaseEmailNotificationStatus;
+      email_delivery_attempt_status: DatabaseEmailDeliveryAttemptStatus;
+      email_recipient_role: DatabaseEmailRecipientRole;
+      email_notification_event: DatabaseEmailNotificationEvent;
     };
     CompositeTypes: Record<string, never>;
   };
@@ -2811,6 +3163,27 @@ export type CustomerProfileInsert =
   Database['public']['Tables']['customer_profiles']['Insert'];
 export type CustomerProfileUpdate =
   Database['public']['Tables']['customer_profiles']['Update'];
+
+export type CustomerInvitationRow =
+  Database['public']['Tables']['customer_invitations']['Row'];
+export type CustomerInvitationInsert =
+  Database['public']['Tables']['customer_invitations']['Insert'];
+export type CustomerInvitationUpdate =
+  Database['public']['Tables']['customer_invitations']['Update'];
+
+export type EmailNotificationRow =
+  Database['public']['Tables']['email_notifications']['Row'];
+export type EmailNotificationInsert =
+  Database['public']['Tables']['email_notifications']['Insert'];
+export type EmailNotificationUpdate =
+  Database['public']['Tables']['email_notifications']['Update'];
+
+export type EmailDeliveryAttemptRow =
+  Database['public']['Tables']['email_delivery_attempts']['Row'];
+export type EmailDeliveryAttemptInsert =
+  Database['public']['Tables']['email_delivery_attempts']['Insert'];
+export type EmailDeliveryAttemptUpdate =
+  Database['public']['Tables']['email_delivery_attempts']['Update'];
 
 export type StaffProfileRow =
   Database['public']['Tables']['staff_profiles']['Row'];

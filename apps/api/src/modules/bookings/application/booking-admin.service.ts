@@ -40,6 +40,34 @@ import {
   type AuthUserRole,
 } from '../../auth/constants/auth-role.constants';
 import { StaffRepository } from '../../staff/repositories/staff.repository';
+import { EmailNotificationService } from '../../notifications/application/email-notification.service';
+import {
+  EMAIL_NOTIFICATION_ENTITY_TYPE_BOOKING,
+  EMAIL_NOTIFICATION_ENTITY_TYPE_BOOKING_ORDER,
+  EMAIL_NOTIFICATION_ENTITY_TYPE_PRIVATE_BOOKING,
+  EMAIL_NOTIFICATION_ENTITY_TYPE_WAITLIST,
+  EMAIL_NOTIFICATION_EVENT_BOOKING_CANCELLED_BY_ADMIN,
+  EMAIL_NOTIFICATION_EVENT_BOOKING_CREATED_PENDING_PAYMENT,
+  EMAIL_NOTIFICATION_EVENT_BOOKING_RESCHEDULED_BY_ADMIN,
+  EMAIL_NOTIFICATION_EVENT_PRIVATE_BOOKING_CANCELLED_BY_ADMIN,
+  EMAIL_NOTIFICATION_EVENT_PRIVATE_BOOKING_CREATED_PENDING_PAYMENT,
+  EMAIL_NOTIFICATION_EVENT_PRIVATE_BOOKING_RESCHEDULED_BY_ADMIN,
+  EMAIL_NOTIFICATION_EVENT_WAITLIST_JOINED,
+  EMAIL_NOTIFICATION_EVENT_WAITLIST_PROMOTED_TO_BOOKING,
+  EMAIL_NOTIFICATION_EVENT_WAITLIST_PROMOTION_PAYMENT_REQUIRED,
+  EMAIL_NOTIFICATION_EVENT_WAITLIST_REMOVED_BY_ADMIN,
+  EMAIL_RECIPIENT_ROLE_CUSTOMER,
+  EMAIL_RECIPIENT_ROLE_TRAINER,
+} from '../../notifications/constants/notification.constants';
+import {
+  createBookingEmailIdempotencyKey,
+  createEntityEmailIdempotencyKey,
+  createPrivateBookingEmailIdempotencyKey,
+} from '../../notifications/domain/email-idempotency.policy';
+import type {
+  EmailNotificationEvent,
+  EmailRecipient,
+} from '../../notifications/types/notification.types';
 import {
   BOOKING_ADMIN_DEFAULT_LIMIT,
   BOOKING_ADMIN_DEFAULT_OFFSET,
@@ -356,6 +384,471 @@ function resolvePrivateBookingPriceSnapshot(
   };
 }
 
+function normalizeOptionalEmailString(
+  value: string | null | undefined,
+): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+
+  return trimmedValue.length > 0 ? trimmedValue : null;
+}
+
+function normalizeOptionalTemplateString(
+  value: string | null | undefined,
+): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+
+  return trimmedValue.length > 0 ? trimmedValue : null;
+}
+
+function createCustomerEmailRecipientFromSnapshot(
+  customer: BookingSafeUserSnapshot | null | undefined,
+): EmailRecipient | null {
+  if (!customer) {
+    return null;
+  }
+
+  const email = normalizeOptionalEmailString(customer.email);
+
+  if (!email) {
+    return null;
+  }
+
+  return {
+    role: EMAIL_RECIPIENT_ROLE_CUSTOMER,
+    email,
+    name: customer.full_name,
+    appUserId: customer.id,
+  };
+}
+
+function createTrainerEmailRecipientFromSnapshot(
+  trainer: BookingTrainerSnapshot | null | undefined,
+): EmailRecipient | null {
+  if (!trainer) {
+    return null;
+  }
+
+  const email = normalizeOptionalEmailString(trainer.email);
+
+  if (!email) {
+    return null;
+  }
+
+  return {
+    role: EMAIL_RECIPIENT_ROLE_TRAINER,
+    email,
+    name: trainer.display_name,
+    appUserId: trainer.app_user_id,
+  };
+}
+
+function createTrainerEmailRecipientsFromSnapshots(
+  trainers: readonly (BookingTrainerSnapshot | null | undefined)[],
+): readonly EmailRecipient[] {
+  return dedupeEmailRecipients(
+    trainers.flatMap((trainer) => {
+      const recipient = createTrainerEmailRecipientFromSnapshot(trainer);
+
+      return recipient ? [recipient] : [];
+    }),
+  );
+}
+
+function dedupeEmailRecipients(
+  recipients: readonly EmailRecipient[],
+): readonly EmailRecipient[] {
+  const seen = new Set<string>();
+  const uniqueRecipients: EmailRecipient[] = [];
+
+  for (const recipient of recipients) {
+    const key = [
+      recipient.role,
+      recipient.appUserId ?? '',
+      recipient.email.toLowerCase(),
+    ].join(':');
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    uniqueRecipients.push(recipient);
+  }
+
+  return uniqueRecipients;
+}
+
+function formatMoneyAmount(
+  amount: number | null | undefined,
+  currency: string | null | undefined,
+): string | null {
+  if (typeof amount !== 'number' || !Number.isFinite(amount)) {
+    return null;
+  }
+
+  const normalizedCurrency = normalizeOptionalTemplateString(currency);
+
+  if (!normalizedCurrency) {
+    return amount.toFixed(3);
+  }
+
+  return `${amount.toFixed(3)} ${normalizedCurrency}`;
+}
+
+function addOptionalTemplateString(
+  target: DatabaseJsonObject,
+  key: string,
+  value: string | null | undefined,
+): void {
+  const normalizedValue = normalizeOptionalTemplateString(value);
+
+  if (normalizedValue) {
+    target[key] = normalizedValue;
+  }
+}
+
+function addOptionalTemplateNumber(
+  target: DatabaseJsonObject,
+  key: string,
+  value: number | null | undefined,
+): void {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    target[key] = value;
+  }
+}
+
+function createBaseBookingTemplateData(input: {
+  readonly recipient: EmailRecipient;
+  readonly customer?: BookingSafeUserSnapshot | null;
+  readonly trainer?: BookingTrainerSnapshot | null;
+}): DatabaseJsonObject {
+  const templateData: DatabaseJsonObject = {};
+
+  addOptionalTemplateString(
+    templateData,
+    'recipientName',
+    input.recipient.name,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'customerName',
+    input.customer?.full_name,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'trainerName',
+    input.trainer?.display_name,
+  );
+
+  return templateData;
+}
+
+function buildBookingEmailTemplateData(input: {
+  readonly booking: BookingListItem;
+  readonly recipient: EmailRecipient;
+}): DatabaseJsonObject {
+  const templateData = createBaseBookingTemplateData({
+    recipient: input.recipient,
+    customer: input.booking.customer,
+    trainer: input.booking.trainer,
+  });
+
+  addOptionalTemplateString(
+    templateData,
+    'bookingNumber',
+    input.booking.booking_number,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'classTitle',
+    input.booking.class?.title,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'sessionDate',
+    input.booking.schedule?.class_date,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'startTime',
+    input.booking.schedule?.start_time,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'endTime',
+    input.booking.schedule?.end_time,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'expiresAt',
+    input.booking.payment_state?.hold_expires_at ??
+      input.booking.seat_hold_expires_at,
+  );
+
+  addOptionalTemplateString(
+    templateData,
+    'amountLabel',
+    formatMoneyAmount(
+      input.booking.latest_payment?.final_amount ?? input.booking.price?.amount,
+      input.booking.latest_payment?.currency ?? input.booking.price?.currency,
+    ),
+  );
+
+  return templateData;
+}
+
+function buildBookingRescheduledEmailTemplateData(input: {
+  readonly oldBooking: BookingListItem;
+  readonly newBooking: BookingListItem;
+  readonly recipient: EmailRecipient;
+}): DatabaseJsonObject {
+  const templateData = buildBookingEmailTemplateData({
+    booking: input.newBooking,
+    recipient: input.recipient,
+  });
+
+  addOptionalTemplateString(
+    templateData,
+    'oldSessionDate',
+    input.oldBooking.schedule?.class_date,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'oldStartTime',
+    input.oldBooking.schedule?.start_time,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'newSessionDate',
+    input.newBooking.schedule?.class_date,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'newStartTime',
+    input.newBooking.schedule?.start_time,
+  );
+
+  return templateData;
+}
+
+function buildBookingOrderEmailTemplateData(input: {
+  readonly bookingOrder: BookingOrderSummary;
+  readonly recipient: EmailRecipient;
+}): DatabaseJsonObject {
+  const templateData = createBaseBookingTemplateData({
+    recipient: input.recipient,
+    customer: input.bookingOrder.customer,
+  });
+
+  addOptionalTemplateString(
+    templateData,
+    'orderNumber',
+    input.bookingOrder.order_number,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'expiresAt',
+    input.bookingOrder.expires_at,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'amountLabel',
+    formatMoneyAmount(
+      input.bookingOrder.total_amount,
+      input.bookingOrder.currency,
+    ),
+  );
+
+  return templateData;
+}
+
+function buildPrivateBookingEmailTemplateData(input: {
+  readonly privateBooking: PrivateBookingListItem;
+  readonly recipient: EmailRecipient;
+}): DatabaseJsonObject {
+  const templateData = createBaseBookingTemplateData({
+    recipient: input.recipient,
+    customer: input.privateBooking.customer,
+    trainer: input.privateBooking.trainer,
+  });
+
+  addOptionalTemplateString(
+    templateData,
+    'bookingNumber',
+    input.privateBooking.booking_number,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'sessionTitle',
+    'Private trainer session',
+  );
+  addOptionalTemplateString(
+    templateData,
+    'sessionDate',
+    input.privateBooking.session_date,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'startTime',
+    input.privateBooking.start_time,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'endTime',
+    input.privateBooking.end_time,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'expiresAt',
+    input.privateBooking.payment_state?.hold_expires_at ??
+      input.privateBooking.seat_hold_expires_at,
+  );
+
+  addOptionalTemplateString(
+    templateData,
+    'amountLabel',
+    formatMoneyAmount(
+      input.privateBooking.latest_payment?.final_amount ??
+        input.privateBooking.price_amount,
+      input.privateBooking.latest_payment?.currency ??
+        input.privateBooking.currency,
+    ),
+  );
+
+  return templateData;
+}
+
+function buildPrivateBookingRescheduledEmailTemplateData(input: {
+  readonly oldPrivateBooking: PrivateBookingListItem;
+  readonly newPrivateBooking: PrivateBookingListItem;
+  readonly recipient: EmailRecipient;
+}): DatabaseJsonObject {
+  const templateData = buildPrivateBookingEmailTemplateData({
+    privateBooking: input.newPrivateBooking,
+    recipient: input.recipient,
+  });
+
+  addOptionalTemplateString(
+    templateData,
+    'oldSessionDate',
+    input.oldPrivateBooking.session_date,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'oldStartTime',
+    input.oldPrivateBooking.start_time,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'newSessionDate',
+    input.newPrivateBooking.session_date,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'newStartTime',
+    input.newPrivateBooking.start_time,
+  );
+
+  return templateData;
+}
+
+function buildWaitlistEmailTemplateData(input: {
+  readonly waitlist: BookingWaitlistListItem;
+  readonly recipient: EmailRecipient;
+}): DatabaseJsonObject {
+  const templateData = createBaseBookingTemplateData({
+    recipient: input.recipient,
+    customer: input.waitlist.customer,
+  });
+
+  addOptionalTemplateString(
+    templateData,
+    'classTitle',
+    input.waitlist.class?.title,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'sessionDate',
+    input.waitlist.schedule?.class_date,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'startTime',
+    input.waitlist.schedule?.start_time,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'endTime',
+    input.waitlist.schedule?.end_time,
+  );
+  addOptionalTemplateNumber(
+    templateData,
+    'waitlistPosition',
+    input.waitlist.position,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'expiresAt',
+    input.waitlist.promotion_expires_at,
+  );
+
+  return templateData;
+}
+
+function buildBookingEmailMetadata(
+  booking: BookingListItem,
+): DatabaseJsonObject {
+  return {
+    booking_id: booking.id,
+    booking_number: booking.booking_number,
+    customer_user_id: booking.user_id,
+    schedule_id: booking.schedule_id,
+    class_id: booking.class_id,
+    booking_order_id: booking.booking_order_id,
+  };
+}
+
+function buildBookingOrderEmailMetadata(
+  bookingOrder: BookingOrderSummary,
+): DatabaseJsonObject {
+  return {
+    booking_order_id: bookingOrder.id,
+    order_number: bookingOrder.order_number,
+    customer_user_id: bookingOrder.customer_user_id,
+    booking_count: bookingOrder.booking_count,
+  };
+}
+
+function buildPrivateBookingEmailMetadata(
+  privateBooking: PrivateBookingListItem,
+): DatabaseJsonObject {
+  return {
+    private_booking_id: privateBooking.id,
+    booking_number: privateBooking.booking_number,
+    customer_user_id: privateBooking.user_id,
+    trainer_staff_profile_id: privateBooking.trainer_staff_profile_id,
+  };
+}
+
+function buildWaitlistEmailMetadata(
+  waitlist: BookingWaitlistListItem,
+): DatabaseJsonObject {
+  return {
+    waitlist_id: waitlist.id,
+    customer_user_id: waitlist.user_id,
+    schedule_id: waitlist.schedule_id,
+    class_id: waitlist.class_id,
+  };
+}
+
 function assertAdminOverrideDoesNotBypassPayment(
   booking: BookingHydratedRow,
   targetStatus: BookingHydratedRow['status'],
@@ -396,6 +889,7 @@ export class BookingAdminService {
     private readonly bookingRepository: BookingRepository,
     private readonly bookingAvailabilityService: BookingAvailabilityService,
     private readonly staffRepository: StaffRepository,
+    private readonly emailNotificationService: EmailNotificationService,
   ) {}
 
   async listBookings(
@@ -500,6 +994,7 @@ export class BookingAdminService {
     const bookingOrderItems = (bookingOrderRow.booking_order_items ?? []).map(
       (item) => this.toBookingOrderItemSummary(item),
     );
+    await this.notifyAdminCreatedBookingOrderPendingPayment(bookingOrder);
 
     return {
       result: actionResult,
@@ -569,7 +1064,7 @@ export class BookingAdminService {
 
     const privateBooking =
       await this.getRequiredPrivateBookingListItem(privateBookingId);
-
+    await this.notifyAdminCreatedPrivateBookingPendingPayment(privateBooking);
     return {
       result: actionResult,
       private_booking: privateBooking,
@@ -691,7 +1186,14 @@ export class BookingAdminService {
     const promotedWaitlist = rpcResult.rpc.promoted_waitlist_id
       ? await this.getRequiredWaitlistItem(rpcResult.rpc.promoted_waitlist_id)
       : null;
+    await this.notifyBookingCancelledByAdmin(cancelledBooking);
 
+    if (promotedBooking) {
+      await this.notifyWaitlistPromotion({
+        promotedBooking,
+        promotedWaitlist,
+      });
+    }
     return {
       result: actionResult,
       cancelled_booking: cancelledBooking,
@@ -741,7 +1243,7 @@ export class BookingAdminService {
     const privateBooking = await this.getRequiredPrivateBookingListItem(
       rpcResult.rpc.private_booking_id,
     );
-
+    await this.notifyPrivateBookingCancelledByAdmin(privateBooking);
     return {
       result: actionResult,
       private_booking: privateBooking,
@@ -804,6 +1306,8 @@ export class BookingAdminService {
       );
       const waitlist = await this.getRequiredWaitlistItem(waitlistId);
 
+      await this.notifyWaitlistJoinedByAdminReschedule(waitlist);
+
       return {
         result: actionResult,
         old_booking: oldBooking,
@@ -818,7 +1322,10 @@ export class BookingAdminService {
       'reschedule_pilates_booking_atomic did not return new_booking_id.',
     );
     const newBooking = await this.getRequiredBookingListItem(newBookingId);
-
+    await this.notifyBookingRescheduledByAdmin({
+      oldBooking,
+      newBooking,
+    });
     return {
       result: actionResult,
       old_booking: oldBooking,
@@ -904,7 +1411,10 @@ export class BookingAdminService {
     );
     const newPrivateBooking =
       await this.getRequiredPrivateBookingListItem(newPrivateBookingId);
-
+    await this.notifyPrivateBookingRescheduledByAdmin({
+      oldPrivateBooking,
+      newPrivateBooking,
+    });
     return {
       result: actionResult,
       old_private_booking: oldPrivateBooking,
@@ -1001,7 +1511,406 @@ export class BookingAdminService {
       reason,
     });
 
-    return this.getRequiredWaitlistItem(waitlistId);
+    const removedWaitlist = await this.getRequiredWaitlistItem(waitlistId);
+
+    await this.notifyWaitlistRemovedByAdmin(removedWaitlist);
+
+    return removedWaitlist;
+  }
+  private async createEmailNotificationBestEffort(input: {
+    readonly eventType: EmailNotificationEvent;
+    readonly recipient: EmailRecipient | null;
+    readonly templateData: DatabaseJsonObject;
+    readonly entityType:
+      | typeof EMAIL_NOTIFICATION_ENTITY_TYPE_BOOKING
+      | typeof EMAIL_NOTIFICATION_ENTITY_TYPE_BOOKING_ORDER
+      | typeof EMAIL_NOTIFICATION_ENTITY_TYPE_WAITLIST
+      | typeof EMAIL_NOTIFICATION_ENTITY_TYPE_PRIVATE_BOOKING;
+    readonly entityId: string;
+    readonly idempotencyKey: string | null;
+    readonly metadata: DatabaseJsonObject;
+  }): Promise<void> {
+    if (!input.recipient) {
+      return;
+    }
+
+    try {
+      await this.emailNotificationService.createFromTemplate({
+        eventType: input.eventType,
+        recipient: input.recipient,
+        templateData: input.templateData,
+        entity: {
+          entityType: input.entityType,
+          entityId: input.entityId,
+        },
+        idempotencyKey: input.idempotencyKey,
+        metadata: input.metadata,
+      });
+    } catch {
+      // Best-effort notification side effect. The committed booking mutation remains authoritative.
+    }
+  }
+
+  private async notifyBookingRecipients(input: {
+    readonly eventType: EmailNotificationEvent;
+    readonly booking: BookingListItem;
+    readonly recipients: readonly EmailRecipient[];
+    readonly scope?: string | null;
+    readonly metadata?: DatabaseJsonObject;
+  }): Promise<void> {
+    for (const recipient of dedupeEmailRecipients(input.recipients)) {
+      await this.createEmailNotificationBestEffort({
+        eventType: input.eventType,
+        recipient,
+        templateData: buildBookingEmailTemplateData({
+          booking: input.booking,
+          recipient,
+        }),
+        entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_BOOKING,
+        entityId: input.booking.id,
+        idempotencyKey: createBookingEmailIdempotencyKey({
+          eventType: input.eventType,
+          bookingId: input.booking.id,
+          recipient,
+          scope: input.scope ?? null,
+        }),
+        metadata: input.metadata ?? buildBookingEmailMetadata(input.booking),
+      });
+    }
+  }
+
+  private async notifyBookingRescheduleRecipients(input: {
+    readonly eventType: EmailNotificationEvent;
+    readonly oldBooking: BookingListItem;
+    readonly newBooking: BookingListItem;
+    readonly recipients: readonly EmailRecipient[];
+  }): Promise<void> {
+    for (const recipient of dedupeEmailRecipients(input.recipients)) {
+      await this.createEmailNotificationBestEffort({
+        eventType: input.eventType,
+        recipient,
+        templateData: buildBookingRescheduledEmailTemplateData({
+          oldBooking: input.oldBooking,
+          newBooking: input.newBooking,
+          recipient,
+        }),
+        entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_BOOKING,
+        entityId: input.newBooking.id,
+        idempotencyKey: createBookingEmailIdempotencyKey({
+          eventType: input.eventType,
+          bookingId: input.newBooking.id,
+          recipient,
+          scope: `from:${input.oldBooking.id}`,
+        }),
+        metadata: {
+          ...buildBookingEmailMetadata(input.newBooking),
+          previous_booking_id: input.oldBooking.id,
+        },
+      });
+    }
+  }
+
+  private async notifyPrivateBookingRecipients(input: {
+    readonly eventType: EmailNotificationEvent;
+    readonly privateBooking: PrivateBookingListItem;
+    readonly recipients: readonly EmailRecipient[];
+    readonly scope?: string | null;
+    readonly metadata?: DatabaseJsonObject;
+  }): Promise<void> {
+    for (const recipient of dedupeEmailRecipients(input.recipients)) {
+      await this.createEmailNotificationBestEffort({
+        eventType: input.eventType,
+        recipient,
+        templateData: buildPrivateBookingEmailTemplateData({
+          privateBooking: input.privateBooking,
+          recipient,
+        }),
+        entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_PRIVATE_BOOKING,
+        entityId: input.privateBooking.id,
+        idempotencyKey: createPrivateBookingEmailIdempotencyKey({
+          eventType: input.eventType,
+          privateBookingId: input.privateBooking.id,
+          recipient,
+          scope: input.scope ?? null,
+        }),
+        metadata:
+          input.metadata ??
+          buildPrivateBookingEmailMetadata(input.privateBooking),
+      });
+    }
+  }
+
+  private async notifyPrivateBookingRescheduleRecipients(input: {
+    readonly eventType: EmailNotificationEvent;
+    readonly oldPrivateBooking: PrivateBookingListItem;
+    readonly newPrivateBooking: PrivateBookingListItem;
+    readonly recipients: readonly EmailRecipient[];
+  }): Promise<void> {
+    for (const recipient of dedupeEmailRecipients(input.recipients)) {
+      await this.createEmailNotificationBestEffort({
+        eventType: input.eventType,
+        recipient,
+        templateData: buildPrivateBookingRescheduledEmailTemplateData({
+          oldPrivateBooking: input.oldPrivateBooking,
+          newPrivateBooking: input.newPrivateBooking,
+          recipient,
+        }),
+        entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_PRIVATE_BOOKING,
+        entityId: input.newPrivateBooking.id,
+        idempotencyKey: createPrivateBookingEmailIdempotencyKey({
+          eventType: input.eventType,
+          privateBookingId: input.newPrivateBooking.id,
+          recipient,
+          scope: `from:${input.oldPrivateBooking.id}`,
+        }),
+        metadata: {
+          ...buildPrivateBookingEmailMetadata(input.newPrivateBooking),
+          previous_private_booking_id: input.oldPrivateBooking.id,
+        },
+      });
+    }
+  }
+
+  private async notifyAdminCreatedBookingOrderPendingPayment(
+    bookingOrder: BookingOrderSummary,
+  ): Promise<void> {
+    const recipient = createCustomerEmailRecipientFromSnapshot(
+      bookingOrder.customer,
+    );
+
+    if (!recipient) {
+      return;
+    }
+
+    await this.createEmailNotificationBestEffort({
+      eventType: EMAIL_NOTIFICATION_EVENT_BOOKING_CREATED_PENDING_PAYMENT,
+      recipient,
+      templateData: buildBookingOrderEmailTemplateData({
+        bookingOrder,
+        recipient,
+      }),
+      entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_BOOKING_ORDER,
+      entityId: bookingOrder.id,
+      idempotencyKey: createEntityEmailIdempotencyKey({
+        eventType: EMAIL_NOTIFICATION_EVENT_BOOKING_CREATED_PENDING_PAYMENT,
+        recipientRole: EMAIL_RECIPIENT_ROLE_CUSTOMER,
+        recipientEmail: recipient.email,
+        recipientAppUserId: recipient.appUserId ?? null,
+        entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_BOOKING_ORDER,
+        entityId: bookingOrder.id,
+      }),
+      metadata: buildBookingOrderEmailMetadata(bookingOrder),
+    });
+  }
+
+  private async notifyAdminCreatedPrivateBookingPendingPayment(
+    privateBooking: PrivateBookingListItem,
+  ): Promise<void> {
+    const customerRecipient = createCustomerEmailRecipientFromSnapshot(
+      privateBooking.customer,
+    );
+
+    await this.notifyPrivateBookingRecipients({
+      eventType:
+        EMAIL_NOTIFICATION_EVENT_PRIVATE_BOOKING_CREATED_PENDING_PAYMENT,
+      privateBooking,
+      recipients: customerRecipient ? [customerRecipient] : [],
+    });
+  }
+
+  private async notifyBookingCancelledByAdmin(
+    booking: BookingListItem,
+  ): Promise<void> {
+    const customerRecipient = createCustomerEmailRecipientFromSnapshot(
+      booking.customer,
+    );
+    const trainerRecipient = createTrainerEmailRecipientFromSnapshot(
+      booking.trainer,
+    );
+
+    await this.notifyBookingRecipients({
+      eventType: EMAIL_NOTIFICATION_EVENT_BOOKING_CANCELLED_BY_ADMIN,
+      booking,
+      recipients: [
+        ...(customerRecipient ? [customerRecipient] : []),
+        ...(trainerRecipient ? [trainerRecipient] : []),
+      ],
+    });
+  }
+
+  private async notifyBookingRescheduledByAdmin(input: {
+    readonly oldBooking: BookingListItem;
+    readonly newBooking: BookingListItem;
+  }): Promise<void> {
+    const customerRecipient = createCustomerEmailRecipientFromSnapshot(
+      input.newBooking.customer,
+    );
+    const trainerRecipients = createTrainerEmailRecipientsFromSnapshots([
+      input.oldBooking.trainer,
+      input.newBooking.trainer,
+    ]);
+
+    await this.notifyBookingRescheduleRecipients({
+      eventType: EMAIL_NOTIFICATION_EVENT_BOOKING_RESCHEDULED_BY_ADMIN,
+      oldBooking: input.oldBooking,
+      newBooking: input.newBooking,
+      recipients: [
+        ...(customerRecipient ? [customerRecipient] : []),
+        ...trainerRecipients,
+      ],
+    });
+  }
+
+  private async notifyWaitlistJoinedByAdminReschedule(
+    waitlist: BookingWaitlistListItem,
+  ): Promise<void> {
+    const recipient = createCustomerEmailRecipientFromSnapshot(
+      waitlist.customer,
+    );
+
+    if (!recipient) {
+      return;
+    }
+
+    await this.createEmailNotificationBestEffort({
+      eventType: EMAIL_NOTIFICATION_EVENT_WAITLIST_JOINED,
+      recipient,
+      templateData: buildWaitlistEmailTemplateData({
+        waitlist,
+        recipient,
+      }),
+      entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_WAITLIST,
+      entityId: waitlist.id,
+      idempotencyKey: createEntityEmailIdempotencyKey({
+        eventType: EMAIL_NOTIFICATION_EVENT_WAITLIST_JOINED,
+        recipientRole: EMAIL_RECIPIENT_ROLE_CUSTOMER,
+        recipientEmail: recipient.email,
+        recipientAppUserId: recipient.appUserId ?? null,
+        entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_WAITLIST,
+        entityId: waitlist.id,
+      }),
+      metadata: buildWaitlistEmailMetadata(waitlist),
+    });
+  }
+
+  private async notifyWaitlistRemovedByAdmin(
+    waitlist: BookingWaitlistListItem,
+  ): Promise<void> {
+    const recipient = createCustomerEmailRecipientFromSnapshot(
+      waitlist.customer,
+    );
+
+    if (!recipient) {
+      return;
+    }
+
+    await this.createEmailNotificationBestEffort({
+      eventType: EMAIL_NOTIFICATION_EVENT_WAITLIST_REMOVED_BY_ADMIN,
+      recipient,
+      templateData: buildWaitlistEmailTemplateData({
+        waitlist,
+        recipient,
+      }),
+      entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_WAITLIST,
+      entityId: waitlist.id,
+      idempotencyKey: createEntityEmailIdempotencyKey({
+        eventType: EMAIL_NOTIFICATION_EVENT_WAITLIST_REMOVED_BY_ADMIN,
+        recipientRole: EMAIL_RECIPIENT_ROLE_CUSTOMER,
+        recipientEmail: recipient.email,
+        recipientAppUserId: recipient.appUserId ?? null,
+        entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_WAITLIST,
+        entityId: waitlist.id,
+      }),
+      metadata: buildWaitlistEmailMetadata(waitlist),
+    });
+  }
+
+  private async notifyWaitlistPromotion(input: {
+    readonly promotedBooking: BookingListItem;
+    readonly promotedWaitlist: BookingWaitlistListItem | null;
+  }): Promise<void> {
+    const recipient = createCustomerEmailRecipientFromSnapshot(
+      input.promotedBooking.customer,
+    );
+
+    if (!recipient) {
+      return;
+    }
+
+    const eventType =
+      input.promotedBooking.payment_state?.checkout_required === true
+        ? EMAIL_NOTIFICATION_EVENT_WAITLIST_PROMOTION_PAYMENT_REQUIRED
+        : EMAIL_NOTIFICATION_EVENT_WAITLIST_PROMOTED_TO_BOOKING;
+
+    await this.createEmailNotificationBestEffort({
+      eventType,
+      recipient,
+      templateData: buildBookingEmailTemplateData({
+        booking: input.promotedBooking,
+        recipient,
+      }),
+      entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_BOOKING,
+      entityId: input.promotedBooking.id,
+      idempotencyKey: createBookingEmailIdempotencyKey({
+        eventType,
+        bookingId: input.promotedBooking.id,
+        recipient,
+        scope: input.promotedWaitlist
+          ? `waitlist:${input.promotedWaitlist.id}`
+          : null,
+      }),
+      metadata: {
+        ...buildBookingEmailMetadata(input.promotedBooking),
+        ...(input.promotedWaitlist
+          ? {
+              promoted_waitlist_id: input.promotedWaitlist.id,
+            }
+          : {}),
+      },
+    });
+  }
+
+  private async notifyPrivateBookingCancelledByAdmin(
+    privateBooking: PrivateBookingListItem,
+  ): Promise<void> {
+    const customerRecipient = createCustomerEmailRecipientFromSnapshot(
+      privateBooking.customer,
+    );
+    const trainerRecipient = createTrainerEmailRecipientFromSnapshot(
+      privateBooking.trainer,
+    );
+
+    await this.notifyPrivateBookingRecipients({
+      eventType: EMAIL_NOTIFICATION_EVENT_PRIVATE_BOOKING_CANCELLED_BY_ADMIN,
+      privateBooking,
+      recipients: [
+        ...(customerRecipient ? [customerRecipient] : []),
+        ...(trainerRecipient ? [trainerRecipient] : []),
+      ],
+    });
+  }
+
+  private async notifyPrivateBookingRescheduledByAdmin(input: {
+    readonly oldPrivateBooking: PrivateBookingListItem;
+    readonly newPrivateBooking: PrivateBookingListItem;
+  }): Promise<void> {
+    const customerRecipient = createCustomerEmailRecipientFromSnapshot(
+      input.newPrivateBooking.customer,
+    );
+    const trainerRecipients = createTrainerEmailRecipientsFromSnapshots([
+      input.oldPrivateBooking.trainer,
+      input.newPrivateBooking.trainer,
+    ]);
+
+    await this.notifyPrivateBookingRescheduleRecipients({
+      eventType: EMAIL_NOTIFICATION_EVENT_PRIVATE_BOOKING_RESCHEDULED_BY_ADMIN,
+      oldPrivateBooking: input.oldPrivateBooking,
+      newPrivateBooking: input.newPrivateBooking,
+      recipients: [
+        ...(customerRecipient ? [customerRecipient] : []),
+        ...trainerRecipients,
+      ],
+    });
   }
 
   private async getRequiredBookingListItem(

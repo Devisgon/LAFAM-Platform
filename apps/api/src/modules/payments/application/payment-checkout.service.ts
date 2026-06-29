@@ -30,6 +30,16 @@ import type {
   DatabaseJsonObject,
   LAFAMSupabaseClient,
 } from '../../../database/database.types';
+import { AuthUserRepository } from '../../auth/repositories/auth-user.repository';
+import type { AuthUserInternalProfile } from '../../auth/types/auth-user.types';
+import { EmailNotificationService } from '../../notifications/application/email-notification.service';
+import {
+  EMAIL_NOTIFICATION_ENTITY_TYPE_WALLET_LEDGER_ENTRY,
+  EMAIL_NOTIFICATION_EVENT_WALLET_BOOKING_DEBIT_SUCCESS,
+  EMAIL_RECIPIENT_ROLE_CUSTOMER,
+} from '../../notifications/constants/notification.constants';
+import { createWalletLedgerEmailIdempotencyKey } from '../../notifications/domain/email-idempotency.policy';
+import type { EmailRecipient } from '../../notifications/types/notification.types';
 import {
   PAYMENT_CHECKOUT_INTENT_TTL_MINUTES,
   PAYMENT_METHOD_WALLET,
@@ -67,6 +77,8 @@ import { WalletRepository } from '../repositories/wallet.repository';
 import type {
   CreateCheckoutPaymentCommand,
   CreateCheckoutPaymentInput,
+  DebitWalletForBookingAtomicResult,
+  DebitWalletForBookingOrderAtomicResult,
   PaymentCheckoutHostedRedirectResult,
   PaymentCheckoutResult,
   PaymentCheckoutWalletResult,
@@ -296,6 +308,161 @@ function resolveWalletDebitDescription(payment: PaymentRecord): string {
   return 'Wallet payment for booking checkout.';
 }
 
+type WalletBookingDebitResult =
+  | DebitWalletForBookingAtomicResult
+  | DebitWalletForBookingOrderAtomicResult;
+
+function formatMoneyAmount(
+  amount: number | null | undefined,
+  currency: string | null | undefined,
+): string | null {
+  if (typeof amount !== 'number' || !Number.isFinite(amount)) {
+    return null;
+  }
+
+  const normalizedCurrency = normalizeOptionalText(currency);
+
+  if (!normalizedCurrency) {
+    return amount.toFixed(3);
+  }
+
+  return `${amount.toFixed(3)} ${normalizedCurrency}`;
+}
+
+function addOptionalTemplateString(
+  target: DatabaseJsonObject,
+  key: string,
+  value: string | null | undefined,
+): void {
+  const normalizedValue = normalizeOptionalText(value);
+
+  if (normalizedValue) {
+    target[key] = normalizedValue;
+  }
+}
+
+function addOptionalTemplateNumber(
+  target: DatabaseJsonObject,
+  key: string,
+  value: number | null | undefined,
+): void {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    target[key] = value;
+  }
+}
+
+function resolveWalletDebitBookingId(
+  walletDebit: WalletBookingDebitResult,
+): string | null {
+  return 'booking_id' in walletDebit ? walletDebit.booking_id : null;
+}
+
+function resolveWalletDebitPrivateBookingId(
+  walletDebit: WalletBookingDebitResult,
+): string | null {
+  return 'private_booking_id' in walletDebit
+    ? walletDebit.private_booking_id
+    : null;
+}
+
+function resolveWalletDebitBookingOrderId(
+  walletDebit: WalletBookingDebitResult,
+): string | null {
+  return 'booking_order_id' in walletDebit
+    ? walletDebit.booking_order_id
+    : null;
+}
+
+function createWalletCustomerEmailRecipient(
+  user: AuthUserInternalProfile | null,
+): EmailRecipient | null {
+  if (!user) {
+    return null;
+  }
+
+  const email = normalizeOptionalText(user.email);
+
+  if (!email) {
+    return null;
+  }
+
+  return {
+    role: EMAIL_RECIPIENT_ROLE_CUSTOMER,
+    email,
+    name: user.fullName,
+    appUserId: user.id,
+  };
+}
+
+function buildWalletBookingDebitEmailTemplateData(input: {
+  readonly payment: PaymentRecord;
+  readonly walletDebit: WalletBookingDebitResult;
+  readonly recipient: EmailRecipient;
+}): DatabaseJsonObject {
+  const templateData: DatabaseJsonObject = {};
+
+  addOptionalTemplateString(
+    templateData,
+    'recipientName',
+    input.recipient.name,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'paymentNumber',
+    input.payment.payment_number,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'receiptNumber',
+    input.payment.receipt_number,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'amountLabel',
+    formatMoneyAmount(input.payment.final_amount, input.payment.currency),
+  );
+  addOptionalTemplateNumber(templateData, 'amount', input.payment.final_amount);
+  addOptionalTemplateString(templateData, 'currency', input.payment.currency);
+  addOptionalTemplateNumber(
+    templateData,
+    'walletBalance',
+    input.walletDebit.available_balance,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'walletBalanceLabel',
+    formatMoneyAmount(
+      input.walletDebit.available_balance,
+      input.payment.currency,
+    ),
+  );
+
+  return templateData;
+}
+
+function buildWalletBookingDebitEmailMetadata(input: {
+  readonly payment: PaymentRecord;
+  readonly walletDebit: WalletBookingDebitResult;
+}): DatabaseJsonObject {
+  return {
+    payment_id: input.payment.id,
+    payment_number: input.payment.payment_number,
+    receipt_number: input.payment.receipt_number,
+    user_id: input.payment.user_id,
+    target_type: input.payment.target_type,
+    wallet_account_id: input.walletDebit.wallet_account_id,
+    wallet_ledger_entry_id: input.walletDebit.ledger_entry_id,
+    booking_id: resolveWalletDebitBookingId(input.walletDebit),
+    private_booking_id: resolveWalletDebitPrivateBookingId(input.walletDebit),
+    booking_order_id: resolveWalletDebitBookingOrderId(input.walletDebit),
+    amount: input.payment.amount,
+    discount_amount: input.payment.discount_amount,
+    final_amount: input.payment.final_amount,
+    currency: input.payment.currency,
+    available_balance: input.walletDebit.available_balance,
+  };
+}
+
 @Injectable()
 export class PaymentCheckoutService {
   constructor(
@@ -305,6 +472,8 @@ export class PaymentCheckoutService {
     private readonly paymentGatewayService: PaymentGatewayService,
     private readonly paymentRepository: PaymentRepository,
     private readonly walletRepository: WalletRepository,
+    private readonly authUserRepository: AuthUserRepository,
+    private readonly emailNotificationService: EmailNotificationService,
   ) {}
 
   async createCheckoutPayment(
@@ -592,6 +761,11 @@ export class PaymentCheckoutService {
 
       const updatedPayment = await this.getPaymentOrThrow(payment.id);
 
+      await this.notifyWalletBookingDebitSuccess({
+        payment: updatedPayment,
+        walletDebit,
+      });
+
       return {
         payment: updatedPayment,
         status: updatedPayment.status,
@@ -634,6 +808,11 @@ export class PaymentCheckoutService {
 
     const updatedPayment = await this.getPaymentOrThrow(payment.id);
 
+    await this.notifyWalletBookingDebitSuccess({
+      payment: updatedPayment,
+      walletDebit,
+    });
+
     return {
       payment: updatedPayment,
       status: updatedPayment.status,
@@ -643,6 +822,45 @@ export class PaymentCheckoutService {
       available_balance: walletDebit.available_balance,
       booking_order_id: updatedPayment.booking_order_id,
     };
+  }
+
+  private async notifyWalletBookingDebitSuccess(input: {
+    readonly payment: PaymentRecord;
+    readonly walletDebit: WalletBookingDebitResult;
+  }): Promise<void> {
+    try {
+      const user = await this.authUserRepository.findById({
+        userId: input.payment.user_id,
+      });
+      const recipient = createWalletCustomerEmailRecipient(user);
+
+      if (!recipient) {
+        return;
+      }
+
+      await this.emailNotificationService.createFromTemplate({
+        eventType: EMAIL_NOTIFICATION_EVENT_WALLET_BOOKING_DEBIT_SUCCESS,
+        recipient,
+        templateData: buildWalletBookingDebitEmailTemplateData({
+          payment: input.payment,
+          walletDebit: input.walletDebit,
+          recipient,
+        }),
+        entity: {
+          entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_WALLET_LEDGER_ENTRY,
+          entityId: input.walletDebit.ledger_entry_id,
+        },
+        idempotencyKey: createWalletLedgerEmailIdempotencyKey({
+          eventType: EMAIL_NOTIFICATION_EVENT_WALLET_BOOKING_DEBIT_SUCCESS,
+          walletLedgerEntryId: input.walletDebit.ledger_entry_id,
+          recipient,
+          scope: input.payment.id,
+        }),
+        metadata: buildWalletBookingDebitEmailMetadata(input),
+      });
+    } catch {
+      // Best-effort notification side effect. The committed wallet debit remains authoritative.
+    }
   }
 
   private async resolveExistingWalletCheckoutResult(

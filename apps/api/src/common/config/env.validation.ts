@@ -16,9 +16,11 @@
  */
 
 import {
+  EMAIL_PROVIDER_VALUES,
   NODE_ENV_VALUES,
   PAYMENT_MODE_VALUES,
   PAYMENT_PROVIDER_VALUES,
+  type EmailProvider,
   type EnvironmentVariableName,
   type NodeEnvironment,
   type PaymentMode,
@@ -34,6 +36,14 @@ const DEFAULT_PORT = 4000;
 const DEFAULT_API_GLOBAL_PREFIX = 'api';
 const DEFAULT_SENTRY_ENVIRONMENT = 'development';
 const DEFAULT_SENTRY_TRACES_SAMPLE_RATE = 0.1;
+const DEFAULT_REDIS_QUEUE_PREFIX = 'lafam-api';
+const DEFAULT_EMAIL_NOTIFICATIONS_ENABLED = false;
+const DEFAULT_EMAIL_PROVIDER: EmailProvider = 'brevo';
+const DEFAULT_EMAIL_OUTBOX_ENABLED = true;
+const DEFAULT_EMAIL_DEFAULT_LOCALE = 'en';
+const DEFAULT_CUSTOMER_INVITE_TOKEN_TTL_HOURS = 72;
+const DEFAULT_CUSTOMER_INVITE_EXPIRING_SOON_HOURS = 24;
+
 const DEFAULT_JWT_CLOCK_TOLERANCE_SECONDS = 30;
 const DEFAULT_REQUEST_BODY_LIMIT = '1mb';
 
@@ -47,6 +57,7 @@ const DEFAULT_AUTH_GUEST_SESSION_TTL_HOURS = 24;
 const DEFAULT_AUTH_GUEST_MAX_SESSIONS_PER_IP_PER_HOUR = 20;
 const DEFAULT_AUTH_GUEST_REQUIRE_CAPTCHA = false;
 const DEFAULT_AUTH_GUEST_CLEANUP_ENABLED = true;
+
 const DEFAULT_PAYMENT_PROVIDER: PaymentProvider = 'mock';
 const DEFAULT_PAYMENT_MODE: PaymentMode = 'sandbox';
 const DEFAULT_PAYMENT_DEFAULT_CURRENCY = 'KWD';
@@ -61,6 +72,7 @@ const MIN_AUTH_AVATAR_MAX_SIZE_BYTES = 1024;
 const MAX_AUTH_AVATAR_MAX_SIZE_BYTES = 10_485_760;
 
 const NODE_ENV_VALUE_SET = new Set<string>(NODE_ENV_VALUES);
+const EMAIL_PROVIDER_VALUE_SET = new Set<string>(EMAIL_PROVIDER_VALUES);
 const PAYMENT_PROVIDER_VALUE_SET = new Set<string>(PAYMENT_PROVIDER_VALUES);
 const PAYMENT_MODE_VALUE_SET = new Set<string>(PAYMENT_MODE_VALUES);
 
@@ -106,6 +118,19 @@ function parseNodeEnvironment(
 
   return DEFAULT_NODE_ENV;
 }
+
+function parseEmailProvider(value: string, errors: string[]): EmailProvider {
+  if (EMAIL_PROVIDER_VALUE_SET.has(value)) {
+    return value as EmailProvider;
+  }
+
+  errors.push(
+    `EMAIL_PROVIDER must be one of: ${EMAIL_PROVIDER_VALUES.join(', ')}.`,
+  );
+
+  return DEFAULT_EMAIL_PROVIDER;
+}
+
 function parsePaymentProvider(
   value: string,
   errors: string[],
@@ -202,6 +227,51 @@ function validateHttpUrl(
     errors.push(`${name} must be a valid URL.`);
     return value;
   }
+}
+
+function validateRedisUrl(value: string, errors: string[]): string {
+  try {
+    const parsedUrl = new URL(value);
+
+    if (parsedUrl.protocol !== 'redis:' && parsedUrl.protocol !== 'rediss:') {
+      errors.push('REDIS_URL must use redis or rediss.');
+      return value;
+    }
+
+    if (!parsedUrl.hostname) {
+      errors.push('REDIS_URL must include a hostname.');
+      return value;
+    }
+
+    return value;
+  } catch {
+    errors.push('REDIS_URL must be a valid Redis URL.');
+    return value;
+  }
+}
+
+function validateRedisQueuePrefix(value: string, errors: string[]): string {
+  const normalizedValue = value.trim();
+
+  if (!normalizedValue) {
+    errors.push('REDIS_QUEUE_PREFIX cannot be empty.');
+    return DEFAULT_REDIS_QUEUE_PREFIX;
+  }
+
+  if (normalizedValue.length > 80) {
+    errors.push('REDIS_QUEUE_PREFIX must be 80 characters or fewer.');
+    return DEFAULT_REDIS_QUEUE_PREFIX;
+  }
+
+  if (!/^[a-zA-Z0-9:_-]+$/u.test(normalizedValue)) {
+    errors.push(
+      'REDIS_QUEUE_PREFIX may only contain letters, numbers, colons, underscores, and hyphens.',
+    );
+
+    return DEFAULT_REDIS_QUEUE_PREFIX;
+  }
+
+  return normalizedValue;
 }
 
 function validateOriginList(value: string, errors: string[]): string {
@@ -329,6 +399,20 @@ function validateEmail(
   return value;
 }
 
+function validateEmailDefaultLocale(value: string, errors: string[]): string {
+  const normalizedValue = value.trim().toLowerCase();
+
+  if (!/^[a-z]{2}(?:-[a-z]{2})?$/u.test(normalizedValue)) {
+    errors.push(
+      'EMAIL_DEFAULT_LOCALE must be a locale like en, ar, en-us, or ar-kw.',
+    );
+
+    return DEFAULT_EMAIL_DEFAULT_LOCALE;
+  }
+
+  return normalizedValue;
+}
+
 function validateAuthAccessTokenHashPepper(
   value: string,
   errors: string[],
@@ -432,6 +516,74 @@ export function validateEnvironment(
     errors,
   );
 
+  const redisUrl = validateRedisUrl(
+    readRequiredString(environment, 'REDIS_URL', errors),
+    errors,
+  );
+
+  const redisQueuePrefix = validateRedisQueuePrefix(
+    readRequiredString(environment, 'REDIS_QUEUE_PREFIX', errors),
+    errors,
+  );
+
+  const emailNotificationsEnabled = parseBoolean(
+    readRequiredString(environment, 'EMAIL_NOTIFICATIONS_ENABLED', errors),
+    'EMAIL_NOTIFICATIONS_ENABLED',
+    DEFAULT_EMAIL_NOTIFICATIONS_ENABLED,
+    errors,
+  );
+
+  const emailProvider = parseEmailProvider(
+    readRequiredString(environment, 'EMAIL_PROVIDER', errors),
+    errors,
+  );
+
+  const emailOutboxEnabled = parseBoolean(
+    readRequiredString(environment, 'EMAIL_OUTBOX_ENABLED', errors),
+    'EMAIL_OUTBOX_ENABLED',
+    DEFAULT_EMAIL_OUTBOX_ENABLED,
+    errors,
+  );
+
+  const emailDefaultLocale = validateEmailDefaultLocale(
+    readRequiredString(environment, 'EMAIL_DEFAULT_LOCALE', errors),
+    errors,
+  );
+
+  const emailPublicAppBaseUrl = validateHttpUrl(
+    readRequiredString(environment, 'EMAIL_PUBLIC_APP_BASE_URL', errors),
+    'EMAIL_PUBLIC_APP_BASE_URL',
+    errors,
+  );
+
+  const customerInviteTokenTtlHours = parseIntegerInRange(
+    readRequiredString(environment, 'CUSTOMER_INVITE_TOKEN_TTL_HOURS', errors),
+    'CUSTOMER_INVITE_TOKEN_TTL_HOURS',
+    1,
+    720,
+    DEFAULT_CUSTOMER_INVITE_TOKEN_TTL_HOURS,
+    errors,
+  );
+
+  const customerInviteExpiringSoonHours = parseIntegerInRange(
+    readRequiredString(
+      environment,
+      'CUSTOMER_INVITE_EXPIRING_SOON_HOURS',
+      errors,
+    ),
+    'CUSTOMER_INVITE_EXPIRING_SOON_HOURS',
+    1,
+    168,
+    DEFAULT_CUSTOMER_INVITE_EXPIRING_SOON_HOURS,
+    errors,
+  );
+
+  if (customerInviteExpiringSoonHours >= customerInviteTokenTtlHours) {
+    errors.push(
+      'CUSTOMER_INVITE_EXPIRING_SOON_HOURS must be less than CUSTOMER_INVITE_TOKEN_TTL_HOURS.',
+    );
+  }
+
   const brevoApiKey = readOptionalString(environment, 'BREVO_API_KEY') ?? '';
   const brevoSenderEmail =
     readOptionalString(environment, 'BREVO_SENDER_EMAIL') ?? '';
@@ -441,6 +593,10 @@ export function validateEnvironment(
     errors,
   );
 
+  if (brevoSenderName.length > 100) {
+    errors.push('BREVO_SENDER_NAME must be 100 characters or fewer.');
+  }
+
   if (
     (brevoApiKey && !brevoSenderEmail) ||
     (!brevoApiKey && brevoSenderEmail)
@@ -448,6 +604,20 @@ export function validateEnvironment(
     errors.push(
       'BREVO_API_KEY and BREVO_SENDER_EMAIL must be configured together.',
     );
+  }
+
+  if (emailNotificationsEnabled && emailProvider === 'brevo') {
+    if (!brevoApiKey) {
+      errors.push(
+        'BREVO_API_KEY is required when EMAIL_NOTIFICATIONS_ENABLED is true and EMAIL_PROVIDER is brevo.',
+      );
+    }
+
+    if (!brevoSenderEmail) {
+      errors.push(
+        'BREVO_SENDER_EMAIL is required when EMAIL_NOTIFICATIONS_ENABLED is true and EMAIL_PROVIDER is brevo.',
+      );
+    }
   }
 
   if (brevoSenderEmail) {
@@ -672,6 +842,19 @@ export function validateEnvironment(
       dsn: sentryDsn ?? '',
       environment: sentryEnvironment,
       tracesSampleRate: sentryTracesSampleRate,
+    },
+    redis: {
+      url: redisUrl,
+      queuePrefix: redisQueuePrefix,
+    },
+    email: {
+      notificationsEnabled: emailNotificationsEnabled,
+      provider: emailProvider,
+      outboxEnabled: emailOutboxEnabled,
+      defaultLocale: emailDefaultLocale,
+      publicAppBaseUrl: emailPublicAppBaseUrl,
+      customerInviteTokenTtlHours,
+      customerInviteExpiringSoonHours,
     },
     brevo: {
       apiKey: brevoApiKey,

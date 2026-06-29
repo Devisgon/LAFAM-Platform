@@ -26,6 +26,20 @@ import { Injectable } from '@nestjs/common';
 
 import { AppError } from '../../../common/errors/app-error';
 import type { DatabaseJsonObject } from '../../../database/database.types';
+import { AuthUserRepository } from '../../auth/repositories/auth-user.repository';
+import type { AuthUserInternalProfile } from '../../auth/types/auth-user.types';
+import { EmailNotificationService } from '../../notifications/application/email-notification.service';
+import {
+  EMAIL_NOTIFICATION_ENTITY_TYPE_PAYMENT,
+  EMAIL_NOTIFICATION_EVENT_PAYMENT_REFUND_FAILED_OR_MANUAL_REVIEW_REQUIRED,
+  EMAIL_NOTIFICATION_EVENT_PAYMENT_REFUNDED,
+  EMAIL_RECIPIENT_ROLE_CUSTOMER,
+} from '../../notifications/constants/notification.constants';
+import { createPaymentEmailIdempotencyKey } from '../../notifications/domain/email-idempotency.policy';
+import type {
+  EmailNotificationEvent,
+  EmailRecipient,
+} from '../../notifications/types/notification.types';
 import {
   PAYMENT_DEFAULT_CURRENCY,
   PAYMENT_METHOD_WALLET,
@@ -312,11 +326,188 @@ function resolveRefundTransactionStatus(
     : PAYMENT_TRANSACTION_STATUS_SUCCEEDED;
 }
 
+function normalizeOptionalText(
+  value: string | null | undefined,
+): string | null {
+  if (!hasText(value)) {
+    return null;
+  }
+
+  return value.trim();
+}
+
+function formatMoneyAmount(
+  amount: number | null | undefined,
+  currency: string | null | undefined,
+): string | null {
+  if (typeof amount !== 'number' || !Number.isFinite(amount)) {
+    return null;
+  }
+
+  const normalizedCurrency = normalizeOptionalText(currency);
+
+  if (!normalizedCurrency) {
+    return amount.toFixed(3);
+  }
+
+  return `${amount.toFixed(3)} ${normalizedCurrency}`;
+}
+
+function addOptionalTemplateString(
+  target: DatabaseJsonObject,
+  key: string,
+  value: string | null | undefined,
+): void {
+  const normalizedValue = normalizeOptionalText(value);
+
+  if (normalizedValue) {
+    target[key] = normalizedValue;
+  }
+}
+
+function addOptionalTemplateNumber(
+  target: DatabaseJsonObject,
+  key: string,
+  value: number | null | undefined,
+): void {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    target[key] = value;
+  }
+}
+
+function resolvePaymentTargetLabel(payment: PaymentRecord): string {
+  if (hasText(payment.booking_order_id)) {
+    return 'booking order';
+  }
+
+  if (hasText(payment.booking_id)) {
+    return 'booking';
+  }
+
+  if (hasText(payment.private_booking_id)) {
+    return 'private booking';
+  }
+
+  if (payment.target_type === 'wallet_top_up') {
+    return 'wallet top-up';
+  }
+
+  return payment.target_type;
+}
+
+function createPaymentCustomerEmailRecipient(
+  user: AuthUserInternalProfile | null,
+): EmailRecipient | null {
+  if (!user) {
+    return null;
+  }
+
+  const email = normalizeOptionalText(user.email);
+
+  if (!email) {
+    return null;
+  }
+
+  return {
+    role: EMAIL_RECIPIENT_ROLE_CUSTOMER,
+    email,
+    name: user.fullName,
+    appUserId: user.id,
+  };
+}
+
+function buildRefundEmailTemplateData(input: {
+  readonly payment: PaymentRecord;
+  readonly refundAmount: number;
+  readonly recipient: EmailRecipient;
+}): DatabaseJsonObject {
+  const templateData: DatabaseJsonObject = {};
+
+  addOptionalTemplateString(
+    templateData,
+    'recipientName',
+    input.recipient.name,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'paymentNumber',
+    input.payment.payment_number,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'receiptNumber',
+    input.payment.receipt_number,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'targetType',
+    resolvePaymentTargetLabel(input.payment),
+  );
+  addOptionalTemplateString(
+    templateData,
+    'amountLabel',
+    formatMoneyAmount(input.payment.final_amount, input.payment.currency),
+  );
+  addOptionalTemplateString(
+    templateData,
+    'refundAmountLabel',
+    formatMoneyAmount(input.refundAmount, input.payment.currency),
+  );
+  addOptionalTemplateNumber(templateData, 'amount', input.payment.amount);
+  addOptionalTemplateNumber(
+    templateData,
+    'discountAmount',
+    input.payment.discount_amount,
+  );
+  addOptionalTemplateNumber(
+    templateData,
+    'finalAmount',
+    input.payment.final_amount,
+  );
+  addOptionalTemplateNumber(templateData, 'refundAmount', input.refundAmount);
+  addOptionalTemplateString(templateData, 'currency', input.payment.currency);
+  addOptionalTemplateString(templateData, 'paidAt', input.payment.paid_at);
+  addOptionalTemplateString(
+    templateData,
+    'refundedAt',
+    input.payment.refunded_at,
+  );
+
+  return templateData;
+}
+
+function buildRefundEmailMetadata(input: {
+  readonly payment: PaymentRecord;
+  readonly refundAmount: number;
+}): DatabaseJsonObject {
+  return {
+    payment_id: input.payment.id,
+    payment_number: input.payment.payment_number,
+    receipt_number: input.payment.receipt_number,
+    user_id: input.payment.user_id,
+    target_type: input.payment.target_type,
+    booking_id: input.payment.booking_id,
+    private_booking_id: input.payment.private_booking_id,
+    booking_order_id: input.payment.booking_order_id,
+    amount: input.payment.amount,
+    discount_amount: input.payment.discount_amount,
+    final_amount: input.payment.final_amount,
+    refund_amount: input.refundAmount,
+    refunded_amount: input.payment.refunded_amount,
+    currency: input.payment.currency,
+    payment_method: input.payment.payment_method,
+    payment_provider: input.payment.payment_provider,
+    status: input.payment.status,
+  };
+}
+
 @Injectable()
 export class PaymentAdminService {
   constructor(
     private readonly paymentRepository: PaymentRepository,
     private readonly paymentGatewayService: PaymentGatewayService,
+    private readonly authUserRepository: AuthUserRepository,
+    private readonly emailNotificationService: EmailNotificationService,
   ) {}
 
   async listAdminPayments(
@@ -524,6 +715,11 @@ export class PaymentAdminService {
 
     const updatedPayment = await this.getPaymentOrThrow(input.payment.id);
 
+    await this.notifyPaymentRefunded({
+      payment: updatedPayment,
+      refundAmount: input.refund_amount,
+    });
+
     return {
       payment: mapPaymentToSummary(updatedPayment),
     };
@@ -660,6 +856,11 @@ export class PaymentAdminService {
 
       const updatedPayment = await this.getPaymentOrThrow(input.payment.id);
 
+      await this.notifyPaymentRefunded({
+        payment: updatedPayment,
+        refundAmount: input.refund_amount,
+      });
+
       return {
         payment: mapPaymentToSummary(updatedPayment),
       };
@@ -711,6 +912,11 @@ export class PaymentAdminService {
           input.provider_result.failure_message ??
           'Manual refund is required for this payment provider.',
         provider_result: input.provider_result,
+      });
+
+      await this.notifyPaymentRefundFailedOrManualReviewRequired({
+        payment: manualPayment,
+        refundAmount: input.refund_amount,
       });
 
       return {
@@ -820,6 +1026,71 @@ export class PaymentAdminService {
           removed_metadata_keys: [...input.removed_metadata_keys],
         },
       },
+    });
+  }
+
+  private async notifyRefundEmailBestEffort(input: {
+    readonly payment: PaymentRecord;
+    readonly refundAmount: number;
+    readonly eventType: EmailNotificationEvent;
+  }): Promise<void> {
+    try {
+      const user = await this.authUserRepository.findById({
+        userId: input.payment.user_id,
+      });
+      const recipient = createPaymentCustomerEmailRecipient(user);
+
+      if (!recipient) {
+        return;
+      }
+
+      await this.emailNotificationService.createFromTemplate({
+        eventType: input.eventType,
+        recipient,
+        templateData: buildRefundEmailTemplateData({
+          payment: input.payment,
+          refundAmount: input.refundAmount,
+          recipient,
+        }),
+        entity: {
+          entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_PAYMENT,
+          entityId: input.payment.id,
+        },
+        idempotencyKey: createPaymentEmailIdempotencyKey({
+          eventType: input.eventType,
+          paymentId: input.payment.id,
+          recipient,
+        }),
+        metadata: buildRefundEmailMetadata({
+          payment: input.payment,
+          refundAmount: input.refundAmount,
+        }),
+      });
+    } catch {
+      // Best-effort notification side effect. The committed refund/payment state remains authoritative.
+    }
+  }
+
+  private async notifyPaymentRefunded(input: {
+    readonly payment: PaymentRecord;
+    readonly refundAmount: number;
+  }): Promise<void> {
+    await this.notifyRefundEmailBestEffort({
+      payment: input.payment,
+      refundAmount: input.refundAmount,
+      eventType: EMAIL_NOTIFICATION_EVENT_PAYMENT_REFUNDED,
+    });
+  }
+
+  private async notifyPaymentRefundFailedOrManualReviewRequired(input: {
+    readonly payment: PaymentRecord;
+    readonly refundAmount: number;
+  }): Promise<void> {
+    await this.notifyRefundEmailBestEffort({
+      payment: input.payment,
+      refundAmount: input.refundAmount,
+      eventType:
+        EMAIL_NOTIFICATION_EVENT_PAYMENT_REFUND_FAILED_OR_MANUAL_REVIEW_REQUIRED,
     });
   }
 

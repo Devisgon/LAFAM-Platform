@@ -1,23 +1,15 @@
 "use client";
-
 import {
   type FormEvent,
-  type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  useCallback,
   useEffect,
   useMemo,
   useState,
 } from "react";
-import { ChevronDown, Eye, EyeOff, RotateCcw } from "lucide-react";
-import {
-  useAdminBookings,
-  useAdminPrivateBookings,
-} from "@/modules/bookings";
-import { useAdminUsers } from "@/modules/users";
-import {
-  type PilatesSchedule,
-  usePilates,
-} from "@/modules/services/pilates";
+import { ChevronDown, RotateCcw } from "lucide-react";
+import { useAdminBookings, useAdminPrivateBookings } from "@/modules/bookings";
+import { type PilatesSchedule, usePilates } from "@/modules/services/pilates";
 import { useStaff } from "@/modules/staff";
 import {
   adminCustomersClient,
@@ -33,12 +25,10 @@ import {
   type AdminPrivateBookingFilters,
   type AdminBookingStatus,
   type AdminOverrideBookingPayload,
-  type AdminWaitlistEntry,
   type CreatePrivateTrainerBookingPayload,
   type PrivateTrainerBooking,
   type PrivateTrainerBookingDetail,
 } from "@/modules/bookings";
-import { type AdminUserFilters } from "@/modules/users";
 import { Badge } from "@/components/ui/Badge";
 import { DataTable } from "@/components/data-display/DataTable";
 import { LoadingState } from "@/components/data-display/LoadingState";
@@ -52,11 +42,22 @@ type ResultToast = {
 
 type BookingMode = "class" | "private";
 type CreateBookingMode = "class" | "private";
-type CustomerBookingMode = "single" | "multiple";
+type LookupStatus = {
+  tone: "idle" | "loading" | "success" | "warning" | "error";
+  message: string;
+};
+type CustomerDraft = {
+  civilId: string;
+  email: string;
+  fullName: string;
+  phone: string;
+  timezone: string;
+};
 
 const fieldClass =
   "min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-4 text-base text-txt-primary outline-none transition placeholder:text-txt-secondary focus:border-primary";
-const BOOKING_PHONE_PATTERN = /^\+?[1-9]\d{6,15}$/u;
+const KUWAIT_PHONE_CODE = "+965";
+const KUWAIT_PHONE_DIGIT_COUNT = 8;
 const BOOKING_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 
 const pageSizeOptions = [10, 25, 50];
@@ -187,9 +188,7 @@ function buildBulkBookingKey(input: {
   return [
     "admin-bulk",
     input.customerUserId.slice(0, 8),
-    input.scheduleIds
-      .map((scheduleId) => scheduleId.slice(0, 8))
-      .join("-"),
+    input.scheduleIds.map((scheduleId) => scheduleId.slice(0, 8)).join("-"),
     Date.now().toString(36),
   ].join("-");
 }
@@ -199,75 +198,76 @@ function normalizeBookingText(value: FormDataEntryValue | null): string {
 }
 
 function normalizeBookingPhone(value: string): string {
-  return value.trim().replace(/\s+/g, "");
+  const digits = value.replace(/\D/g, "");
+  const localDigits = digits.startsWith("965") ? digits.slice(3) : digits;
+
+  return localDigits ? `${KUWAIT_PHONE_CODE}${localDigits}` : "";
 }
 
 function normalizeBookingCivilId(value: string): string {
   return value.trim().replace(/[^\d -]/g, "");
 }
 
-function assertCreateCustomerInput(input: {
+function bookingPhoneLocalValue(value: string): string {
+  const digits = value.replace(/\D/g, "");
+
+  return digits.startsWith("965") ? digits.slice(3) : digits;
+}
+
+function isValidKuwaitBookingPhone(value: string): boolean {
+  return bookingPhoneLocalValue(value).length === KUWAIT_PHONE_DIGIT_COUNT;
+}
+
+function createGeneratedAttendeePassword(): string {
+  const bytes = new Uint32Array(2);
+
+  if (typeof window !== "undefined" && window.crypto) {
+    window.crypto.getRandomValues(bytes);
+  } else {
+    bytes[0] = Date.now();
+    bytes[1] = Math.floor(Math.random() * 1_000_000);
+  }
+
+  return `Lafam-${bytes[0].toString(36)}-${bytes[1].toString(36)}aA1!`;
+}
+
+function assertAttendeeInput(input: {
   civilId: string;
   email: string;
   fullName: string;
-  password: string;
   phone: string;
 }): void {
   if (!input.fullName) {
-    throw new Error("Full name is required to create a customer user.");
+    throw new Error("Full name is required.");
   }
   if (!BOOKING_EMAIL_PATTERN.test(input.email)) {
-    throw new Error("Enter a valid email address for the customer user.");
+    throw new Error("Enter a valid email address.");
   }
-  if (!BOOKING_PHONE_PATTERN.test(input.phone)) {
-    throw new Error("Phone must be international format, like +923001234567.");
+  if (!isValidKuwaitBookingPhone(input.phone)) {
+    throw new Error("Enter a valid Kuwait phone number.");
   }
   if (input.civilId.replace(/\D/g, "").length !== 12) {
-    throw new Error("Civil ID must contain exactly 12 digits.");
-  }
-  if (input.password.length < 8) {
-    throw new Error("Password must be at least 8 characters long.");
-  }
-  if (!/[a-z]/u.test(input.password)) {
-    throw new Error("Password must include at least one lowercase letter.");
-  }
-  if (!/[A-Z]/u.test(input.password)) {
-    throw new Error("Password must include at least one uppercase letter.");
-  }
-  if (!/[0-9]/u.test(input.password)) {
-    throw new Error("Password must include at least one number.");
-  }
-  if (!/[^A-Za-z0-9]/u.test(input.password)) {
-    throw new Error("Password must include at least one symbol.");
-  }
-  if (/\s/u.test(input.password)) {
-    throw new Error("Password must not contain spaces.");
+    throw new Error("Invalid Civil ID.");
   }
 }
 
-function buildMissingCustomerPayload(
-  formData: FormData,
-  lookupPhone: string,
-  lookupCivilId: string,
-): CreateCustomerPayload {
+function buildManualAttendeePayload(formData: FormData): CreateCustomerPayload {
   const fullName = normalizeBookingText(formData.get("new_customer_full_name"));
-  const email = normalizeBookingText(formData.get("new_customer_email")).toLowerCase();
-  const phone = normalizeBookingPhone(lookupPhone);
-  const civilId = normalizeBookingCivilId(lookupCivilId);
-  const password = String(formData.get("new_customer_password") ?? "");
-  const confirmPassword = String(
-    formData.get("new_customer_confirm_password") ?? "",
+  const email = normalizeBookingText(
+    formData.get("new_customer_email"),
+  ).toLowerCase();
+  const phone = normalizeBookingPhone(
+    String(formData.get("lookup_phone") ?? ""),
   );
+  const civilId = normalizeBookingCivilId(
+    String(formData.get("lookup_civil_id") ?? ""),
+  );
+  const password = createGeneratedAttendeePassword();
 
-  if (password !== confirmPassword) {
-    throw new Error("Password and confirmation do not match.");
-  }
-
-  assertCreateCustomerInput({
+  assertAttendeeInput({
     civilId,
     email,
     fullName,
-    password,
     phone,
   });
 
@@ -277,10 +277,188 @@ function buildMissingCustomerPayload(
     phone,
     civil_id: civilId,
     password,
-    confirm_password: confirmPassword,
+    confirm_password: password,
     timezone:
       normalizeBookingText(formData.get("new_customer_timezone")) ||
       "Asia/Kuwait",
+  };
+}
+
+function useBookingCustomerLookup() {
+  const [lookupPhone, setLookupPhone] = useState("");
+  const [lookupCivilId, setLookupCivilId] = useState("");
+  const [lookupCustomer, setLookupCustomer] = useState<CustomerProfile | null>(
+    null,
+  );
+  const [customerDraft, setCustomerDraft] = useState<CustomerDraft>({
+    civilId: "",
+    email: "",
+    fullName: "",
+    phone: "",
+    timezone: "Asia/Kuwait",
+  });
+  const [lookupStatus, setLookupStatus] = useState<LookupStatus>({
+    tone: "idle",
+    message: "Enter phone or Civil ID to find an attendee.",
+  });
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+
+  const selectCustomer = useCallback((customer: CustomerProfile) => {
+    setLookupCustomer(customer);
+    setLookupPhone(bookingPhoneLocalValue(customer.phone));
+    setLookupCivilId(customer.civil_id);
+    setCustomerDraft({
+      civilId: customer.civil_id,
+      email: customer.email,
+      fullName: customer.full_name,
+      phone: customer.phone,
+      timezone: customer.timezone ?? "Asia/Kuwait",
+    });
+  }, []);
+
+  const updateLookupPhone = (value: string) => {
+    const localPhone = bookingPhoneLocalValue(value);
+
+    setLookupPhone(localPhone);
+    setCustomerDraft((current) => ({
+      ...current,
+      phone: normalizeBookingPhone(localPhone),
+    }));
+  };
+
+  const updateLookupCivilId = (value: string) => {
+    setLookupCivilId(value);
+    setCustomerDraft((current) => ({
+      ...current,
+      civilId: normalizeBookingCivilId(value),
+    }));
+  };
+
+  const updateCustomerDraft = (field: keyof CustomerDraft, value: string) => {
+    setCustomerDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const resolveAttendee = async (
+    form: HTMLFormElement,
+  ): Promise<CustomerProfile> => {
+    if (lookupCustomer) {
+      return lookupCustomer;
+    }
+
+    setIsCreatingCustomer(true);
+    try {
+      const createdCustomer = await adminCustomersClient.create(
+        buildManualAttendeePayload(new FormData(form)),
+      );
+
+      selectCustomer(createdCustomer);
+      setLookupStatus({
+        tone: "success",
+        message: `${createdCustomer.full_name} was added and selected.`,
+      });
+      window.dispatchEvent(new CustomEvent("lafam:users:changed"));
+      return createdCustomer;
+    } catch (requestError: unknown) {
+      setLookupStatus({
+        tone: "error",
+        message: getErrorMessage(requestError),
+      });
+      throw requestError;
+    } finally {
+      setIsCreatingCustomer(false);
+    }
+  };
+
+  useEffect(() => {
+    const phone = normalizeBookingPhone(lookupPhone);
+    const civilId = normalizeBookingCivilId(lookupCivilId);
+    const civilDigits = civilId.replace(/\D/g, "");
+    const canLookupByPhone = isValidKuwaitBookingPhone(phone);
+    const canLookupByCivilId = civilDigits.length === 12;
+
+    if (!canLookupByPhone && !canLookupByCivilId) {
+      const reset = window.setTimeout(() => {
+        setLookupCustomer(null);
+        setLookupStatus({
+          tone: civilDigits.length > 0 ? "warning" : "idle",
+          message:
+            civilDigits.length > 0
+              ? "Invalid Civil ID."
+              : "Enter phone or Civil ID to find an attendee.",
+        });
+      }, 0);
+
+      return () => window.clearTimeout(reset);
+    }
+
+    const controller = new AbortController();
+    const request = window.setTimeout(() => {
+      setLookupStatus({ tone: "loading", message: "Looking up attendee..." });
+      void adminCustomersClient
+        .lookup(
+          {
+            ...(canLookupByPhone ? { phone } : {}),
+            ...(canLookupByCivilId ? { civil_id: civilId } : {}),
+          },
+          controller.signal,
+        )
+        .then((result) => {
+          if (!result.customer) {
+            setLookupCustomer(null);
+            setCustomerDraft((current) => ({
+              ...current,
+              civilId,
+              email: "",
+              fullName: "",
+              phone,
+            }));
+            setLookupStatus({
+              tone: "warning",
+              message:
+                "No attendee matched those details. Complete the form, then add the attendee.",
+            });
+            return;
+          }
+
+          selectCustomer(result.customer);
+          setLookupStatus({
+            tone: "success",
+            message: `${result.customer.full_name} found and selected.`,
+          });
+        })
+        .catch((requestError: unknown) => {
+          if (
+            requestError instanceof DOMException &&
+            requestError.name === "AbortError"
+          ) {
+            return;
+          }
+
+          setLookupCustomer(null);
+          setLookupStatus({
+            tone: "error",
+            message: getErrorMessage(requestError),
+          });
+        });
+    }, 120);
+
+    return () => {
+      window.clearTimeout(request);
+      controller.abort();
+    };
+  }, [lookupCivilId, lookupPhone, selectCustomer]);
+
+  return {
+    customerDraft,
+    isCreatingCustomer,
+    lookupCivilId,
+    lookupCustomer,
+    lookupPhone,
+    lookupStatus,
+    resolveAttendee,
+    updateCustomerDraft,
+    updateLookupCivilId,
+    updateLookupPhone,
   };
 }
 
@@ -307,26 +485,12 @@ export function BookingExplorer({
 }) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [toast, setToast] = useState<ResultToast | null>(null);
-  const customerFilters = useMemo<AdminUserFilters>(() => ({}), []);
-  const { users: customers, isLoading: areCustomersLoading } =
-    useAdminUsers(customerFilters);
   const { staff, isLoading: isStaffLoading } = useStaff();
   const {
     schedules,
     isLoading: areSchedulesLoading,
     error: scheduleLoadError,
   } = usePilates();
-  const customerOptions = useMemo(() => {
-    const customerLikeUsers = customers.filter(
-      (customer) =>
-        customer.is_guest ||
-        customer.role === "customer" ||
-        customer.role === "guest" ||
-        customer.role === "user",
-    );
-
-    return customerLikeUsers.length > 0 ? customerLikeUsers : customers;
-  }, [customers]);
   const staffOptions = useMemo(
     () =>
       staff.filter(
@@ -342,11 +506,6 @@ export function BookingExplorer({
       <section className="grid gap-9 text-txt-primary">
         {isCreateOpen ? (
           <CreateBookingCard
-            areCustomersLoading={areCustomersLoading}
-            customerOptions={customerOptions.map((customer) => [
-              customer.id,
-              `${customer.full_name ?? customer.email ?? customer.phone ?? "Unnamed customer"}${customer.email ? ` - ${customer.email}` : ""}`,
-            ])}
             areSchedulesLoading={areSchedulesLoading}
             isStaffLoading={isStaffLoading}
             onClose={() => setIsCreateOpen(false)}
@@ -1716,9 +1875,7 @@ function ActionCard({
 }
 
 function CreateBookingCard({
-  areCustomersLoading,
   areSchedulesLoading,
-  customerOptions,
   isStaffLoading,
   onBulkCreated,
   onClose,
@@ -1728,9 +1885,7 @@ function CreateBookingCard({
   schedules,
   staffOptions,
 }: {
-  areCustomersLoading: boolean;
   areSchedulesLoading: boolean;
-  customerOptions: Array<[string, string]>;
   isStaffLoading: boolean;
   onBulkCreated: (orderNumbers: string[]) => void;
   onClose: () => void;
@@ -1778,8 +1933,6 @@ function CreateBookingCard({
         />
       ) : (
         <CreatePrivateBookingCard
-          areCustomersLoading={areCustomersLoading}
-          customerOptions={customerOptions}
           isStaffLoading={isStaffLoading}
           onClose={onClose}
           onCreated={onPrivateCreated}
@@ -1806,28 +1959,11 @@ function CreateClassBulkBookingCard({
   scheduleLoadError: string | null;
   schedules: PilatesSchedule[];
 }) {
-  const [customerMode, setCustomerMode] =
-    useState<CustomerBookingMode>("single");
-  const [lookupPhone, setLookupPhone] = useState("");
-  const [lookupCivilId, setLookupCivilId] = useState("");
-  const [lookupCustomer, setLookupCustomer] = useState<CustomerProfile | null>(
-    null,
-  );
-  const [selectedCustomers, setSelectedCustomers] = useState<CustomerProfile[]>(
-    [],
-  );
-  const [lookupStatus, setLookupStatus] = useState<{
-    tone: "idle" | "loading" | "success" | "warning" | "error";
-    message: string;
-  }>({ tone: "idle", message: "Enter phone or Civil ID to find a customer." });
+  const customerLookup = useBookingCustomerLookup();
   const [classId, setClassId] = useState("");
   const [scheduleDate, setScheduleDate] = useState("");
   const [selectedScheduleIds, setSelectedScheduleIds] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
-  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
-  const [showNewCustomerPassword, setShowNewCustomerPassword] = useState(false);
-  const [showNewCustomerConfirmPassword, setShowNewCustomerConfirmPassword] =
-    useState(false);
 
   const classOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -1878,100 +2014,9 @@ function CreateClassBulkBookingCard({
     [selectedSchedules],
   );
 
-  useEffect(() => {
-    const phone = lookupPhone.trim().replace(/\s+/g, "");
-    const civilId = lookupCivilId.trim();
-    const civilDigits = civilId.replace(/\D/g, "");
-    const canLookupByPhone = phone.startsWith("+") && phone.length >= 8;
-    const canLookupByCivilId = civilDigits.length === 12;
-
-    if (!canLookupByPhone && !canLookupByCivilId) {
-      const reset = window.setTimeout(() => {
-        setLookupCustomer(null);
-        setSelectedCustomers((current) =>
-          customerMode === "single" ? [] : current,
-        );
-        setLookupStatus({
-          tone: "idle",
-          message: "Enter phone or a 12-digit Civil ID to find a customer.",
-        });
-      }, 0);
-
-      return () => window.clearTimeout(reset);
-    }
-
-    const controller = new AbortController();
-    const request = window.setTimeout(() => {
-      setLookupStatus({ tone: "loading", message: "Looking up customer..." });
-      void adminCustomersClient
-        .lookup(
-          {
-            ...(canLookupByPhone ? { phone } : {}),
-            ...(canLookupByCivilId ? { civil_id: civilId } : {}),
-          },
-          controller.signal,
-        )
-        .then((result) => {
-          setLookupCustomer(result.customer);
-
-          if (!result.customer) {
-            setSelectedCustomers((current) =>
-              customerMode === "single" ? [] : current,
-            );
-            setLookupStatus({
-              tone: "warning",
-              message:
-                "No customer matched those details. Create the customer user below, then book.",
-            });
-            return;
-          }
-
-          if (customerMode === "single") {
-            setSelectedCustomers([result.customer]);
-          }
-
-          setLookupStatus({
-            tone: "success",
-            message: `${result.customer.full_name} found and details filled.`,
-          });
-        })
-        .catch((requestError: unknown) => {
-          if (
-            requestError instanceof DOMException &&
-            requestError.name === "AbortError"
-          ) {
-            return;
-          }
-
-          setLookupCustomer(null);
-          setLookupStatus({
-            tone: "error",
-            message: getErrorMessage(requestError),
-          });
-        });
-    }, 120);
-
-    return () => {
-      window.clearTimeout(request);
-      controller.abort();
-    };
-  }, [customerMode, lookupCivilId, lookupPhone]);
-
-  const addLookupCustomer = () => {
-    if (!lookupCustomer) return;
-
-    setSelectedCustomers((current) =>
-      current.some((customer) => customer.id === lookupCustomer.id)
-        ? current
-        : [...current, lookupCustomer],
-    );
-  };
-
-  const toggleSchedule = (scheduleId: string) => {
+  const removeSchedule = (scheduleId: string) => {
     setSelectedScheduleIds((current) =>
-      current.includes(scheduleId)
-        ? current.filter((id) => id !== scheduleId)
-        : [...current, scheduleId],
+      current.filter((id) => id !== scheduleId),
     );
   };
 
@@ -1983,20 +2028,11 @@ function CreateClassBulkBookingCard({
     );
   };
 
-
   const createBulkBooking = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const form = event.currentTarget;
     const formData = new FormData(event.currentTarget);
     const notes = String(formData.get("admin_notes") ?? "").trim();
-    const customers =
-      customerMode === "single"
-        ? selectedCustomers.slice(0, 1)
-        : selectedCustomers;
-
-    if (customers.length === 0) {
-      onError("Find or create the customer user first.");
-      return;
-    }
 
     if (selectedScheduleIds.length === 0) {
       onError("Select at least one time slot.");
@@ -2005,89 +2041,29 @@ function CreateClassBulkBookingCard({
 
     setIsCreating(true);
     try {
-      const results = await Promise.all(
-        customers.map((customer) =>
-          adminBookingsClient.createBulkBooking({
-            customer_user_id: customer.app_user_id,
-            schedule_ids: selectedScheduleIds,
-            idempotency_key: buildBulkBookingKey({
-              customerUserId: customer.app_user_id,
-              scheduleIds: selectedScheduleIds,
-            }),
-            ...(notes ? { admin_notes: notes } : {}),
-          }),
-        ),
-      );
-      const orderDetails = await Promise.all(
-        results.map((result) =>
-          adminBookingsClient
-            .getBookingOrder(result.booking_order.id)
-            .catch(() => null),
-        ),
-      );
+      const attendee = await customerLookup.resolveAttendee(form);
+      const result = await adminBookingsClient.createBulkBooking({
+        customer_user_id: attendee.app_user_id,
+        schedule_ids: selectedScheduleIds,
+        idempotency_key: buildBulkBookingKey({
+          customerUserId: attendee.app_user_id,
+          scheduleIds: selectedScheduleIds,
+        }),
+        ...(notes ? { admin_notes: notes } : {}),
+      });
+      const orderDetail = await adminBookingsClient
+        .getBookingOrder(result.booking_order.id)
+        .catch(() => null);
 
-      onCreated(
-        results.map(
-          (result, index) =>
-            orderDetails[index]?.order_number ??
-            result.booking_order.order_number,
-        ),
-      );
+      onCreated([
+        orderDetail?.order_number ?? result.booking_order.order_number,
+      ]);
     } catch (requestError: unknown) {
       onError(getErrorMessage(requestError));
     } finally {
       setIsCreating(false);
     }
   };
-
-  const createMissingCustomer = async (
-    event: ReactMouseEvent<HTMLButtonElement>,
-  ) => {
-    const form = event.currentTarget.form;
-
-    if (!form) return;
-
-    setIsCreatingCustomer(true);
-    try {
-      const createdCustomer = await adminCustomersClient.create(
-        buildMissingCustomerPayload(
-          new FormData(form),
-          lookupPhone,
-          lookupCivilId,
-        ),
-      );
-
-      setLookupCustomer(createdCustomer);
-      setSelectedCustomers((current) =>
-        customerMode === "single"
-          ? [createdCustomer]
-          : current.some((customer) => customer.id === createdCustomer.id)
-            ? current
-            : [...current, createdCustomer],
-      );
-      setLookupStatus({
-        tone: "success",
-        message: `${createdCustomer.full_name} was created and selected.`,
-      });
-      window.dispatchEvent(new CustomEvent("lafam:users:changed"));
-    } catch (requestError: unknown) {
-      setLookupStatus({
-        tone: "error",
-        message: getErrorMessage(requestError),
-      });
-    } finally {
-      setIsCreatingCustomer(false);
-    }
-  };
-
-  const lookupStatusClass =
-    lookupStatus.tone === "success"
-      ? "border-success/30 bg-success/10 text-success"
-      : lookupStatus.tone === "error"
-        ? "border-error/30 bg-error/10 text-error"
-        : lookupStatus.tone === "warning"
-          ? "border-warning/30 bg-warning/10 text-warning"
-          : "border-background-secondary bg-card-bg-secondary text-txt-secondary";
 
   return (
     <form
@@ -2099,343 +2075,138 @@ function CreateClassBulkBookingCard({
       </header>
 
       <div className="grid gap-6 px-5 py-5">
-        <section className="rounded-sm border border-background-secondary bg-card-bg-secondary p-4">
-          <h3 className="text-sm font-bold">1. Find customer user</h3>
-          <p className="mt-1 text-sm text-txt-secondary">
-            Enter phone or Civil ID. Existing customer details fill automatically.
-          </p>
-        </section>
+        <BookingCustomerLookupPanel customerLookup={customerLookup} />
 
-        <section className="grid gap-4 md:grid-cols-2">
-          <label className="grid gap-1.5 text-xs font-bold">
-            Customer selection
-            <span className="relative">
-              <select
-                className={`${fieldClass} appearance-none pr-10`}
-                onChange={(event) => {
-                  const nextMode = event.target.value as CustomerBookingMode;
-                  setCustomerMode(nextMode);
-                  setSelectedCustomers((current) =>
-                    nextMode === "single" ? current.slice(0, 1) : current,
-                  );
-                }}
-                value={customerMode}
-              >
-                <option value="single">Single customer</option>
-                <option value="multiple">Multiple customers</option>
-              </select>
-              <ChevronDown
-                aria-hidden="true"
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
-                size={16}
-              />
-            </span>
-          </label>
-          <FormField
-            label="Customer phone"
-            name="lookup_phone"
-            onChange={setLookupPhone}
-            placeholder="+923001234567"
-            type="text"
-          />
-          <FormField
-            label="Civil ID"
-            name="lookup_civil_id"
-            onChange={setLookupCivilId}
-            placeholder="2990-1011-2345"
-            type="text"
-          />
-        </section>
-
-        <section
-          aria-live="polite"
-          className={`rounded-sm border px-4 py-3 text-sm font-semibold ${lookupStatusClass}`}
-          role={lookupStatus.tone === "error" ? "alert" : "status"}
-        >
-          {lookupStatus.message}
-        </section>
-
-        {lookupCustomer ? (
-          <section className="grid gap-3 rounded-sm border border-background-secondary bg-card-bg-secondary p-4">
-            <h3 className="text-sm font-bold">Customer detail</h3>
-            <div className="grid gap-3 md:grid-cols-4">
-              <DetailItem label="Customer" value={lookupCustomer.full_name} />
-              <DetailItem label="Phone" value={lookupCustomer.phone} />
-              <DetailItem label="Email" value={lookupCustomer.email} />
-              <DetailItem label="Civil ID" value={lookupCustomer.civil_id} />
-            </div>
-            {customerMode === "multiple" ? (
-              <button
-                className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-sm font-semibold text-txt-primary"
-                onClick={addLookupCustomer}
-                type="button"
-              >
-                Add customer to booking list
-              </button>
-            ) : null}
+        <section className="grid gap-4">
+          <section className="rounded-sm border border-background-secondary bg-card-bg-secondary p-4">
+            <h3 className="text-sm font-bold">Booking Details</h3>
+            <p className="mt-1 text-sm text-txt-secondary">
+              Select a service, date, and available time slots.
+            </p>
           </section>
-        ) : null}
-
-        {!lookupCustomer && lookupStatus.tone === "warning" ? (
-          <section className="grid gap-4 rounded-sm border border-warning/30 bg-warning/10 p-4">
-            <div>
-              <h3 className="text-sm font-bold">Create customer user for booking</h3>
-              <p className="mt-1 text-sm text-txt-secondary">
-                The phone and Civil ID above will be used for the new customer user.
-              </p>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField
-                label="Full name"
-                name="new_customer_full_name"
-                placeholder="Ahmad Sajid"
-                required
-              />
-              <FormField
-                label="Email"
-                name="new_customer_email"
-                placeholder="customer@example.com"
-                required
-                type="text"
-              />
-              <BookingPasswordField
-                label="Password"
-                name="new_customer_password"
-                onToggle={() =>
-                  setShowNewCustomerPassword((value) => !value)
-                }
-                required
-                showPassword={showNewCustomerPassword}
-              />
-              <BookingPasswordField
-                label="Confirm password"
-                name="new_customer_confirm_password"
-                onToggle={() =>
-                  setShowNewCustomerConfirmPassword((value) => !value)
-                }
-                required
-                showPassword={showNewCustomerConfirmPassword}
-              />
-              <FormField
-                defaultValue="Asia/Kuwait"
-                label="Timezone"
-                name="new_customer_timezone"
-                placeholder="Asia/Kuwait"
-              />
-            </div>
-            <button
-              className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-sm font-semibold text-txt-primary disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isCreatingCustomer}
-              onClick={(buttonEvent) => void createMissingCustomer(buttonEvent)}
-              type="button"
-            >
-              {isCreatingCustomer ? "Creating customer..." : "Create customer user"}
-            </button>
-          </section>
-        ) : null}
-
-        {customerMode === "multiple" && selectedCustomers.length > 0 ? (
-          <section className="grid gap-2">
-            <h3 className="text-sm font-bold">Selected customers</h3>
-            <div className="flex flex-wrap gap-2">
-              {selectedCustomers.map((customer) => (
-                <span
-                  className="inline-flex items-center gap-2 rounded-sm border border-background-secondary bg-card-bg-secondary px-3 py-2 text-sm font-semibold"
-                  key={customer.id}
-                >
-                  {customer.full_name}
-                  {customerMode === "multiple" ? (
-                    <button
-                      aria-label={`Remove ${customer.full_name}`}
-                      className="text-error"
-                      onClick={() =>
-                        setSelectedCustomers((current) =>
-                          current.filter((item) => item.id !== customer.id),
-                        )
-                      }
-                      type="button"
-                    >
-                      X
-                    </button>
-                  ) : null}
-                </span>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {selectedCustomers.length > 0 ? (
-          <>
-            <section className="grid gap-4">
-              <section className="rounded-sm border border-background-secondary bg-card-bg-secondary p-4">
-                <h3 className="text-sm font-bold">
-                  Booking Details
-                </h3>
-                <p className="mt-1 text-sm text-txt-secondary">
-                  Select a service, date, and available time slots.
-                </p>
-              </section>
-              <div className="grid gap-4">
-                <OptionSelect
-                  disabled={areSchedulesLoading || classOptions.length === 0}
-                  label="Service"
-                  name="class_filter"
-                  onChange={(value) => {
-                    setClassId(value);
-                    setSelectedScheduleIds([]);
-                    setScheduleDate("");
-                  }}
-                  options={classOptions}
-                  placeholder={
-                    areSchedulesLoading ? "Loading services..." : "Select service"
-                  }
-                  value={classId}
-                />
-                <div className="grid gap-3 md:grid-cols-[1fr_1fr_160px_180px]">
-                  <FormField
-                    disabled={!classId}
-                    label="Session date"
-                    name="schedule_date"
-                    onChange={(value) => {
-                      setScheduleDate(value);
-                      setSelectedScheduleIds([]);
-                    }}
-                    type="date"
-                  />
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    Session Time
-                    <span className="relative">
-                      <select
-                        className={`${fieldClass} appearance-none pr-10 disabled:cursor-not-allowed disabled:opacity-60`}
-                        disabled={!classId || scheduleOptions.length === 0}
-                        defaultValue=""
-                        onChange={(event) => {
-                          addScheduleFromDropdown(event.target.value);
-                          event.target.value = "";
-                        }}
-                      >
-                        <option value="">
-                          {!classId
-                            ? "Select service first"
-                            : scheduleOptions.length === 0
-                              ? "No available time"
-                              : "Select time"}
-                        </option>
-                        {scheduleOptions.map((schedule) => (
-                          <option key={schedule.id} value={schedule.id}>
-                            {formatDate(schedule.class_date)} |{" "}
-                            {formatTime(schedule.start_time)} -{" "}
-                            {formatTime(schedule.end_time)} |{" "}
-                            {formatPrice(
-                              schedule.price_amount ??
-                                schedule.class?.default_price_amount ??
-                                null,
-                              schedule.currency ?? schedule.class?.currency,
-                            )}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown
-                        aria-hidden="true"
-                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
-                        size={16}
-                      />
-                    </span>
-                  </label>
-                  <FormField
-                    disabled
-                    label="Total Sessions"
-                    name="total_sessions_display"
-                    value={String(selectedSchedules.length)}
-                  />
-                  <FormField
-                    disabled
-                    label="Total Amount"
-                    name="total_amount_display"
-                    value={`${totalAmount.toFixed(3)} KWD`}
-                  />
-                </div>
-                <div className="grid gap-3 md:grid-cols-[1fr_1fr]">
-                  <label className="grid gap-1.5 text-xs font-bold">
-                    Payment Method
-                    <span className="relative">
-                      <select
-                        className={`${fieldClass} appearance-none pr-10`}
-                        defaultValue="cash"
-                        name="payment_method"
-                      >
-                        <option value="cash">Cash</option>
-                        <option value="card">Card</option>
-                        <option value="knet">KNET</option>
-                      </select>
-                      <ChevronDown
-                        aria-hidden="true"
-                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
-                        size={16}
-                      />
-                    </span>
-                  </label>
-                  <FormField
-                    label="Admin notes"
-                    name="admin_notes"
-                    placeholder="Booked at front desk."
-                  />
-                </div>
-              </div>
-
-              {scheduleLoadError ? (
-                <p className="text-sm text-error" role="alert">
-                  {scheduleLoadError}
-                </p>
-              ) : null}
-
-              <section className="grid gap-2">
-                <h4 className="text-sm font-bold">Selected time slots</h4>
-                {selectedSchedules.length > 0 ? (
-                  <div className="grid gap-2">
-                    {selectedSchedules.map((schedule) => (
-                      <div
-                        className="grid gap-2 rounded-sm border border-background-secondary bg-card-bg-secondary p-3 text-sm md:grid-cols-[1fr_auto]"
-                        key={schedule.id}
-                      >
-                        <div>
-                          <p className="font-semibold">
-                            {schedule.class?.title ?? "Pilates class"}
-                          </p>
-                          <p className="mt-1 text-txt-secondary">
-                            {formatDate(schedule.class_date)} |{" "}
-                            {formatTime(schedule.start_time)} -{" "}
-                            {formatTime(schedule.end_time)} | {schedule.studio}
-                          </p>
-                        </div>
-                        <button
-                          className="min-h-10 rounded-sm border border-background-secondary px-3 text-xs font-bold text-error"
-                          onClick={() => toggleSchedule(schedule.id)}
-                          type="button"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="rounded-sm border border-background-secondary bg-card-bg-secondary p-3 text-sm text-txt-secondary">
-                    No time slots selected.
-                  </p>
-                )}
-              </section>
-            </section>
-
-            <ScheduleWaitlistPanel
-              scheduleId={selectedScheduleIds[0] ?? ""}
-              schedules={schedules}
+          <div className="grid gap-4">
+            <OptionSelect
+              disabled={areSchedulesLoading || classOptions.length === 0}
+              label="Service"
+              name="class_filter"
+              onChange={(value) => {
+                setClassId(value);
+                setSelectedScheduleIds([]);
+                setScheduleDate("");
+              }}
+              options={classOptions}
+              placeholder={
+                areSchedulesLoading ? "Loading services..." : "Select service"
+              }
+              value={classId}
             />
-          </>
-        ) : (
-          <section className="rounded-sm border border-background-secondary bg-card-bg-secondary p-4 text-sm text-txt-secondary">
-            Find or create a customer user before choosing a class.
-          </section>
-        )}
+            <div className="grid gap-3 md:grid-cols-[1fr_1fr_160px_180px]">
+              <FormField
+                disabled={!classId}
+                label="Session date"
+                name="schedule_date"
+                onChange={(value) => {
+                  setScheduleDate(value);
+                  setSelectedScheduleIds([]);
+                }}
+                type="date"
+              />
+              <label className="grid gap-1.5 text-xs font-bold">
+                Session Time
+                <span className="relative flex min-h-16 items-center gap-2 rounded-sm border border-background-secondary bg-card-bg-primary px-3 py-2 focus-within:border-primary">
+                  <SelectedScheduleTags
+                    onRemove={removeSchedule}
+                    schedules={selectedSchedules}
+                  />
+                  <span className="relative min-w-0 flex-1">
+                    <select
+                      aria-label="Session Time"
+                      className={`min-h-10 w-full appearance-none rounded-sm bg-transparent text-base text-txt-primary outline-none disabled:cursor-not-allowed disabled:opacity-60 ${
+                        selectedSchedules.length > 0
+                          ? "absolute inset-y-0 right-0 z-10 cursor-pointer opacity-0"
+                          : "px-2 pr-10"
+                      }`}
+                      disabled={!classId || scheduleOptions.length === 0}
+                      defaultValue=""
+                      onChange={(event) => {
+                        addScheduleFromDropdown(event.target.value);
+                        event.target.value = "";
+                      }}
+                    >
+                      <option value="">
+                        {!classId
+                          ? "Select service first"
+                          : scheduleOptions.length === 0
+                            ? "No available time"
+                            : "Select time"}
+                      </option>
+                      {scheduleOptions.map((schedule) => (
+                        <option key={schedule.id} value={schedule.id}>
+                          {formatTime(schedule.start_time)} -{" "}
+                          {formatTime(schedule.end_time)} |{" "}
+                          {formatPrice(
+                            schedule.price_amount ??
+                              schedule.class?.default_price_amount ??
+                              null,
+                            schedule.currency ?? schedule.class?.currency,
+                          )}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      aria-hidden="true"
+                      className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-txt-secondary"
+                      size={16}
+                    />
+                  </span>
+                </span>
+              </label>
+              <FormField
+                disabled
+                label="Total Sessions"
+                name="total_sessions_display"
+                value={String(selectedSchedules.length)}
+              />
+              <FormField
+                disabled
+                label="Total Amount"
+                name="total_amount_display"
+                value={`${totalAmount.toFixed(3)} KWD`}
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-[1fr_1fr]">
+              <label className="grid gap-1.5 text-xs font-bold">
+                Payment Method
+                <span className="relative">
+                  <select
+                    className={`${fieldClass} appearance-none pr-10`}
+                    defaultValue="cash"
+                    name="payment_method"
+                  >
+                    <option value="card">Card</option>
+                    <option value="knet">KNET</option>
+                  </select>
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
+                    size={16}
+                  />
+                </span>
+              </label>
+              <FormField
+                label="Admin notes"
+                name="admin_notes"
+                placeholder="Booked at front desk."
+              />
+            </div>
+          </div>
+
+          {scheduleLoadError ? (
+            <p className="text-sm text-error" role="alert">
+              {scheduleLoadError}
+            </p>
+          ) : null}
+        </section>
       </div>
 
       <footer className="flex justify-start gap-2 border-t border-background-secondary px-5 py-5">
@@ -2443,7 +2214,7 @@ function CreateClassBulkBookingCard({
           className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-xs font-bold text-txt-primary disabled:cursor-not-allowed disabled:opacity-60"
           disabled={
             isCreating ||
-            selectedCustomers.length === 0 ||
+            customerLookup.isCreatingCustomer ||
             selectedScheduleIds.length === 0
           }
           type="submit"
@@ -2463,154 +2234,137 @@ function CreateClassBulkBookingCard({
   );
 }
 
-function ScheduleWaitlistPanel({
-  scheduleId,
-  schedules,
+function BookingCustomerLookupPanel({
+  customerLookup,
 }: {
-  scheduleId: string;
-  schedules: PilatesSchedule[];
+  customerLookup: ReturnType<typeof useBookingCustomerLookup>;
 }) {
-  const [waitlist, setWaitlist] = useState<AdminWaitlistEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isRemoving, setIsRemoving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const schedule = schedules.find((item) => item.id === scheduleId);
-
-  useEffect(() => {
-    if (!scheduleId) {
-      const reset = window.setTimeout(() => {
-        setWaitlist([]);
-        setError(null);
-      }, 0);
-
-      return () => window.clearTimeout(reset);
-    }
-
-    let isCurrent = true;
-    const request = window.setTimeout(() => {
-      setIsLoading(true);
-      setError(null);
-
-      void adminBookingsClient
-        .listScheduleWaitlist(scheduleId)
-        .then((result) => {
-          if (isCurrent) {
-            setWaitlist(result.waitlist);
-          }
-        })
-        .catch((requestError: unknown) => {
-          if (isCurrent) {
-            setError(getErrorMessage(requestError));
-          }
-        })
-        .finally(() => {
-          if (isCurrent) {
-            setIsLoading(false);
-          }
-        });
-    }, 0);
-
-    return () => {
-      isCurrent = false;
-      window.clearTimeout(request);
-    };
-  }, [scheduleId]);
-
-  const removeEntry = async (waitlistId: string) => {
-    setIsRemoving(true);
-    setError(null);
-    try {
-      await adminBookingsClient.removeWaitlistEntry(waitlistId);
-      setWaitlist((current) =>
-        current.filter((entry) => entry.id !== waitlistId),
-      );
-    } catch (requestError: unknown) {
-      setError(getErrorMessage(requestError));
-    } finally {
-      setIsRemoving(false);
-    }
-  };
-
-  if (!scheduleId) {
-    return (
-      <section className="rounded-sm border border-background-secondary bg-card-bg-secondary p-4 text-sm text-txt-secondary">
-        Select a time slot to review its waitlist.
-      </section>
-    );
-  }
+  const {
+    customerDraft,
+    lookupStatus,
+    updateCustomerDraft,
+    updateLookupCivilId,
+    updateLookupPhone,
+  } = customerLookup;
+  const lookupStatusClass =
+    lookupStatus.tone === "success"
+      ? "border-success/30 bg-success/10 text-success"
+      : lookupStatus.tone === "error"
+        ? "border-error/30 bg-error/10 text-error"
+        : lookupStatus.tone === "warning"
+          ? "border-warning/30 bg-warning/10 text-warning"
+          : "border-background-secondary bg-card-bg-secondary text-txt-secondary";
 
   return (
-    <section className="overflow-hidden rounded-sm border border-background-secondary bg-card-bg-secondary">
+    <section className="overflow-hidden rounded-sm border border-background-secondary bg-card-bg-primary">
       <header className="border-b border-background-secondary px-4 py-3">
-        <h3 className="text-sm font-bold">
-          Waitlist for{" "}
-          {schedule
-            ? `${schedule.class?.title ?? "selected class"} | ${formatDate(schedule.class_date)} ${formatTime(schedule.start_time)}`
-            : "selected slot"}
-        </h3>
+        <h3 className="text-sm font-bold">Customer Details</h3>
       </header>
-
-      {isLoading ? (
-        <LoadingState className="p-4" label="Loading waitlist" />
-      ) : error ? (
-        <p className="p-4 text-sm text-error" role="alert">
-          {error}
+      <div className="grid gap-4 p-4 md:grid-cols-2">
+        <FormField
+          label="Customer Mobile Number"
+          name="lookup_phone"
+          onChange={updateLookupPhone}
+          placeholder="00000000"
+          required
+          prefix={KUWAIT_PHONE_CODE}
+          type="text"
+          value={customerLookup.lookupPhone}
+        />
+        <FormField
+          label="Customer CIVIL ID"
+          name="lookup_civil_id"
+          onChange={updateLookupCivilId}
+          placeholder="2990-1011-2345"
+          required
+          type="text"
+          value={customerLookup.lookupCivilId}
+        />
+        <FormField
+          label="Customer Name"
+          name="new_customer_full_name"
+          onChange={(value) => updateCustomerDraft("fullName", value)}
+          placeholder="Name"
+          required
+          value={customerDraft.fullName}
+        />
+        <FormField
+          label="Customer Email"
+          name="new_customer_email"
+          onChange={(value) => updateCustomerDraft("email", value)}
+          placeholder="Email"
+          required
+          type="text"
+          value={customerDraft.email}
+        />
+        <input
+          name="new_customer_timezone"
+          type="hidden"
+          value={customerDraft.timezone}
+        />
+      </div>
+      {lookupStatus.tone !== "idle" ? (
+        <p
+          aria-live="polite"
+          className={`mx-4 mb-4 rounded-sm border px-4 py-3 text-sm font-semibold ${lookupStatusClass}`}
+          role={lookupStatus.tone === "error" ? "alert" : "status"}
+        >
+          {lookupStatus.message}
         </p>
-      ) : waitlist.length === 0 ? (
-        <p className="p-4 text-sm text-txt-secondary">
-          No waitlist entries for this slot.
-        </p>
-      ) : (
-        <div className="grid gap-2 p-4">
-          {waitlist.map((entry) => (
-            <div
-              className="grid gap-2 rounded-sm border border-background-secondary bg-card-bg-primary p-3 md:grid-cols-[1fr_auto]"
-              key={entry.id}
-            >
-              <div>
-                <p className="font-semibold">
-                  #{entry.position}{" "}
-                  {entry.customer?.full_name ??
-                    entry.customer?.email ??
-                    "Unnamed customer"}
-                </p>
-                <p className="mt-1 text-xs text-txt-secondary">
-                  {label(entry.status)} | Joined {formatDateTime(entry.joined_at)}
-                </p>
-              </div>
-              <button
-                className="min-h-10 rounded-sm bg-error px-3 text-xs font-bold text-white disabled:opacity-60"
-                disabled={isRemoving}
-                onClick={() => void removeEntry(entry.id)}
-                type="button"
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      ) : null}
     </section>
   );
 }
 
+function SelectedScheduleTags({
+  onRemove,
+  schedules,
+}: {
+  onRemove: (scheduleId: string) => void;
+  schedules: PilatesSchedule[];
+}) {
+  if (schedules.length === 0) {
+    return <span className="min-w-0 flex-1" aria-hidden="true" />;
+  }
+
+  return (
+    <span className="flex min-w-0 flex-1 flex-nowrap gap-2 overflow-hidden">
+      {schedules.map((schedule) => (
+        <span
+          className="inline-flex max-w-full shrink-0 items-center gap-2 rounded-sm border border-background-secondary bg-card-bg-secondary px-2 py-1 text-xs font-semibold text-txt-primary"
+          key={schedule.id}
+        >
+          <span className="truncate">
+            {formatTime(schedule.start_time)} - {formatTime(schedule.end_time)}
+          </span>
+          <button
+            aria-label={`Remove ${formatTime(schedule.start_time)} session`}
+            className="text-txt-secondary transition hover:text-error"
+            onClick={() => onRemove(schedule.id)}
+            type="button"
+          >
+            X
+          </button>
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function CreatePrivateBookingCard({
-  areCustomersLoading,
-  customerOptions,
   isStaffLoading,
   onClose,
   onCreated,
   onError,
   staffOptions,
 }: {
-  areCustomersLoading: boolean;
-  customerOptions: Array<[string, string]>;
   isStaffLoading: boolean;
   onClose: () => void;
   onCreated: (bookingNumber: string) => void;
   onError: (message: string) => void;
   staffOptions: Array<[string, string]>;
 }) {
+  const customerLookup = useBookingCustomerLookup();
   const [isCreating, setIsCreating] = useState(false);
   const [trainerId, setTrainerId] = useState("");
   const [sessionDate, setSessionDate] = useState("");
@@ -2687,25 +2441,26 @@ function CreatePrivateBookingCard({
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const payload: CreatePrivateTrainerBookingPayload = {
-      currency: "KWD",
-      duration_minutes: Number(formData.get("duration_minutes") || 60),
-      payment_required: formData.get("payment_required") === "true",
-      price_amount: Number(formData.get("price_amount") || 0),
-      session_date: String(formData.get("session_date")).trim(),
-      start_time: String(formData.get("start_time")).trim(),
-      studio: String(formData.get("studio")).trim() || "LAFAM Pilates Studio",
-      trainer_staff_profile_id: String(
-        formData.get("trainer_staff_profile_id"),
-      ).trim(),
-      user_id: String(formData.get("user_id")).trim(),
-    };
-    payload.idempotency_key =
-      String(formData.get("idempotency_key")).trim() ||
-      buildIdempotencyKey(payload);
 
     setIsCreating(true);
     try {
+      const attendee = await customerLookup.resolveAttendee(form);
+      const payload: CreatePrivateTrainerBookingPayload = {
+        currency: "KWD",
+        duration_minutes: Number(formData.get("duration_minutes") || 60),
+        payment_required: formData.get("payment_required") === "true",
+        price_amount: Number(formData.get("price_amount") || 0),
+        session_date: String(formData.get("session_date")).trim(),
+        start_time: String(formData.get("start_time")).trim(),
+        studio: String(formData.get("studio")).trim() || "LAFAM Pilates Studio",
+        trainer_staff_profile_id: String(
+          formData.get("trainer_staff_profile_id"),
+        ).trim(),
+        user_id: attendee.app_user_id,
+      };
+      payload.idempotency_key =
+        String(formData.get("idempotency_key")).trim() ||
+        buildIdempotencyKey(payload);
       const result = await adminBookingsClient.createPrivateTrainer(payload);
       form.reset();
       onCreated(result.private_booking.booking_number);
@@ -2733,19 +2488,12 @@ function CreatePrivateBookingCard({
 
       <div className="px-5 py-5">
         <p className="mb-5 text-sm text-txt-secondary">
-          Create a private trainer booking for a customer and trainer.
+          Create a private trainer booking for an attendee and trainer.
         </p>
-        <div className="grid gap-5 md:grid-cols-2">
-          <OptionSelect
-            disabled={areCustomersLoading || customerOptions.length === 0}
-            label="Customer"
-            name="user_id"
-            options={customerOptions}
-            placeholder={
-              areCustomersLoading ? "Loading customers..." : "Select customer"
-            }
-            required
-          />
+        <div className="grid gap-5">
+          <BookingCustomerLookupPanel customerLookup={customerLookup} />
+        </div>
+        <div className="mt-5 grid gap-5 md:grid-cols-2">
           <OptionSelect
             disabled={isStaffLoading || staffOptions.length === 0}
             label="Staff trainer"
@@ -2851,6 +2599,7 @@ function CreatePrivateBookingCard({
           className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-xs font-bold text-txt-primary disabled:cursor-not-allowed disabled:opacity-60"
           disabled={
             isCreating ||
+            customerLookup.isCreatingCustomer ||
             (hasCompleteSlotSelection && availability?.status !== "available")
           }
           type="submit"
@@ -2939,6 +2688,7 @@ function FormField({
   name,
   onChange,
   placeholder,
+  prefix,
   required = false,
   step,
   type = "text",
@@ -2951,6 +2701,7 @@ function FormField({
   name: string;
   onChange?: (value: string) => void;
   placeholder?: string;
+  prefix?: string;
   required?: boolean;
   step?: string;
   type?: "date" | "number" | "text" | "time";
@@ -2959,66 +2710,46 @@ function FormField({
   return (
     <label className="grid gap-1.5 text-xs font-bold">
       {label}
-      <input
-        className={fieldClass}
-        defaultValue={defaultValue}
-        disabled={disabled}
-        min={min}
-        name={name}
-        onChange={
-          onChange ? (event) => onChange(event.target.value) : undefined
-        }
-        placeholder={placeholder}
-        readOnly={value !== undefined && !onChange}
-        required={required}
-        step={step}
-        type={type}
-        value={value}
-      />
-    </label>
-  );
-}
-
-function BookingPasswordField({
-  disabled = false,
-  label,
-  name,
-  onToggle,
-  required = false,
-  showPassword,
-}: {
-  disabled?: boolean;
-  label: string;
-  name: string;
-  onToggle: () => void;
-  required?: boolean;
-  showPassword: boolean;
-}) {
-  const Icon = showPassword ? EyeOff : Eye;
-
-  return (
-    <label className="grid gap-1.5 text-xs font-bold">
-      {label}
-      <span className="relative">
+      {prefix ? (
+        <span className="flex min-h-12 overflow-hidden rounded-sm border border-background-secondary bg-card-bg-primary text-base text-txt-primary transition focus-within:border-primary">
+          <span className="flex items-center border-r border-background-secondary px-4 font-semibold text-txt-secondary">
+            {prefix}
+          </span>
+          <input
+            className="min-w-0 flex-1 bg-transparent px-4 text-base text-txt-primary outline-none placeholder:text-txt-secondary disabled:opacity-60"
+            defaultValue={defaultValue}
+            disabled={disabled}
+            min={min}
+            name={name}
+            onChange={
+              onChange ? (event) => onChange(event.target.value) : undefined
+            }
+            placeholder={placeholder}
+            readOnly={value !== undefined && !onChange}
+            required={required}
+            step={step}
+            type={type}
+            value={value}
+          />
+        </span>
+      ) : (
         <input
-          autoComplete="new-password"
-          className={`${fieldClass} pr-12`}
+          className={fieldClass}
+          defaultValue={defaultValue}
           disabled={disabled}
-          maxLength={128}
-          minLength={8}
+          min={min}
           name={name}
+          onChange={
+            onChange ? (event) => onChange(event.target.value) : undefined
+          }
+          placeholder={placeholder}
+          readOnly={value !== undefined && !onChange}
           required={required}
-          type={showPassword ? "text" : "password"}
+          step={step}
+          type={type}
+          value={value}
         />
-        <button
-          aria-label={showPassword ? "Hide password" : "Show password"}
-          className="absolute right-3 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-sm text-txt-secondary transition hover:bg-background-secondary hover:text-txt-primary"
-          onClick={onToggle}
-          type="button"
-        >
-          <Icon aria-hidden="true" size={18} />
-        </button>
-      </span>
+      )}
     </label>
   );
 }
