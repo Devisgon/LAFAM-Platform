@@ -8,6 +8,8 @@
  *   private trainer bookings, booking calendar, waitlist, availability, and booking events.
  * - Wires StaffModule so BookingAdminService can resolve trainer staff profiles
  *   for scoped trainer booking management.
+ * - Wires NotificationsModule so booking, waitlist, and private-booking email
+ *   outbox records are created through the notification boundary.
  *
  * Important:
  * - Pilates class bookings and private trainer bookings are separate flows.
@@ -29,6 +31,7 @@ import { Module } from '@nestjs/common';
 
 import { DatabaseModule } from '../../database/database.module';
 import { AuthModule } from '../auth/auth.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { StaffModule } from '../staff/staff.module';
 import { BookingAdminService } from './application/booking-admin.service';
 import { BookingAvailabilityService } from './application/booking-availability.service';
@@ -41,7 +44,7 @@ import { BookingCustomerController } from './controllers/booking-customer.contro
 import { BookingRepository } from './repositories/booking.repository';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, StaffModule],
+  imports: [DatabaseModule, AuthModule, StaffModule, NotificationsModule],
   controllers: [BookingCustomerController, BookingAdminController],
   providers: [
     BookingCustomerService,

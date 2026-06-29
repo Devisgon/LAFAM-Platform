@@ -15,6 +15,7 @@
 export const AUTH_USER_STATUSES = [
   'guest_active',
   'pending_email_verification',
+  'invited',
   'active',
   'deactivated',
   'deleted',
@@ -26,6 +27,7 @@ export const AUTH_USER_STATUS_GUEST_ACTIVE =
   'guest_active' satisfies AuthUserStatus;
 export const AUTH_USER_STATUS_PENDING_EMAIL_VERIFICATION =
   'pending_email_verification' satisfies AuthUserStatus;
+export const AUTH_USER_STATUS_INVITED = 'invited' satisfies AuthUserStatus;
 export const AUTH_USER_STATUS_ACTIVE = 'active' satisfies AuthUserStatus;
 export const AUTH_USER_STATUS_DEACTIVATED =
   'deactivated' satisfies AuthUserStatus;
@@ -38,6 +40,7 @@ export const AUTH_ACCESS_ALLOWED_USER_STATUSES = [
 
 export const AUTH_ACCESS_BLOCKED_USER_STATUSES = [
   AUTH_USER_STATUS_PENDING_EMAIL_VERIFICATION,
+  AUTH_USER_STATUS_INVITED,
   AUTH_USER_STATUS_DEACTIVATED,
   AUTH_USER_STATUS_DELETED,
 ] as const satisfies readonly AuthUserStatus[];

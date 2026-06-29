@@ -18,6 +18,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { AppError } from '../../../common/errors/app-error';
+import type { DatabaseJsonObject } from '../../../database/database.types';
 import {
   AUTH_ERROR_DETAIL_KEYS,
   AUTH_ERROR_REASON_PASSWORD_CONFIRMATION_MISMATCH,
@@ -28,6 +29,19 @@ import {
   AUTH_USER_STATUS_PENDING_EMAIL_VERIFICATION,
 } from '../../auth/constants/auth.constants';
 import { SupabaseAuthRepository } from '../../auth/repositories/supabase-auth.repository';
+import { EmailNotificationService } from '../../notifications/application/email-notification.service';
+import {
+  EMAIL_NOTIFICATION_ENTITY_TYPE_STAFF_PROFILE,
+  EMAIL_NOTIFICATION_EVENT_TRAINER_ACCOUNT_CREATED_WITH_PASSWORD,
+  EMAIL_NOTIFICATION_EVENT_TRAINER_AVAILABILITY_UPDATED,
+  EMAIL_RECIPIENT_ROLE_STAFF,
+  EMAIL_RECIPIENT_ROLE_TRAINER,
+} from '../../notifications/constants/notification.constants';
+import { createEntityEmailIdempotencyKey } from '../../notifications/domain/email-idempotency.policy';
+import type {
+  EmailNotificationEvent,
+  EmailRecipient,
+} from '../../notifications/types/notification.types';
 import type { AuthInternalContext } from '../../auth/types/auth-context.types';
 import {
   getAuthPasswordPolicyFailureCodes,
@@ -38,6 +52,7 @@ import {
   STAFF_DEFAULT_AVAILABILITY_IS_AVAILABLE,
   STAFF_LIST_DEFAULT_LIMIT,
   STAFF_LIST_DEFAULT_OFFSET,
+  STAFF_PORTAL_ROLE_TRAINER,
   STAFF_PROFILE_STATUS_AVAILABLE,
   isStaffAdminManagementRole,
   isStaffDayOfWeek,
@@ -272,11 +287,106 @@ function hasObjectKeys(value: Record<string, unknown>): boolean {
   return Object.keys(value).length > 0;
 }
 
+function normalizeOptionalText(
+  value: string | null | undefined,
+): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+
+  return trimmedValue.length > 0 ? trimmedValue : null;
+}
+
+function addOptionalTemplateString(
+  target: DatabaseJsonObject,
+  key: string,
+  value: string | null | undefined,
+): void {
+  const normalizedValue = normalizeOptionalText(value);
+
+  if (normalizedValue) {
+    target[key] = normalizedValue;
+  }
+}
+
+function resolveStaffEmailRecipientRole(
+  staff: StaffProfileWithUser,
+): typeof EMAIL_RECIPIENT_ROLE_TRAINER | typeof EMAIL_RECIPIENT_ROLE_STAFF {
+  const portalRole = resolveStaffPortalRole(staff.app_user.role);
+
+  return portalRole === STAFF_PORTAL_ROLE_TRAINER
+    ? EMAIL_RECIPIENT_ROLE_TRAINER
+    : EMAIL_RECIPIENT_ROLE_STAFF;
+}
+
+function createStaffEmailRecipient(
+  staff: StaffProfileWithUser,
+): EmailRecipient | null {
+  const email = normalizeOptionalText(staff.app_user.email);
+
+  if (!email) {
+    return null;
+  }
+
+  return {
+    role: resolveStaffEmailRecipientRole(staff),
+    email,
+    name: staff.profile.display_name,
+    appUserId: staff.app_user.id,
+  };
+}
+
+function buildStaffEmailTemplateData(
+  staff: StaffProfileWithUser,
+): DatabaseJsonObject {
+  const templateData: DatabaseJsonObject = {};
+
+  addOptionalTemplateString(
+    templateData,
+    'recipientName',
+    staff.profile.display_name,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'trainerName',
+    staff.profile.display_name,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'postTitle',
+    staff.profile.post_title,
+  );
+  addOptionalTemplateString(templateData, 'portalRole', staff.app_user.role);
+
+  return templateData;
+}
+
+function buildStaffEmailMetadata(input: {
+  readonly staff: StaffProfileWithUser;
+  readonly adminUserId?: string | null;
+}): DatabaseJsonObject {
+  return {
+    staff_profile_id: input.staff.profile.id,
+    app_user_id: input.staff.app_user.id,
+    portal_role: input.staff.app_user.role,
+    post_title: input.staff.profile.post_title,
+    availability_rule_count: input.staff.availability.length,
+    ...(input.adminUserId
+      ? {
+          updated_by_admin_id: input.adminUserId,
+        }
+      : {}),
+  };
+}
+
 @Injectable()
 export class StaffAdminService {
   constructor(
     private readonly staffRepository: StaffRepository,
     private readonly supabaseAuthRepository: SupabaseAuthRepository,
+    private readonly emailNotificationService: EmailNotificationService,
   ) {}
 
   async listStaff(
@@ -372,6 +482,11 @@ export class StaffAdminService {
         availability,
       });
 
+      await this.notifyTrainerAccountCreatedWithPassword({
+        staff,
+        adminUserId,
+      });
+
       return {
         staff: mapStaffToSafeResponse(staff),
       };
@@ -456,6 +571,8 @@ export class StaffAdminService {
       availability,
     });
 
+    await this.notifyTrainerAvailabilityUpdated(staff);
+
     return {
       staff: mapStaffToSafeResponse(staff),
     };
@@ -510,6 +627,67 @@ export class StaffAdminService {
       deleted: true,
       staff_id: staffId,
     };
+  }
+
+  private async createStaffEmailNotificationBestEffort(input: {
+    readonly eventType: EmailNotificationEvent;
+    readonly staff: StaffProfileWithUser;
+    readonly adminUserId?: string | null;
+    readonly scope?: string | null;
+  }): Promise<void> {
+    try {
+      const recipient = createStaffEmailRecipient(input.staff);
+
+      if (!recipient) {
+        return;
+      }
+
+      await this.emailNotificationService.createFromTemplate({
+        eventType: input.eventType,
+        recipient,
+        templateData: buildStaffEmailTemplateData(input.staff),
+        entity: {
+          entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_STAFF_PROFILE,
+          entityId: input.staff.profile.id,
+        },
+        idempotencyKey: createEntityEmailIdempotencyKey({
+          eventType: input.eventType,
+          recipientRole: recipient.role,
+          recipientEmail: recipient.email,
+          recipientAppUserId: recipient.appUserId ?? null,
+          entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_STAFF_PROFILE,
+          entityId: input.staff.profile.id,
+          scope: input.scope ?? null,
+        }),
+        metadata: buildStaffEmailMetadata({
+          staff: input.staff,
+          adminUserId: input.adminUserId ?? null,
+        }),
+      });
+    } catch {
+      // Best-effort notification side effect. The committed staff mutation remains authoritative.
+    }
+  }
+
+  private async notifyTrainerAccountCreatedWithPassword(input: {
+    readonly staff: StaffProfileWithUser;
+    readonly adminUserId: string;
+  }): Promise<void> {
+    await this.createStaffEmailNotificationBestEffort({
+      eventType: EMAIL_NOTIFICATION_EVENT_TRAINER_ACCOUNT_CREATED_WITH_PASSWORD,
+      staff: input.staff,
+      adminUserId: input.adminUserId,
+    });
+  }
+
+  private async notifyTrainerAvailabilityUpdated(
+    staff: StaffProfileWithUser,
+  ): Promise<void> {
+    await this.createStaffEmailNotificationBestEffort({
+      eventType: EMAIL_NOTIFICATION_EVENT_TRAINER_AVAILABILITY_UPDATED,
+      staff,
+      scope: `updated:${staff.profile.updated_at}`,
+    });
   }
 
   private async cleanupCreatedAuthUser(authUserId: string): Promise<void> {

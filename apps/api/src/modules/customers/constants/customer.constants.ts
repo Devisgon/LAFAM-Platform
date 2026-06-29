@@ -21,6 +21,7 @@ import {
   AUTH_USER_STATUS_ACTIVE,
   AUTH_USER_STATUS_DEACTIVATED,
   AUTH_USER_STATUS_DELETED,
+  AUTH_USER_STATUS_INVITED,
   AUTH_USER_STATUS_PENDING_EMAIL_VERIFICATION,
   type AuthUserStatus,
 } from '../../auth/constants/auth.constants';
@@ -32,11 +33,19 @@ import {
   AUTH_TRAINER_ROLE,
   type AuthUserRole,
 } from '../../auth/constants/auth-role.constants';
+import type { DatabaseCustomerInvitationStatus } from '../../../database/database.types';
 
 export const CUSTOMER_MODULE_NAME = 'customers' as const;
 
-export const CUSTOMER_ADMIN_ROUTE_PREFIX = 'admin/customers' as const;
-export const CUSTOMER_LOOKUP_ROUTE_SEGMENT = 'lookup' as const;
+export const CUSTOMER_INVITATION_ROUTE_SEGMENT = 'invitations' as const;
+export const CUSTOMER_INVITATION_ACCEPT_ROUTE_SEGMENT = 'accept' as const;
+export const CUSTOMER_INVITATION_RESEND_ROUTE_SEGMENT = 'resend' as const;
+export const CUSTOMER_INVITATION_REVOKE_ROUTE_SEGMENT = 'revoke' as const;
+
+export const CUSTOMER_INVITATION_PUBLIC_ROUTE_PREFIX =
+  'customers/invitations' as const;
+
+export const CUSTOMER_INVITATION_ID_PARAM = 'invitationId' as const;
 
 export type CustomerAppRole = Extract<AuthUserRole, 'customer'>;
 
@@ -56,6 +65,7 @@ export const CUSTOMER_ADMIN_MANAGEMENT_ROLES = [
 
 export const CUSTOMER_AUTH_STATUSES = [
   AUTH_USER_STATUS_PENDING_EMAIL_VERIFICATION,
+  AUTH_USER_STATUS_INVITED,
   AUTH_USER_STATUS_ACTIVE,
   AUTH_USER_STATUS_DEACTIVATED,
   AUTH_USER_STATUS_DELETED,
@@ -68,6 +78,8 @@ export type CustomerAuthStatus = Extract<
 
 export const CUSTOMER_AUTH_STATUS_PENDING_EMAIL_VERIFICATION =
   AUTH_USER_STATUS_PENDING_EMAIL_VERIFICATION satisfies CustomerAuthStatus;
+export const CUSTOMER_AUTH_STATUS_INVITED =
+  AUTH_USER_STATUS_INVITED satisfies CustomerAuthStatus;
 export const CUSTOMER_AUTH_STATUS_ACTIVE =
   AUTH_USER_STATUS_ACTIVE satisfies CustomerAuthStatus;
 export const CUSTOMER_AUTH_STATUS_DEACTIVATED =
@@ -77,6 +89,7 @@ export const CUSTOMER_AUTH_STATUS_DELETED =
 
 export const CUSTOMER_LIST_FILTERABLE_AUTH_STATUSES = [
   CUSTOMER_AUTH_STATUS_PENDING_EMAIL_VERIFICATION,
+  CUSTOMER_AUTH_STATUS_INVITED,
   CUSTOMER_AUTH_STATUS_ACTIVE,
   CUSTOMER_AUTH_STATUS_DEACTIVATED,
   CUSTOMER_AUTH_STATUS_DELETED,
@@ -85,11 +98,33 @@ export const CUSTOMER_LIST_FILTERABLE_AUTH_STATUSES = [
 export const CUSTOMER_CREATE_AUTH_STATUS =
   CUSTOMER_AUTH_STATUS_ACTIVE satisfies CustomerAuthStatus;
 
+export const CUSTOMER_INVITE_AUTH_STATUS =
+  CUSTOMER_AUTH_STATUS_INVITED satisfies CustomerAuthStatus;
+
 export const CUSTOMER_SIGN_UP_AUTH_STATUS =
   CUSTOMER_AUTH_STATUS_PENDING_EMAIL_VERIFICATION satisfies CustomerAuthStatus;
 
 export const CUSTOMER_CONVERSION_AUTH_STATUS =
   CUSTOMER_AUTH_STATUS_PENDING_EMAIL_VERIFICATION satisfies CustomerAuthStatus;
+
+export const CUSTOMER_INVITATION_STATUS_PENDING =
+  'pending' satisfies DatabaseCustomerInvitationStatus;
+export const CUSTOMER_INVITATION_STATUS_ACCEPTED =
+  'accepted' satisfies DatabaseCustomerInvitationStatus;
+export const CUSTOMER_INVITATION_STATUS_EXPIRED =
+  'expired' satisfies DatabaseCustomerInvitationStatus;
+export const CUSTOMER_INVITATION_STATUS_REVOKED =
+  'revoked' satisfies DatabaseCustomerInvitationStatus;
+
+export const CUSTOMER_INVITATION_STATUSES = [
+  CUSTOMER_INVITATION_STATUS_PENDING,
+  CUSTOMER_INVITATION_STATUS_ACCEPTED,
+  CUSTOMER_INVITATION_STATUS_EXPIRED,
+  CUSTOMER_INVITATION_STATUS_REVOKED,
+] as const satisfies readonly DatabaseCustomerInvitationStatus[];
+
+export type CustomerInvitationStatus =
+  (typeof CUSTOMER_INVITATION_STATUSES)[number];
 
 export const CUSTOMER_FULL_NAME_MIN_LENGTH = 1;
 export const CUSTOMER_FULL_NAME_MAX_LENGTH =
@@ -105,6 +140,14 @@ export const CUSTOMER_CIVIL_ID_NORMALIZED_LENGTH =
 
 export const CUSTOMER_PASSWORD_MIN_LENGTH = AUTH_FIELD_LIMITS.passwordMinLength;
 export const CUSTOMER_PASSWORD_MAX_LENGTH = AUTH_FIELD_LIMITS.passwordMaxLength;
+
+export const CUSTOMER_INVITE_TOKEN_BYTE_LENGTH = 32;
+export const CUSTOMER_INVITE_TOKEN_MIN_LENGTH = 32;
+export const CUSTOMER_INVITE_TOKEN_MAX_LENGTH = 256;
+export const CUSTOMER_INVITE_TOKEN_HASH_LENGTH = 64;
+
+export const CUSTOMER_INVITE_TOKEN_PATTERN = /^[A-Za-z0-9_-]+$/u;
+export const CUSTOMER_INVITE_TOKEN_HASH_PATTERN = /^[a-f0-9]{64}$/u;
 
 export const CUSTOMER_TIMEZONE_MAX_LENGTH = AUTH_FIELD_LIMITS.timezoneMaxLength;
 
@@ -135,8 +178,15 @@ export const CUSTOMER_AUTH_METADATA_CREATED_BY_ADMIN_ID_KEY =
 export const CUSTOMER_AUTH_METADATA_SOURCE_ADMIN_CUSTOMER_CREATE =
   'lafam_admin_customer_create' as const;
 
+export const CUSTOMER_AUTH_METADATA_SOURCE_ADMIN_CUSTOMER_INVITE =
+  'lafam_admin_customer_invite' as const;
+
 export const CUSTOMER_AUDIT_METADATA_CUSTOMER_PROFILE_ID_KEY =
   'customer_profile_id' as const;
+
+export const CUSTOMER_AUDIT_METADATA_CUSTOMER_INVITATION_ID_KEY =
+  'customer_invitation_id' as const;
+
 export const CUSTOMER_AUDIT_METADATA_APP_USER_ID_KEY = 'app_user_id' as const;
 export const CUSTOMER_AUDIT_METADATA_CREATED_BY_ADMIN_ID_KEY =
   'created_by_admin_id' as const;
@@ -147,8 +197,8 @@ const CUSTOMER_ADMIN_MANAGEMENT_ROLE_SET = new Set<CustomerAdminManagementRole>(
   CUSTOMER_ADMIN_MANAGEMENT_ROLES,
 );
 
-const CUSTOMER_AUTH_STATUS_SET = new Set<CustomerAuthStatus>(
-  CUSTOMER_AUTH_STATUSES,
+const CUSTOMER_INVITATION_STATUS_SET = new Set<CustomerInvitationStatus>(
+  CUSTOMER_INVITATION_STATUSES,
 );
 
 const CUSTOMER_LOOKUP_FIELD_SET = new Set<CustomerLookupField>(
@@ -163,10 +213,10 @@ export function isCustomerAdminManagementRole(
   );
 }
 
-export function isCustomerAuthStatus(
+export function isCustomerInvitationStatus(
   value: string,
-): value is CustomerAuthStatus {
-  return CUSTOMER_AUTH_STATUS_SET.has(value as CustomerAuthStatus);
+): value is CustomerInvitationStatus {
+  return CUSTOMER_INVITATION_STATUS_SET.has(value as CustomerInvitationStatus);
 }
 
 export function isCustomerLookupField(

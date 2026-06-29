@@ -102,6 +102,21 @@ export type AppErrorCode =
   | 'CUSTOMER_ALREADY_ACTIVE'
   | 'CUSTOMER_ALREADY_DELETED'
   | 'CUSTOMER_EMPTY_UPDATE'
+  | 'CUSTOMER_INVITE_NOT_FOUND'
+  | 'CUSTOMER_INVITE_ALREADY_PENDING'
+  | 'CUSTOMER_INVITE_ALREADY_ACCEPTED'
+  | 'CUSTOMER_INVITE_EXPIRED'
+  | 'CUSTOMER_INVITE_REVOKED'
+  | 'CUSTOMER_INVITE_TOKEN_INVALID'
+  | 'CUSTOMER_INVITE_CREATE_FAILED'
+  | 'CUSTOMER_INVITE_RESEND_FAILED'
+  | 'CUSTOMER_INVITE_ACCEPT_FAILED'
+  | 'CUSTOMER_INVITE_REVOKE_FAILED'
+  | 'EMAIL_NOTIFICATION_NOT_FOUND'
+  | 'EMAIL_NOTIFICATION_RECIPIENT_INVALID'
+  | 'EMAIL_NOTIFICATION_TEMPLATE_NOT_FOUND'
+  | 'EMAIL_NOTIFICATION_CREATE_FAILED'
+  | 'EMAIL_NOTIFICATION_DISPATCH_FAILED'
   | 'PILATES_CLASS_NOT_FOUND'
   | 'PILATES_CLASS_ALREADY_DELETED'
   | 'PILATES_CLASS_EMPTY_UPDATE'
@@ -316,6 +331,21 @@ export class AppError extends Error {
     });
   }
 
+  private static createGoneError(
+    code: AppErrorCode,
+    publicMessage: string,
+    details?: AppErrorDetails,
+  ): AppError {
+    return new AppError({
+      code,
+      category: 'conflict',
+      statusCode: HttpStatus.GONE,
+      publicMessage,
+      details,
+      exposeDetails: typeof details !== 'undefined',
+    });
+  }
+
   private static createExternalProviderError(
     code: AppErrorCode,
     publicMessage: string,
@@ -439,6 +469,61 @@ export class AppError extends Error {
       'The email service is temporarily unavailable.',
       cause,
     );
+  }
+
+  static emailNotificationNotFound(
+    publicMessage = 'The requested email notification was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'EMAIL_NOTIFICATION_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static emailNotificationRecipientInvalid(
+    publicMessage = 'The email notification recipient is invalid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'EMAIL_NOTIFICATION_RECIPIENT_INVALID',
+      publicMessage,
+      details,
+    );
+  }
+
+  static emailNotificationTemplateNotFound(
+    publicMessage = 'The requested email notification template was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'EMAIL_NOTIFICATION_TEMPLATE_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static emailNotificationCreateFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'EMAIL_NOTIFICATION_CREATE_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage:
+        'Email notification could not be created. Please try again later.',
+      cause,
+    });
+  }
+
+  static emailNotificationDispatchFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'EMAIL_NOTIFICATION_DISPATCH_FAILED',
+      category: 'external_provider',
+      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+      publicMessage:
+        'Email notification could not be sent. Please try again later.',
+      cause,
+    });
   }
 
   static configurationInvalid(
@@ -1048,6 +1133,116 @@ export class AppError extends Error {
       'CUSTOMER_EMPTY_UPDATE',
       publicMessage,
     );
+  }
+
+  static customerInviteNotFound(
+    publicMessage = 'The requested customer invitation was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'CUSTOMER_INVITE_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerInviteAlreadyPending(
+    publicMessage = 'This customer already has a pending invitation.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'CUSTOMER_INVITE_ALREADY_PENDING',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerInviteAlreadyAccepted(
+    publicMessage = 'This invitation has already been accepted.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createGoneError(
+      'CUSTOMER_INVITE_ALREADY_ACCEPTED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerInviteExpired(
+    publicMessage = 'This invitation has expired.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createGoneError(
+      'CUSTOMER_INVITE_EXPIRED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerInviteRevoked(
+    publicMessage = 'This invitation has been revoked.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createGoneError(
+      'CUSTOMER_INVITE_REVOKED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerInviteTokenInvalid(
+    publicMessage = 'The invitation token is invalid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'CUSTOMER_INVITE_TOKEN_INVALID',
+      publicMessage,
+      details,
+    );
+  }
+
+  static customerInviteCreateFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'CUSTOMER_INVITE_CREATE_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage:
+        'Customer invitation could not be created. Please try again later.',
+      cause,
+    });
+  }
+
+  static customerInviteResendFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'CUSTOMER_INVITE_RESEND_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage:
+        'Customer invitation could not be resent. Please try again later.',
+      cause,
+    });
+  }
+
+  static customerInviteAcceptFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'CUSTOMER_INVITE_ACCEPT_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage:
+        'Customer invitation could not be accepted. Please try again later.',
+      cause,
+    });
+  }
+
+  static customerInviteRevokeFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'CUSTOMER_INVITE_REVOKE_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage:
+        'Customer invitation could not be revoked. Please try again later.',
+      cause,
+    });
   }
 
   static pilatesClassNotFound(

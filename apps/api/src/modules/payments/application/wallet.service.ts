@@ -17,6 +17,14 @@
  * - Customer wallet reads enforce ownership.
  * - Guest users cannot use wallet features.
  * - Booking-order wallet debits are handled by the checkout/wallet RPC path.
+ * - Wallet top-up checkout creation must not send a success email.
+ * - Wallet top-up success, failure, and expiry emails belong to verified
+ *   payment/wallet settlement transitions, not wallet read or checkout-start
+ *   methods.
+ * - Wallet booking debit success email is handled by PaymentCheckoutService
+ *   after the atomic wallet debit succeeds.
+ * - Admin wallet adjustment emails remain blocked until an atomic admin wallet
+ *   adjustment RPC exists.
  * - Admin adjustment is deliberately blocked because the current database
  *   contract does not expose an atomic admin wallet adjustment RPC.
  */

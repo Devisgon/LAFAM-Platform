@@ -6,12 +6,14 @@
  * - Owns direct database access for admin-managed customer records.
  * - Persists customer identity across app_users and customer_profiles.
  * - Hydrates customer_profiles with their related app_users records.
+ * - Supports direct customer creation and invited customer activation.
  * - Maps database/provider failures into frontend-safe AppError instances.
  *
  * Important:
  * - Email, phone, full name, role, auth status, timezone, and provider identity live in app_users.
  * - Civil ID lives in customer_profiles.
- * - Civil ID values must never be written to logs, audit metadata, or error details.
+ * - Civil ID values must never be written to logs, audit metadata, email metadata, or error details.
+ * - Raw invite tokens must never be stored here.
  * - All privileged customer mutations must go through the NestJS backend.
  */
 
@@ -33,6 +35,7 @@ import {
   CUSTOMER_AUTH_STATUS_ACTIVE,
   CUSTOMER_AUTH_STATUS_DEACTIVATED,
   CUSTOMER_AUTH_STATUS_DELETED,
+  CUSTOMER_AUTH_STATUS_INVITED,
   CUSTOMER_LIST_DEFAULT_LIMIT,
   CUSTOMER_LIST_DEFAULT_OFFSET,
   CUSTOMER_LIST_MAX_LIMIT,
@@ -49,6 +52,7 @@ import type {
   CustomerUpdateRepositoryInput,
   FindCustomerByAppUserIdInput,
   FindCustomerByCivilIdNormalizedInput,
+  FindCustomerByEmailInput,
   FindCustomerByIdInput,
   FindCustomerByPhoneInput,
   LookupCustomerRepositoryInput,
@@ -64,6 +68,10 @@ interface DatabaseErrorShape {
   readonly message?: string;
   readonly details?: string | null;
   readonly hint?: string | null;
+}
+
+export interface ActivateInvitedCustomerInput {
+  readonly app_user_id: string;
 }
 
 function isDatabaseError(value: unknown): value is DatabaseErrorShape {
@@ -326,17 +334,6 @@ export class CustomerRepository {
     return hydratedProfile;
   }
 
-  private async deleteAppUserByIdForRollback(appUserId: string): Promise<void> {
-    const { error } = await this.adminClient
-      .from('app_users')
-      .delete()
-      .eq('id', appUserId);
-
-    if (error) {
-      throw mapAppUserDatabaseError(error);
-    }
-  }
-
   private async cleanupCreatedCustomerRows(appUserId: string): Promise<void> {
     try {
       await this.deleteAppUserByIdForRollback(appUserId);
@@ -464,6 +461,47 @@ export class CustomerRepository {
     }
 
     return data ? this.hydrateCustomerProfile(data) : null;
+  }
+
+  async findByEmail(
+    input: FindCustomerByEmailInput,
+  ): Promise<CustomerProfileWithUser | null> {
+    let query = this.adminClient
+      .from('app_users')
+      .select('*')
+      .eq('email', input.email);
+
+    query = this.applyActiveCustomerAppUserFilter(query, input.includeDeleted);
+
+    const { data, error } = await query
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (error) {
+      throw mapReadDatabaseError(error);
+    }
+
+    for (const appUser of data ?? []) {
+      const customer = await this.findByAppUserId({
+        appUserId: appUser.id,
+        includeDeleted: input.includeDeleted,
+      });
+
+      if (!customer) {
+        continue;
+      }
+
+      if (
+        input.excludeCustomerProfileId &&
+        customer.profile.id === input.excludeCustomerProfileId
+      ) {
+        continue;
+      }
+
+      return customer;
+    }
+
+    return null;
   }
 
   async findByPhone(
@@ -658,6 +696,64 @@ export class CustomerRepository {
       profile,
       app_user: appUser,
     };
+  }
+
+  async activateInvitedCustomer(
+    input: ActivateInvitedCustomerInput,
+  ): Promise<CustomerProfileWithUser> {
+    const currentCustomer = await this.findByAppUserId({
+      appUserId: input.app_user_id,
+      includeDeleted: true,
+    });
+
+    if (!currentCustomer) {
+      throw AppError.customerNotFound('The invited customer was not found.', {
+        app_user_id: input.app_user_id,
+      });
+    }
+
+    if (
+      currentCustomer.profile.deleted_at !== null ||
+      currentCustomer.app_user.status === CUSTOMER_AUTH_STATUS_DELETED ||
+      currentCustomer.app_user.deleted_at !== null
+    ) {
+      throw AppError.customerAlreadyDeleted();
+    }
+
+    if (currentCustomer.app_user.status === CUSTOMER_AUTH_STATUS_ACTIVE) {
+      throw AppError.customerInviteAlreadyAccepted(
+        'This invitation has already been accepted.',
+        {
+          app_user_id: input.app_user_id,
+        },
+      );
+    }
+
+    if (currentCustomer.app_user.status !== CUSTOMER_AUTH_STATUS_INVITED) {
+      throw AppError.customerInviteAcceptFailed(
+        new Error('Customer account is not in invited status.'),
+      );
+    }
+
+    const appUserUpdatePayload: AppUserUpdate = {
+      status: CUSTOMER_AUTH_STATUS_ACTIVE,
+      deactivated_at: null,
+      deleted_at: null,
+    };
+
+    const { error } = await this.adminClient
+      .from('app_users')
+      .update(appUserUpdatePayload)
+      .eq('id', input.app_user_id)
+      .eq('status', CUSTOMER_AUTH_STATUS_INVITED);
+
+    if (error) {
+      throw mapAppUserDatabaseError(error);
+    }
+
+    return this.getById({
+      customerProfileId: currentCustomer.profile.id,
+    });
   }
 
   async updateCustomer(
@@ -879,6 +975,30 @@ export class CustomerRepository {
 
     if (appUserUpdateError) {
       throw mapAppUserDatabaseError(appUserUpdateError);
+    }
+  }
+
+  async deleteCustomerProfileByIdForRollback(
+    customerProfileId: string,
+  ): Promise<void> {
+    const { error } = await this.adminClient
+      .from('customer_profiles')
+      .delete()
+      .eq('id', customerProfileId);
+
+    if (error) {
+      throw mapCustomerProfileDatabaseError(error);
+    }
+  }
+
+  async deleteAppUserByIdForRollback(appUserId: string): Promise<void> {
+    const { error } = await this.adminClient
+      .from('app_users')
+      .delete()
+      .eq('id', appUserId);
+
+    if (error) {
+      throw mapAppUserDatabaseError(error);
     }
   }
 }

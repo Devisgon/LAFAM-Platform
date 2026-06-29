@@ -5,15 +5,19 @@
  * Role:
  * - Exposes protected admin Customer Module endpoints.
  * - Allows admins, super-admins, staff, and trainers to create, list, lookup,
- *   read, update, deactivate, reactivate, and soft-delete customer records.
- * - Keeps controller logic thin and delegates business rules to CustomerAdminService.
+ *   read, update, deactivate, reactivate, soft-delete, resend invitations, and
+ *   revoke invitations.
+ * - Keeps controller logic thin and delegates business rules to services.
  *
  * Important:
  * - AuthGuard resolves the Bearer token and attaches Auth context.
- * - ActiveSessionGuard rejects revoked, expired, deleted, deactivated, and invalid guest sessions.
+ * - ActiveSessionGuard rejects revoked, expired, deleted, deactivated, invited,
+ *   and invalid guest sessions.
  * - RolesGuard enforces route-level admin/staff/trainer customer-management access.
  * - CustomerAdminService performs Customer Module business validation.
- * - Controllers must not log raw access tokens, refresh tokens, passwords, OTPs, token hashes, or Civil ID values.
+ * - CustomerInviteService performs customer invitation lifecycle validation.
+ * - Controllers must not log raw access tokens, refresh tokens, passwords, OTPs,
+ *   invite tokens, token hashes, or Civil ID values.
  */
 
 import {
@@ -48,21 +52,29 @@ import { AuthGuard } from '../../auth/guards/auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import type { AuthInternalContext } from '../../auth/types/auth-context.types';
 import { CustomerAdminService } from '../application/customer-admin.service';
+import { CustomerInviteService } from '../application/customer-invite.service';
 import {
-  CUSTOMER_ADMIN_ROUTE_PREFIX,
-  CUSTOMER_LOOKUP_ROUTE_SEGMENT,
+  CUSTOMER_INVITATION_ID_PARAM,
+  CUSTOMER_INVITATION_RESEND_ROUTE_SEGMENT,
+  CUSTOMER_INVITATION_REVOKE_ROUTE_SEGMENT,
+  CUSTOMER_INVITATION_ROUTE_SEGMENT,
 } from '../constants/customer.constants';
 import { CreateCustomerDto } from '../dto/create-customer.dto';
+import { CustomerInviteParamDto } from '../dto/customer-invite-param.dto';
 import { CustomerParamDto } from '../dto/customer-param.dto';
 import { ListCustomersQueryDto } from '../dto/list-customers-query.dto';
 import { LookupCustomerQueryDto } from '../dto/lookup-customer-query.dto';
 import { UpdateCustomerDto } from '../dto/update-customer.dto';
 import type {
   CustomerDeleteResult,
+  CustomerInvitationMutationResult,
   CustomerListResult,
   CustomerLookupResult,
   CustomerMutationResult,
 } from '../types/customer.types';
+
+const CUSTOMER_ADMIN_ROUTE_PREFIX = 'admin/customers' as const;
+const CUSTOMER_LOOKUP_ROUTE_SEGMENT = 'lookup' as const;
 
 function resolveAuthContext(
   auth: AuthInternalContext | undefined,
@@ -74,6 +86,24 @@ function resolveAuthContext(
   return auth;
 }
 
+function resolveAdminActorId(auth: AuthInternalContext | undefined): string {
+  return resolveAuthContext(auth).profile.id;
+}
+
+function resolveInvitationId(params: CustomerInviteParamDto): string {
+  return params[CUSTOMER_INVITATION_ID_PARAM];
+}
+
+function resolveCreateCustomerMessage(
+  data: CustomerMutationResult | CustomerInvitationMutationResult,
+): string {
+  if ('invitation' in data) {
+    return 'Customer invitation created successfully.';
+  }
+
+  return 'Customer created successfully. The customer can log in immediately.';
+}
+
 @Controller(CUSTOMER_ADMIN_ROUTE_PREFIX)
 @UseGuards(AuthGuard, ActiveSessionGuard, RolesGuard)
 @Roles(
@@ -83,7 +113,10 @@ function resolveAuthContext(
   AUTH_TRAINER_ROLE,
 )
 export class CustomerAdminController {
-  constructor(private readonly customerAdminService: CustomerAdminService) {}
+  constructor(
+    private readonly customerAdminService: CustomerAdminService,
+    private readonly customerInviteService: CustomerInviteService,
+  ) {}
 
   @Get()
   async listCustomers(
@@ -107,7 +140,11 @@ export class CustomerAdminController {
   async createCustomer(
     @CurrentAuth() auth: AuthInternalContext | undefined,
     @Body() body: CreateCustomerDto,
-  ): Promise<ApiSuccessResponse<CustomerMutationResult>> {
+  ): Promise<
+    ApiSuccessResponse<
+      CustomerMutationResult | CustomerInvitationMutationResult
+    >
+  > {
     const data = await this.customerAdminService.createCustomer(
       resolveAuthContext(auth),
       body,
@@ -115,8 +152,7 @@ export class CustomerAdminController {
 
     return createApiSuccessResponse({
       status: HttpStatus.CREATED,
-      message:
-        'Customer created successfully. The customer can log in immediately.',
+      message: resolveCreateCustomerMessage(data),
       data,
     });
   }
@@ -134,6 +170,46 @@ export class CustomerAdminController {
     return createApiSuccessResponse({
       status: HttpStatus.OK,
       message: 'Customer lookup completed successfully.',
+      data,
+    });
+  }
+
+  @Post(
+    `${CUSTOMER_INVITATION_ROUTE_SEGMENT}/:${CUSTOMER_INVITATION_ID_PARAM}/${CUSTOMER_INVITATION_RESEND_ROUTE_SEGMENT}`,
+  )
+  @HttpCode(HttpStatus.OK)
+  async resendCustomerInvitation(
+    @CurrentAuth() auth: AuthInternalContext | undefined,
+    @Param() params: CustomerInviteParamDto,
+  ): Promise<ApiSuccessResponse<CustomerInvitationMutationResult>> {
+    const data = await this.customerInviteService.resendCustomerInvitation({
+      invitation_id: resolveInvitationId(params),
+      resent_by_admin_id: resolveAdminActorId(auth),
+    });
+
+    return createApiSuccessResponse({
+      status: HttpStatus.OK,
+      message: 'Customer invitation resent successfully.',
+      data,
+    });
+  }
+
+  @Post(
+    `${CUSTOMER_INVITATION_ROUTE_SEGMENT}/:${CUSTOMER_INVITATION_ID_PARAM}/${CUSTOMER_INVITATION_REVOKE_ROUTE_SEGMENT}`,
+  )
+  @HttpCode(HttpStatus.OK)
+  async revokeCustomerInvitation(
+    @CurrentAuth() auth: AuthInternalContext | undefined,
+    @Param() params: CustomerInviteParamDto,
+  ): Promise<ApiSuccessResponse<CustomerInvitationMutationResult>> {
+    const data = await this.customerInviteService.revokeCustomerInvitation({
+      invitation_id: resolveInvitationId(params),
+      revoked_by_admin_id: resolveAdminActorId(auth),
+    });
+
+    return createApiSuccessResponse({
+      status: HttpStatus.OK,
+      message: 'Customer invitation revoked successfully.',
       data,
     });
   }

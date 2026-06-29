@@ -23,6 +23,7 @@ import { Injectable } from '@nestjs/common';
 import { AppError } from '../../../common/errors/app-error';
 import type {
   AppUserRow,
+  DatabaseJsonObject,
   PilatesClassInsert,
   PilatesClassRow,
   PilatesClassScheduleInsert,
@@ -37,6 +38,19 @@ import type {
 } from '../../../database/database.types';
 import { AUTH_USER_STATUS_ACTIVE } from '../../auth/constants/auth.constants';
 import type { AuthInternalContext } from '../../auth/types/auth-context.types';
+import { EmailNotificationService } from '../../notifications/application/email-notification.service';
+import {
+  EMAIL_NOTIFICATION_ENTITY_TYPE_PILATES_CLASS_SCHEDULE,
+  EMAIL_NOTIFICATION_EVENT_TRAINER_ASSIGNED_TO_CLASS,
+  EMAIL_NOTIFICATION_EVENT_TRAINER_REMOVED_FROM_CLASS,
+  EMAIL_NOTIFICATION_EVENT_TRAINER_SCHEDULE_CHANGED,
+  EMAIL_RECIPIENT_ROLE_TRAINER,
+} from '../../notifications/constants/notification.constants';
+import { createEntityEmailIdempotencyKey } from '../../notifications/domain/email-idempotency.policy';
+import type {
+  EmailNotificationEvent,
+  EmailRecipient,
+} from '../../notifications/types/notification.types';
 import {
   STAFF_PROFILE_STATUS_AVAILABLE,
   STAFF_PROFILE_STATUS_DEACTIVATED,
@@ -130,6 +144,11 @@ interface AssignableTrainerContext {
   readonly appUser: AppUserRow;
 }
 
+interface TrainerNotificationContext {
+  readonly trainer: StaffProfileRow;
+  readonly appUser: AppUserRow;
+}
+
 type PilatesClassImageUrlResolver = (imagePath: string | null) => string | null;
 
 function resolveAdminActorId(auth: AuthInternalContext): string {
@@ -182,6 +201,153 @@ function mapSeriesTimeSlotToAdminSummary(
 
 function hasObjectKeys(value: Record<string, unknown>): boolean {
   return Object.keys(value).length > 0;
+}
+
+function normalizeOptionalText(
+  value: string | null | undefined,
+): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+
+  return trimmedValue.length > 0 ? trimmedValue : null;
+}
+
+function addOptionalTemplateString(
+  target: DatabaseJsonObject,
+  key: string,
+  value: string | null | undefined,
+): void {
+  const normalizedValue = normalizeOptionalText(value);
+
+  if (normalizedValue) {
+    target[key] = normalizedValue;
+  }
+}
+
+function createTrainerEmailRecipient(
+  context: TrainerNotificationContext,
+): EmailRecipient | null {
+  const email = normalizeOptionalText(context.appUser.email);
+
+  if (!email) {
+    return null;
+  }
+
+  return {
+    role: EMAIL_RECIPIENT_ROLE_TRAINER,
+    email,
+    name: context.trainer.display_name,
+    appUserId: context.appUser.id,
+  };
+}
+
+function buildTrainerClassScheduleTemplateData(input: {
+  readonly schedule: PilatesClassScheduleAdminSummary;
+  readonly trainer: TrainerNotificationContext;
+  readonly oldSchedule?: PilatesClassScheduleAdminSummary | null;
+}): DatabaseJsonObject {
+  const templateData: DatabaseJsonObject = {};
+
+  addOptionalTemplateString(
+    templateData,
+    'recipientName',
+    input.trainer.trainer.display_name,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'trainerName',
+    input.trainer.trainer.display_name,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'classTitle',
+    input.schedule.class?.title,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'sessionDate',
+    input.schedule.class_date,
+  );
+  addOptionalTemplateString(
+    templateData,
+    'startTime',
+    input.schedule.start_time,
+  );
+  addOptionalTemplateString(templateData, 'endTime', input.schedule.end_time);
+
+  if (input.oldSchedule) {
+    addOptionalTemplateString(
+      templateData,
+      'oldSessionDate',
+      input.oldSchedule.class_date,
+    );
+    addOptionalTemplateString(
+      templateData,
+      'oldStartTime',
+      input.oldSchedule.start_time,
+    );
+    addOptionalTemplateString(
+      templateData,
+      'newSessionDate',
+      input.schedule.class_date,
+    );
+    addOptionalTemplateString(
+      templateData,
+      'newStartTime',
+      input.schedule.start_time,
+    );
+  }
+
+  return templateData;
+}
+
+function buildTrainerClassScheduleMetadata(input: {
+  readonly schedule: PilatesClassScheduleAdminSummary;
+  readonly adminUserId?: string | null;
+  readonly oldSchedule?: PilatesClassScheduleAdminSummary | null;
+}): DatabaseJsonObject {
+  return {
+    schedule_id: input.schedule.id,
+    class_id: input.schedule.class_id,
+    trainer_staff_profile_id: input.schedule.trainer_staff_profile_id,
+    class_date: input.schedule.class_date,
+    start_time: input.schedule.start_time,
+    end_time: input.schedule.end_time,
+    studio: input.schedule.studio,
+    status: input.schedule.status,
+    ...(input.oldSchedule
+      ? {
+          old_schedule_id: input.oldSchedule.id,
+          old_trainer_staff_profile_id:
+            input.oldSchedule.trainer_staff_profile_id,
+          old_class_date: input.oldSchedule.class_date,
+          old_start_time: input.oldSchedule.start_time,
+          old_end_time: input.oldSchedule.end_time,
+        }
+      : {}),
+    ...(input.adminUserId
+      ? {
+          updated_by_admin_id: input.adminUserId,
+        }
+      : {}),
+  };
+}
+
+function hasTrainerScheduleImpactChanged(input: {
+  readonly oldSchedule: PilatesClassScheduleAdminSummary;
+  readonly newSchedule: PilatesClassScheduleAdminSummary;
+}): boolean {
+  return (
+    input.oldSchedule.class_id !== input.newSchedule.class_id ||
+    input.oldSchedule.studio !== input.newSchedule.studio ||
+    input.oldSchedule.class_date !== input.newSchedule.class_date ||
+    input.oldSchedule.start_time !== input.newSchedule.start_time ||
+    input.oldSchedule.end_time !== input.newSchedule.end_time ||
+    input.oldSchedule.duration_minutes !== input.newSchedule.duration_minutes
+  );
 }
 
 function todayIsoDate(): string {
@@ -749,6 +915,7 @@ export class PilatesClassAdminService {
     private readonly pilatesClassRepository: PilatesClassRepository,
     private readonly pilatesClassEventService: PilatesClassEventService,
     private readonly pilatesClassImageService: PilatesClassImageService,
+    private readonly emailNotificationService: EmailNotificationService,
   ) {}
 
   private resolveClassImageUrl(imagePath: string | null): string | null {
@@ -1210,6 +1377,19 @@ export class PilatesClassAdminService {
         'At least one Pilates schedule field must be provided for update.',
       );
     }
+    const oldHydratedSchedule =
+      await this.pilatesClassRepository.findScheduleWithRelationsById(
+        scheduleId,
+      );
+
+    if (!oldHydratedSchedule) {
+      throw AppError.pilatesScheduleNotFound(
+        'The existing Pilates schedule could not be loaded.',
+        {
+          schedule_id: scheduleId,
+        },
+      );
+    }
 
     const classId = dto.class_id ?? existingSchedule.class_id;
     const trainerStaffProfileId =
@@ -1300,8 +1480,19 @@ export class PilatesClassAdminService {
       );
     }
 
+    const oldScheduleSummary =
+      this.mapScheduleToAdminSummary(oldHydratedSchedule);
+    const updatedScheduleSummary =
+      this.mapScheduleToAdminSummary(hydratedSchedule);
+
+    await this.notifyTrainerScheduleUpdated({
+      oldSchedule: oldScheduleSummary,
+      newSchedule: updatedScheduleSummary,
+      adminUserId,
+    });
+
     return {
-      schedule: this.mapScheduleToAdminSummary(hydratedSchedule),
+      schedule: updatedScheduleSummary,
     };
   }
 
@@ -1354,8 +1545,17 @@ export class PilatesClassAdminService {
       );
     }
 
+    const cancelledScheduleSummary =
+      this.mapScheduleToAdminSummary(hydratedSchedule);
+
+    await this.notifyTrainerRemovedFromClass({
+      schedule: cancelledScheduleSummary,
+      adminUserId,
+      scope: `cancelled:${cancelledScheduleSummary.cancelled_at ?? cancelledScheduleSummary.updated_at}`,
+    });
+
     return {
-      schedule: this.mapScheduleToAdminSummary(hydratedSchedule),
+      schedule: cancelledScheduleSummary,
     };
   }
 
@@ -1446,6 +1646,19 @@ export class PilatesClassAdminService {
         },
       );
     }
+    const hydratedExistingSchedule =
+      await this.pilatesClassRepository.findScheduleWithRelationsById(
+        scheduleId,
+      );
+
+    if (!hydratedExistingSchedule) {
+      throw AppError.pilatesScheduleNotFound(
+        'The existing Pilates schedule could not be loaded.',
+        {
+          schedule_id: scheduleId,
+        },
+      );
+    }
 
     const schedule = await this.pilatesClassRepository.softDeleteSchedule({
       schedule_id: scheduleId,
@@ -1455,6 +1668,11 @@ export class PilatesClassAdminService {
 
     this.pilatesClassEventService.recordScheduleDeleted(schedule, {
       actor_admin_user_id: adminUserId,
+    });
+    await this.notifyTrainerRemovedFromClass({
+      schedule: this.mapScheduleToAdminSummary(hydratedExistingSchedule),
+      adminUserId,
+      scope: `deleted:${schedule.deleted_at ?? schedule.updated_at}`,
     });
 
     return {
@@ -1606,6 +1824,10 @@ export class PilatesClassAdminService {
     const generatedScheduleSummaries = (
       hydratedSeries.generated_schedules ?? []
     ).map((schedule) => this.mapScheduleToAdminSummary(schedule));
+    await this.notifyTrainerAssignedToGeneratedSchedules({
+      schedules: generatedScheduleSummaries,
+      adminUserId,
+    });
     const schedulePlan: PilatesWeeklySchedulePlanAdminSummary = {
       id: seriesDetail.id,
       class_id: seriesDetail.class_id,
@@ -1627,6 +1849,168 @@ export class PilatesClassAdminService {
       generated_count: generatedScheduleSummaries.length,
       skipped_dates: generationResult.skipped_dates,
     };
+  }
+  private async resolveTrainerNotificationContext(
+    trainerStaffProfileId: string,
+  ): Promise<TrainerNotificationContext | null> {
+    const trainer = await this.pilatesClassRepository.findStaffProfileById(
+      trainerStaffProfileId,
+    );
+
+    if (!trainer) {
+      return null;
+    }
+
+    const appUser = await this.pilatesClassRepository.findAppUserById(
+      trainer.app_user_id,
+    );
+
+    if (!appUser) {
+      return null;
+    }
+
+    return {
+      trainer,
+      appUser,
+    };
+  }
+
+  private async createTrainerClassScheduleNotificationBestEffort(input: {
+    readonly eventType: EmailNotificationEvent;
+    readonly schedule: PilatesClassScheduleAdminSummary;
+    readonly adminUserId?: string | null;
+    readonly oldSchedule?: PilatesClassScheduleAdminSummary | null;
+    readonly scope?: string | null;
+  }): Promise<void> {
+    try {
+      const trainerContext = await this.resolveTrainerNotificationContext(
+        input.schedule.trainer_staff_profile_id,
+      );
+
+      if (!trainerContext) {
+        return;
+      }
+
+      const recipient = createTrainerEmailRecipient(trainerContext);
+
+      if (!recipient) {
+        return;
+      }
+
+      await this.emailNotificationService.createFromTemplate({
+        eventType: input.eventType,
+        recipient,
+        templateData: buildTrainerClassScheduleTemplateData({
+          schedule: input.schedule,
+          trainer: trainerContext,
+          oldSchedule: input.oldSchedule ?? null,
+        }),
+        entity: {
+          entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_PILATES_CLASS_SCHEDULE,
+          entityId: input.schedule.id,
+        },
+        idempotencyKey: createEntityEmailIdempotencyKey({
+          eventType: input.eventType,
+          recipientRole: recipient.role,
+          recipientEmail: recipient.email,
+          recipientAppUserId: recipient.appUserId ?? null,
+          entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_PILATES_CLASS_SCHEDULE,
+          entityId: input.schedule.id,
+          scope: input.scope ?? null,
+        }),
+        metadata: buildTrainerClassScheduleMetadata({
+          schedule: input.schedule,
+          oldSchedule: input.oldSchedule ?? null,
+          adminUserId: input.adminUserId ?? null,
+        }),
+      });
+    } catch {
+      // Best-effort notification side effect. The committed class/schedule mutation remains authoritative.
+    }
+  }
+
+  private async notifyTrainerAssignedToClass(input: {
+    readonly schedule: PilatesClassScheduleAdminSummary;
+    readonly adminUserId: string;
+    readonly scope?: string | null;
+  }): Promise<void> {
+    await this.createTrainerClassScheduleNotificationBestEffort({
+      eventType: EMAIL_NOTIFICATION_EVENT_TRAINER_ASSIGNED_TO_CLASS,
+      schedule: input.schedule,
+      adminUserId: input.adminUserId,
+      scope: input.scope ?? `assigned:${input.schedule.created_at}`,
+    });
+  }
+
+  private async notifyTrainerAssignedToGeneratedSchedules(input: {
+    readonly schedules: readonly PilatesClassScheduleAdminSummary[];
+    readonly adminUserId: string;
+  }): Promise<void> {
+    for (const schedule of input.schedules) {
+      await this.notifyTrainerAssignedToClass({
+        schedule,
+        adminUserId: input.adminUserId,
+        scope: `series:${schedule.series_id ?? 'none'}:${schedule.id}`,
+      });
+    }
+  }
+
+  private async notifyTrainerRemovedFromClass(input: {
+    readonly schedule: PilatesClassScheduleAdminSummary;
+    readonly adminUserId: string;
+    readonly scope?: string | null;
+  }): Promise<void> {
+    await this.createTrainerClassScheduleNotificationBestEffort({
+      eventType: EMAIL_NOTIFICATION_EVENT_TRAINER_REMOVED_FROM_CLASS,
+      schedule: input.schedule,
+      adminUserId: input.adminUserId,
+      scope: input.scope ?? `removed:${input.schedule.updated_at}`,
+    });
+  }
+
+  private async notifyTrainerScheduleChanged(input: {
+    readonly oldSchedule: PilatesClassScheduleAdminSummary;
+    readonly newSchedule: PilatesClassScheduleAdminSummary;
+    readonly adminUserId: string;
+  }): Promise<void> {
+    await this.createTrainerClassScheduleNotificationBestEffort({
+      eventType: EMAIL_NOTIFICATION_EVENT_TRAINER_SCHEDULE_CHANGED,
+      schedule: input.newSchedule,
+      oldSchedule: input.oldSchedule,
+      adminUserId: input.adminUserId,
+      scope: `from:${input.oldSchedule.id}:updated:${input.newSchedule.updated_at}`,
+    });
+  }
+
+  private async notifyTrainerScheduleUpdated(input: {
+    readonly oldSchedule: PilatesClassScheduleAdminSummary;
+    readonly newSchedule: PilatesClassScheduleAdminSummary;
+    readonly adminUserId: string;
+  }): Promise<void> {
+    if (
+      input.oldSchedule.trainer_staff_profile_id !==
+      input.newSchedule.trainer_staff_profile_id
+    ) {
+      await this.notifyTrainerRemovedFromClass({
+        schedule: input.oldSchedule,
+        adminUserId: input.adminUserId,
+        scope: `reassigned-from:${input.newSchedule.id}:${input.newSchedule.updated_at}`,
+      });
+
+      await this.notifyTrainerAssignedToClass({
+        schedule: input.newSchedule,
+        adminUserId: input.adminUserId,
+        scope: `reassigned-to:${input.oldSchedule.id}:${input.newSchedule.updated_at}`,
+      });
+
+      return;
+    }
+
+    if (!hasTrainerScheduleImpactChanged(input)) {
+      return;
+    }
+
+    await this.notifyTrainerScheduleChanged(input);
   }
   private async resolveSchedulableClass(
     classId: string,

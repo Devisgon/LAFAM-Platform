@@ -5,16 +5,19 @@
  * Role:
  * - Owns Customer Module business rules for admin-managed customer records.
  * - Coordinates Supabase Auth customer user creation with app_users/customer_profiles creation.
+ * - Supports two admin customer creation modes:
+ *   1. Password provided: create an active/verified customer immediately.
+ *   2. Password omitted: create an invited customer and send a password-set invite.
  * - Converts repository results into safe admin API response objects.
  *
  * Important:
- * - Admin-created customers are created as active/verified users and do not require email OTP verification.
- * - Customer creation requires full name, email, phone, Civil ID, password, and password confirmation.
+ * - Admin-created customers with password are created as active/verified users and do not require email OTP verification.
+ * - Admin-created customers without password are created as invited users and must accept the invite to set a password.
  * - Email changes are not supported in this phase.
- * - Password changes are handled by Auth password reset flows.
+ * - Password changes after creation are handled by Auth password reset/change flows.
  * - Customer status changes must use dedicated deactivate/reactivate endpoints.
- * - Passwords, OTPs, access tokens, refresh tokens, and Civil ID values must never be logged.
- * - Civil ID may be returned in admin customer responses, but must never be written to audit metadata.
+ * - Passwords, OTPs, access tokens, refresh tokens, invite tokens, and Civil ID values must never be logged.
+ * - Civil ID may be returned in admin customer responses, but must never be written to audit metadata or notification metadata.
  */
 
 import { Injectable } from '@nestjs/common';
@@ -41,7 +44,16 @@ import { normalizeAuthCivilIdNormalized } from '../../auth/utils/auth-normalizat
 import {
   getAuthPasswordPolicyFailureCodes,
   validateAuthPasswordAndConfirmation,
+  type AuthPasswordPolicyFailure,
 } from '../../auth/utils/password-policy.util';
+import { EmailNotificationService } from '../../notifications/application/email-notification.service';
+import {
+  EMAIL_NOTIFICATION_ENTITY_TYPE_APP_USER,
+  EMAIL_NOTIFICATION_EVENT_ADMIN_CREATED_CUSTOMER_WITH_PASSWORD_WELCOME,
+  EMAIL_RECIPIENT_ROLE_CUSTOMER,
+} from '../../notifications/constants/notification.constants';
+import { createCustomerAccountEmailIdempotencyKey } from '../../notifications/domain/email-idempotency.policy';
+import { CustomerInviteService } from './customer-invite.service';
 import {
   CUSTOMER_APP_ROLE,
   CUSTOMER_AUDIT_METADATA_APP_USER_ID_KEY,
@@ -51,6 +63,11 @@ import {
   CUSTOMER_AUTH_METADATA_CREATED_BY_ADMIN_ID_KEY,
   CUSTOMER_AUTH_METADATA_SOURCE_ADMIN_CUSTOMER_CREATE,
   CUSTOMER_AUTH_METADATA_SOURCE_KEY,
+  CUSTOMER_AUTH_STATUS_ACTIVE,
+  CUSTOMER_AUTH_STATUS_DEACTIVATED,
+  CUSTOMER_AUTH_STATUS_DELETED,
+  CUSTOMER_AUTH_STATUS_INVITED,
+  CUSTOMER_AUTH_STATUS_PENDING_EMAIL_VERIFICATION,
   CUSTOMER_CIVIL_ID_NORMALIZED_LENGTH,
   CUSTOMER_CREATE_AUTH_STATUS,
   CUSTOMER_LIST_DEFAULT_LIMIT,
@@ -58,7 +75,6 @@ import {
   CUSTOMER_LOOKUP_FIELD_CIVIL_ID,
   CUSTOMER_LOOKUP_FIELD_PHONE,
   isCustomerAdminManagementRole,
-  isCustomerAuthStatus,
   type CustomerAuthStatus,
 } from '../constants/customer.constants';
 import type { CreateCustomerDto } from '../dto/create-customer.dto';
@@ -67,7 +83,9 @@ import type { LookupCustomerQueryDto } from '../dto/lookup-customer-query.dto';
 import type { UpdateCustomerDto } from '../dto/update-customer.dto';
 import { CustomerRepository } from '../repositories/customer.repository';
 import type {
+  CustomerCreateMode,
   CustomerDeleteResult,
+  CustomerInvitationMutationResult,
   CustomerListQuery,
   CustomerListResult,
   CustomerLookupMatch,
@@ -76,6 +94,11 @@ import type {
   CustomerProfileWithUser,
   SafeCustomerProfile,
 } from '../types/customer.types';
+
+interface CustomerPasswordCreateFields {
+  readonly password: string;
+  readonly confirmPassword: string;
+}
 
 function resolveAdminActorId(auth: AuthInternalContext): string {
   if (!isCustomerAdminManagementRole(auth.profile.role)) {
@@ -106,7 +129,7 @@ function resolveRequiredCivilIdNormalized(civilId: string): string {
 }
 
 function buildPasswordFailureDetails(
-  failures: readonly unknown[],
+  failures: readonly AuthPasswordPolicyFailure[],
   failureCodes: readonly string[],
 ): DatabaseJsonObject {
   return {
@@ -115,17 +138,66 @@ function buildPasswordFailureDetails(
     )
       ? AUTH_ERROR_REASON_PASSWORD_CONFIRMATION_MISMATCH
       : AUTH_ERROR_REASON_PASSWORD_POLICY_FAILED,
-    failures: failures as DatabaseJsonObject['failures'],
+    failures: failures.map((failure) => ({
+      code: failure.code,
+      message: failure.message,
+    })),
   };
 }
 
-function assertCustomerPasswordAllowed(dto: CreateCustomerDto): void {
-  const result = validateAuthPasswordAndConfirmation(
-    dto.password,
-    dto.confirm_password,
+function resolveCustomerCreateMode(dto: CreateCustomerDto): CustomerCreateMode {
+  const hasPassword = typeof dto.password === 'string';
+  const hasConfirmPassword = typeof dto.confirm_password === 'string';
+
+  if (hasPassword && hasConfirmPassword) {
+    return 'create_with_password';
+  }
+
+  if (!hasPassword && !hasConfirmPassword) {
+    return 'invite_without_password';
+  }
+
+  throw AppError.invalidRequest(
+    'password and confirm_password must either both be provided or both be omitted.',
     {
-      email: dto.email,
-      fullName: dto.full_name,
+      allowed_modes: ['create_with_password', 'invite_without_password'],
+    },
+  );
+}
+
+function resolvePasswordCreateFields(
+  dto: CreateCustomerDto,
+): CustomerPasswordCreateFields {
+  const password = dto.password;
+  const confirmPassword = dto.confirm_password;
+
+  if (typeof password === 'string' && typeof confirmPassword === 'string') {
+    return {
+      password,
+      confirmPassword,
+    };
+  }
+
+  throw AppError.invalidRequest(
+    'password and confirm_password are required when creating a customer with password.',
+    {
+      mode: 'create_with_password',
+    },
+  );
+}
+
+function assertCustomerPasswordAllowed(input: {
+  readonly password: string;
+  readonly confirmPassword: string;
+  readonly email: string;
+  readonly fullName: string;
+}): void {
+  const result = validateAuthPasswordAndConfirmation(
+    input.password,
+    input.confirmPassword,
+    {
+      email: input.email,
+      fullName: input.fullName,
     },
   );
 
@@ -160,13 +232,18 @@ function resolveRequiredCustomerString(input: {
 }
 
 function resolveCustomerAuthStatus(value: string): CustomerAuthStatus {
-  if (isCustomerAuthStatus(value)) {
-    return value;
+  switch (value) {
+    case CUSTOMER_AUTH_STATUS_PENDING_EMAIL_VERIFICATION:
+    case CUSTOMER_AUTH_STATUS_INVITED:
+    case CUSTOMER_AUTH_STATUS_ACTIVE:
+    case CUSTOMER_AUTH_STATUS_DEACTIVATED:
+    case CUSTOMER_AUTH_STATUS_DELETED:
+      return value;
+    default:
+      throw AppError.customerNotFound(
+        'The stored customer auth status is invalid.',
+      );
   }
-
-  throw AppError.customerNotFound(
-    'The stored customer auth status is invalid.',
-  );
 }
 
 function assertHydratedCustomerIsCustomer(
@@ -271,9 +348,11 @@ function buildCustomerAuditMetadata(input: {
 export class CustomerAdminService {
   constructor(
     private readonly customerRepository: CustomerRepository,
+    private readonly customerInviteService: CustomerInviteService,
     private readonly authUserRepository: AuthUserRepository,
     private readonly supabaseAuthRepository: SupabaseAuthRepository,
     private readonly authAuditRepository: AuthAuditRepository,
+    private readonly emailNotificationService: EmailNotificationService,
   ) {}
 
   async listCustomers(
@@ -357,89 +436,21 @@ export class CustomerAdminService {
   async createCustomer(
     auth: AuthInternalContext,
     dto: CreateCustomerDto,
-  ): Promise<CustomerMutationResult> {
+  ): Promise<CustomerMutationResult | CustomerInvitationMutationResult> {
     const adminUserId = resolveAdminActorId(auth);
-    const civilIdNormalized = resolveRequiredCivilIdNormalized(dto.civil_id);
+    const createMode = resolveCustomerCreateMode(dto);
 
-    assertCustomerPasswordAllowed(dto);
-
-    await this.assertCustomerCreateIdentityAvailable({
-      email: dto.email,
-      phone: dto.phone,
-      civilIdNormalized,
-    });
-
-    const authUserResult =
-      await this.supabaseAuthRepository.createCustomerAuthUserWithPassword({
-        email: dto.email,
-        password: dto.password,
-        fullName: dto.full_name,
-        phone: dto.phone,
-        timezone: dto.timezone ?? null,
-        createdByAdminId: adminUserId,
+    if (createMode === 'invite_without_password') {
+      return this.customerInviteService.createInvitedCustomer({
+        adminUserId,
+        customer: dto,
       });
-
-    try {
-      const customer = await this.customerRepository.createCustomer({
-        app_user: {
-          auth_user_id: authUserResult.user.id,
-          email: dto.email,
-          phone: dto.phone,
-          full_name: dto.full_name,
-          role: CUSTOMER_APP_ROLE,
-          status: CUSTOMER_CREATE_AUTH_STATUS,
-          is_guest: false,
-          timezone: dto.timezone ?? null,
-          metadata: {
-            [CUSTOMER_AUTH_METADATA_SOURCE_KEY]:
-              CUSTOMER_AUTH_METADATA_SOURCE_ADMIN_CUSTOMER_CREATE,
-            [CUSTOMER_AUTH_METADATA_CREATED_BY_ADMIN_ID_KEY]: adminUserId,
-          },
-        },
-        customer_profile: {
-          civil_id: dto.civil_id,
-          civil_id_normalized: civilIdNormalized,
-          created_by_admin_id: adminUserId,
-          updated_by_admin_id: adminUserId,
-        },
-      });
-
-      await this.authAuditRepository.createEvent({
-        actorUserId: adminUserId,
-        targetUserId: customer.app_user.id,
-        eventType: AUTH_AUDIT_EVENT_USER_CREATED_BY_ADMIN,
-        metadata: buildCustomerAuditMetadata({
-          customerProfileId: customer.profile.id,
-          appUserId: customer.app_user.id,
-          adminUserId,
-          adminMetadataKey: CUSTOMER_AUDIT_METADATA_CREATED_BY_ADMIN_ID_KEY,
-        }),
-      });
-
-      await this.authAuditRepository.createEvent({
-        actorUserId: adminUserId,
-        targetUserId: customer.app_user.id,
-        eventType: AUTH_AUDIT_EVENT_CUSTOMER_PROFILE_CREATED,
-        metadata: buildCustomerAuditMetadata({
-          customerProfileId: customer.profile.id,
-          appUserId: customer.app_user.id,
-          adminUserId,
-          adminMetadataKey: CUSTOMER_AUDIT_METADATA_CREATED_BY_ADMIN_ID_KEY,
-        }),
-      });
-
-      return {
-        customer: mapCustomerToSafeResponse(customer),
-      };
-    } catch (error) {
-      await this.cleanupCreatedAuthUser(authUserResult.user.id);
-
-      if (error instanceof AppError) {
-        throw error;
-      }
-
-      throw AppError.customerCreateFailed(error);
     }
+
+    return this.createCustomerWithPassword({
+      adminUserId,
+      dto,
+    });
   }
 
   async updateCustomer(
@@ -612,6 +623,168 @@ export class CustomerAdminService {
       deleted: true,
       customer_id: customerId,
     };
+  }
+
+  private async createCustomerWithPassword(input: {
+    readonly adminUserId: string;
+    readonly dto: CreateCustomerDto;
+  }): Promise<CustomerMutationResult> {
+    const { adminUserId, dto } = input;
+    const civilIdNormalized = resolveRequiredCivilIdNormalized(dto.civil_id);
+    const passwordFields = resolvePasswordCreateFields(dto);
+
+    assertCustomerPasswordAllowed({
+      password: passwordFields.password,
+      confirmPassword: passwordFields.confirmPassword,
+      email: dto.email,
+      fullName: dto.full_name,
+    });
+
+    await this.assertCustomerCreateIdentityAvailable({
+      email: dto.email,
+      phone: dto.phone,
+      civilIdNormalized,
+    });
+
+    const authUserResult =
+      await this.supabaseAuthRepository.createCustomerAuthUserWithPassword({
+        email: dto.email,
+        password: passwordFields.password,
+        fullName: dto.full_name,
+        phone: dto.phone,
+        timezone: dto.timezone ?? null,
+        createdByAdminId: adminUserId,
+      });
+
+    try {
+      const customer = await this.customerRepository.createCustomer({
+        app_user: {
+          auth_user_id: authUserResult.user.id,
+          email: dto.email,
+          phone: dto.phone,
+          full_name: dto.full_name,
+          role: CUSTOMER_APP_ROLE,
+          status: CUSTOMER_CREATE_AUTH_STATUS,
+          is_guest: false,
+          timezone: dto.timezone ?? null,
+          metadata: {
+            [CUSTOMER_AUTH_METADATA_SOURCE_KEY]:
+              CUSTOMER_AUTH_METADATA_SOURCE_ADMIN_CUSTOMER_CREATE,
+            [CUSTOMER_AUTH_METADATA_CREATED_BY_ADMIN_ID_KEY]: adminUserId,
+          },
+        },
+        customer_profile: {
+          civil_id: dto.civil_id,
+          civil_id_normalized: civilIdNormalized,
+          created_by_admin_id: adminUserId,
+          updated_by_admin_id: adminUserId,
+        },
+      });
+
+      await this.createCustomerCreatedAuditEvents({
+        customer,
+        adminUserId,
+      });
+
+      await this.sendAdminCreatedCustomerWelcomeEmail({
+        customer,
+        adminUserId,
+      });
+
+      return {
+        customer: mapCustomerToSafeResponse(customer),
+      };
+    } catch (error: unknown) {
+      await this.cleanupCreatedAuthUser(authUserResult.user.id);
+
+      if (error instanceof AppError) {
+        throw error;
+      }
+
+      throw AppError.customerCreateFailed(error);
+    }
+  }
+
+  private async createCustomerCreatedAuditEvents(input: {
+    readonly customer: CustomerProfileWithUser;
+    readonly adminUserId: string;
+  }): Promise<void> {
+    await this.authAuditRepository.createEvent({
+      actorUserId: input.adminUserId,
+      targetUserId: input.customer.app_user.id,
+      eventType: AUTH_AUDIT_EVENT_USER_CREATED_BY_ADMIN,
+      metadata: buildCustomerAuditMetadata({
+        customerProfileId: input.customer.profile.id,
+        appUserId: input.customer.app_user.id,
+        adminUserId: input.adminUserId,
+        adminMetadataKey: CUSTOMER_AUDIT_METADATA_CREATED_BY_ADMIN_ID_KEY,
+      }),
+    });
+
+    await this.authAuditRepository.createEvent({
+      actorUserId: input.adminUserId,
+      targetUserId: input.customer.app_user.id,
+      eventType: AUTH_AUDIT_EVENT_CUSTOMER_PROFILE_CREATED,
+      metadata: buildCustomerAuditMetadata({
+        customerProfileId: input.customer.profile.id,
+        appUserId: input.customer.app_user.id,
+        adminUserId: input.adminUserId,
+        adminMetadataKey: CUSTOMER_AUDIT_METADATA_CREATED_BY_ADMIN_ID_KEY,
+      }),
+    });
+  }
+
+  private async sendAdminCreatedCustomerWelcomeEmail(input: {
+    readonly customer: CustomerProfileWithUser;
+    readonly adminUserId: string;
+  }): Promise<void> {
+    const customerEmail = resolveRequiredCustomerString({
+      value: input.customer.app_user.email,
+      publicMessage: 'The related customer email was not found.',
+      details: {
+        customer_profile_id: input.customer.profile.id,
+        app_user_id: input.customer.app_user.id,
+      },
+    });
+    const customerName = resolveRequiredCustomerString({
+      value: input.customer.app_user.full_name,
+      publicMessage: 'The related customer full name was not found.',
+      details: {
+        customer_profile_id: input.customer.profile.id,
+        app_user_id: input.customer.app_user.id,
+      },
+    });
+
+    await this.emailNotificationService.createFromTemplate({
+      eventType:
+        EMAIL_NOTIFICATION_EVENT_ADMIN_CREATED_CUSTOMER_WITH_PASSWORD_WELCOME,
+      recipient: {
+        role: EMAIL_RECIPIENT_ROLE_CUSTOMER,
+        email: customerEmail,
+        name: customerName,
+        appUserId: input.customer.app_user.id,
+      },
+      templateData: {
+        recipientName: customerName,
+        customerName,
+      },
+      entity: {
+        entityType: EMAIL_NOTIFICATION_ENTITY_TYPE_APP_USER,
+        entityId: input.customer.app_user.id,
+      },
+      idempotencyKey: createCustomerAccountEmailIdempotencyKey({
+        eventType:
+          EMAIL_NOTIFICATION_EVENT_ADMIN_CREATED_CUSTOMER_WITH_PASSWORD_WELCOME,
+        customerAppUserId: input.customer.app_user.id,
+        customerEmail,
+      }),
+      metadata: buildCustomerAuditMetadata({
+        customerProfileId: input.customer.profile.id,
+        appUserId: input.customer.app_user.id,
+        adminUserId: input.adminUserId,
+        adminMetadataKey: CUSTOMER_AUDIT_METADATA_CREATED_BY_ADMIN_ID_KEY,
+      }),
+    });
   }
 
   private async lookupCustomerByPhoneAndCivilId(input: {

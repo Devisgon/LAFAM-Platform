@@ -5,11 +5,13 @@
  * Role:
  * - Validates admin-created customer request payloads.
  * - Normalizes email, phone, Civil ID, full name, and timezone before service use.
- * - Keeps password confirmation in the request so the service can apply the shared Auth password policy.
+ * - Supports two admin customer creation modes:
+ *   1. Password provided: create an active/verified customer immediately.
+ *   2. Password omitted: create an invited customer and send a password-set invite.
  *
  * Important:
- * - Admin-created customers are created active/verified by the backend.
- * - Customer creation requires full name, email, phone, Civil ID, password, and password confirmation.
+ * - Password and confirm_password must be provided together or omitted together.
+ * - Password match and shared password-policy checks are enforced by the service.
  * - Passwords and Civil ID values must never be logged.
  * - Civil ID belongs to customer_profiles, not Supabase Auth metadata.
  */
@@ -17,11 +19,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, type TransformFnParams } from 'class-transformer';
 import {
-  IsOptional,
   IsString,
   Matches,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 
 import {
@@ -48,6 +50,11 @@ import {
 
 const CUSTOMER_CIVIL_ID_INPUT_PATTERN = /^(?=(?:\D*\d){12}\D*$)[0-9 -]+$/u;
 
+interface PasswordPairCandidate {
+  readonly password?: unknown;
+  readonly confirm_password?: unknown;
+}
+
 function transformStringValue(
   params: TransformFnParams,
   normalizer: (value: string) => string | null,
@@ -55,6 +62,13 @@ function transformStringValue(
   return typeof params.value === 'string'
     ? normalizer(params.value)
     : params.value;
+}
+
+function hasPasswordPairInput(value: PasswordPairCandidate): boolean {
+  return (
+    typeof value.password !== 'undefined' ||
+    typeof value.confirm_password !== 'undefined'
+  );
 }
 
 export class CreateCustomerDto {
@@ -120,35 +134,45 @@ export class CreateCustomerDto {
   })
   readonly civil_id!: string;
 
-  @ApiProperty({
-    description: 'Customer password.',
+  @ApiPropertyOptional({
+    description:
+      'Customer password. Provide with confirm_password to create an active customer immediately. Omit both fields to create an invited customer.',
     example: 'StrongPass123!',
     minLength: CUSTOMER_PASSWORD_MIN_LENGTH,
     maxLength: CUSTOMER_PASSWORD_MAX_LENGTH,
   })
-  @IsString({ message: 'password must be a string.' })
+  @ValidateIf((value: PasswordPairCandidate) => hasPasswordPairInput(value))
+  @IsString({
+    message:
+      'password must be a string when password or confirm_password is provided.',
+  })
   @MinLength(CUSTOMER_PASSWORD_MIN_LENGTH, {
     message: `password must be at least ${CUSTOMER_PASSWORD_MIN_LENGTH} characters long.`,
   })
   @MaxLength(CUSTOMER_PASSWORD_MAX_LENGTH, {
     message: `password must be at most ${CUSTOMER_PASSWORD_MAX_LENGTH} characters long.`,
   })
-  readonly password!: string;
+  readonly password?: string | null;
 
-  @ApiProperty({
-    description: 'Password confirmation. Must match password.',
+  @ApiPropertyOptional({
+    description:
+      'Password confirmation. Required when password is provided. Omit both fields to create an invited customer.',
     example: 'StrongPass123!',
     minLength: CUSTOMER_PASSWORD_MIN_LENGTH,
     maxLength: CUSTOMER_PASSWORD_MAX_LENGTH,
   })
-  @IsString({ message: 'confirm_password must be a string.' })
+  @ValidateIf((value: PasswordPairCandidate) => hasPasswordPairInput(value))
+  @IsString({
+    message:
+      'confirm_password must be a string when password or confirm_password is provided.',
+  })
   @MinLength(CUSTOMER_PASSWORD_MIN_LENGTH, {
     message: `confirm_password must be at least ${CUSTOMER_PASSWORD_MIN_LENGTH} characters long.`,
   })
   @MaxLength(CUSTOMER_PASSWORD_MAX_LENGTH, {
     message: `confirm_password must be at most ${CUSTOMER_PASSWORD_MAX_LENGTH} characters long.`,
   })
-  readonly confirm_password!: string;
+  readonly confirm_password?: string | null;
 
   @ApiPropertyOptional({
     description: 'Customer timezone.',
@@ -157,7 +181,7 @@ export class CreateCustomerDto {
     nullable: true,
   })
   @Transform((params) => transformStringValue(params, normalizeAuthTimezone))
-  @IsOptional()
+  @ValidateIf((_, value: unknown) => value !== null && value !== undefined)
   @IsString({ message: 'timezone must be a string.' })
   @MaxLength(CUSTOMER_TIMEZONE_MAX_LENGTH, {
     message: `timezone must be at most ${CUSTOMER_TIMEZONE_MAX_LENGTH} characters long.`,
