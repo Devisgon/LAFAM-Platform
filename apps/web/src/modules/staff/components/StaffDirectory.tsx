@@ -9,14 +9,27 @@ import { Toast } from "@/components/ui/Toast";
 
 import { useStaff } from "../hooks/useStaff";
 import type { StaffMember } from "../api/staffApi";
-import { ADD_STAFF_HASH, pageSizeOptions } from "../constants/staffUi.constants";
+import {
+  ADD_STAFF_HASH,
+  pageSizeOptions,
+} from "../constants/staffUi.constants";
 import type { ResultToast, StaffTableAction } from "../types/staffUi.types";
-import { buildCreatePayload, getErrorMessage, isActiveStaff, statusLabel, usernameFromEmail } from "../utils/staffFormatters";
+import {
+  buildCreatePayload,
+  getErrorMessage,
+  isActiveStaff,
+  statusLabel,
+  usernameFromEmail,
+} from "../utils/staffFormatters";
 import { AddStaffCard } from "./staff-management/AddStaffCard";
 import { ConfirmationOverlay } from "./staff-management/StaffFormControls";
 import { StaffProfile } from "./staff-management/StaffProfile";
 
-export function StaffDirectory() {
+type StaffDirectoryProps = {
+  currentRole?: string | null;
+};
+
+export function StaffDirectory({ currentRole = null }: StaffDirectoryProps) {
   const {
     staff,
     isLoading,
@@ -43,20 +56,32 @@ export function StaffDirectory() {
   const [pageSize, setPageSize] = useState(pageSizeOptions[0]);
   const [currentPage, setCurrentPage] = useState(1);
   const [isCreateMode, setIsCreateMode] = useState(() =>
-    typeof window === "undefined" ? false : window.location.hash === ADD_STAFF_HASH,
+    typeof window === "undefined"
+      ? false
+      : window.location.hash === ADD_STAFF_HASH,
   );
-
+  const canManageStaff =
+    currentRole === "admin" || currentRole === "super_admin";
   useEffect(() => {
     const syncCreateMode = () => {
-      setIsCreateMode(window.location.hash === ADD_STAFF_HASH);
+      const shouldOpenCreateMode =
+        canManageStaff && window.location.hash === ADD_STAFF_HASH;
+
+      setIsCreateMode(shouldOpenCreateMode);
+
+      if (!canManageStaff && window.location.hash === ADD_STAFF_HASH) {
+        window.history.replaceState(null, "", window.location.pathname);
+      }
     };
+
+    syncCreateMode();
 
     window.addEventListener("hashchange", syncCreateMode);
     return () => window.removeEventListener("hashchange", syncCreateMode);
-  }, []);
+  }, [canManageStaff]);
 
   const runStaffTableAction = async () => {
-    if (!pendingAction) return;
+    if (!pendingAction || !canManageStaff) return;
 
     const { action, member } = pendingAction;
     setIsActionSaving(true);
@@ -117,11 +142,25 @@ export function StaffDirectory() {
   const pageStart = (safeCurrentPage - 1) * pageSize;
   const pagedStaff = filteredStaff.slice(pageStart, pageStart + pageSize);
   const visibleStart = filteredStaff.length === 0 ? 0 : pageStart + 1;
-  const visibleEnd = Math.min(pageStart + pagedStaff.length, filteredStaff.length);
-  const isEditingStaffPage = Boolean(selectedStaff && openStaffInEditMode);
+  const visibleEnd = Math.min(
+    pageStart + pagedStaff.length,
+    filteredStaff.length,
+  );
+  const isEditingStaffPage =
+    canManageStaff && Boolean(selectedStaff && openStaffInEditMode);
 
   const createStaff = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (!canManageStaff) {
+      setToast({
+        message: "You do not have permission to create staff members.",
+        title: "Staff action blocked",
+        tone: "error",
+      });
+      return;
+    }
+
     const form = event.currentTarget;
 
     try {
@@ -166,7 +205,7 @@ export function StaffDirectory() {
             updateStaff={updateStaff}
             updateAvailability={updateAvailability}
           />
-        ) : isCreateMode ? (
+        ) : canManageStaff && isCreateMode ? (
           <AddStaffCard
             isCreating={isCreating}
             onCancel={() => {
@@ -177,19 +216,21 @@ export function StaffDirectory() {
           />
         ) : (
           <>
-            <section className="flex items-center justify-between gap-4 rounded-md bg-card-bg-primary px-5 py-5 shadow-lg shadow-slate-900/10">
-              <h2 className="text-2xl font-medium">Add New User</h2>
-              <button
-                className="min-h-12 rounded-sm bg-button-primary px-5 text-base font-semibold text-txt-primary transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                onClick={() => {
-                  window.history.replaceState(null, "", ADD_STAFF_HASH);
-                  setIsCreateMode(true);
-                }}
-                type="button"
-              >
-                + Add staff
-              </button>
-            </section>
+            {canManageStaff ? (
+              <section className="flex items-center justify-between gap-4 rounded-md bg-card-bg-primary px-5 py-5 shadow-lg shadow-slate-900/10">
+                <h2 className="text-2xl font-medium">Add New User</h2>
+                <button
+                  className="min-h-12 rounded-sm bg-button-primary px-5 text-base font-semibold text-txt-primary transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  onClick={() => {
+                    window.history.replaceState(null, "", ADD_STAFF_HASH);
+                    setIsCreateMode(true);
+                  }}
+                  type="button"
+                >
+                  + Add staff
+                </button>
+              </section>
+            ) : null}
 
             <section
               className="overflow-hidden rounded-md bg-card-bg-primary shadow-sm"
@@ -199,61 +240,113 @@ export function StaffDirectory() {
                 <h2 className="text-2xl font-medium">User List</h2>
               </header>
 
-        {isLoading ? (
-          <LoadingState className="p-6" label="Loading staff members" />
-        ) : loadError ? (
-          <div className="p-6">
-            <p role="alert" className="text-sm text-error">
-              {loadError}
-            </p>
-            <button
-              type="button"
-              onClick={() => void loadStaff().catch(() => undefined)}
-              className="mt-3 rounded-lg bg-button-primary px-4 py-2 text-xs font-bold text-white"
-            >
-              Try again
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-col gap-4 px-5 py-5 md:flex-row md:items-center md:justify-end">
-              <label className="md:w-[340px]">
-                <span className="sr-only">Search staff members</span>
-                <input
-                  className="min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-4 text-base text-txt-primary outline-none transition placeholder:text-txt-secondary focus:border-primary"
-                  onChange={(event) => {
-                    setSearch(event.target.value);
-                    setCurrentPage(1);
-                  }}
-                  placeholder="Search..."
-                  type="search"
-                  value={search}
-                />
-              </label>
-            </div>
+              {isLoading ? (
+                <LoadingState className="p-6" label="Loading staff members" />
+              ) : loadError ? (
+                <div className="p-6">
+                  <p role="alert" className="text-sm text-error">
+                    {loadError}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void loadStaff().catch(() => undefined)}
+                    className="mt-3 rounded-lg bg-button-primary px-4 py-2 text-xs font-bold text-white"
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-4 px-5 py-5 md:flex-row md:items-center md:justify-end">
+                    <label className="md:w-[340px]">
+                      <span className="sr-only">Search staff members</span>
+                      <input
+                        className="min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-4 text-base text-txt-primary outline-none transition placeholder:text-txt-secondary focus:border-primary"
+                        onChange={(event) => {
+                          setSearch(event.target.value);
+                          setCurrentPage(1);
+                        }}
+                        placeholder="Search..."
+                        type="search"
+                        value={search}
+                      />
+                    </label>
+                  </div>
 
-            <DataTable
-              bodyClassName=""
-              className="border"
-              columnHeaderClassName="border-r border-background-secondary px-1 py-2 align-bottom font-bold last:border-r-0"
-              columns={[
-                { key: "active", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Active/Inactive</span></span> },
-                { key: "full-name", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Full Name</span></span> },
-                { key: "mobile", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Mobile Number</span></span> },
-                { key: "email", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Email</span></span> },
-                { key: "username", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Username</span></span> },
-                { key: "password", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Password</span></span> },
-                { key: "role", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Role</span></span> },
-                { key: "action", heading: <span className="flex min-h-12 items-end justify-between gap-2"><span>Action</span></span> },
-              ]}
-              emptyCellClassName="px-3 py-6 text-center text-txt-secondary"
-              emptyMessage="No staff members found."
-              headerRowClassName="border-b-2 text-txt-primary"
-              isEmpty={pagedStaff.length === 0}
-              minWidthClassName=""
-              wrapperClassName="overflow-x-auto px-5"
-            >
-              {pagedStaff.map((member) => (
+                  <DataTable
+                    bodyClassName=""
+                    className="border"
+                    columnHeaderClassName="border-r border-background-secondary px-1 py-2 align-bottom font-bold last:border-r-0"
+                    columns={[
+                      {
+                        key: "active",
+                        heading: (
+                          <span className="flex min-h-12 items-end justify-between gap-2">
+                            <span>Active/Inactive</span>
+                          </span>
+                        ),
+                      },
+                      {
+                        key: "full-name",
+                        heading: (
+                          <span className="flex min-h-12 items-end justify-between gap-2">
+                            <span>Full Name</span>
+                          </span>
+                        ),
+                      },
+                      {
+                        key: "mobile",
+                        heading: (
+                          <span className="flex min-h-12 items-end justify-between gap-2">
+                            <span>Mobile Number</span>
+                          </span>
+                        ),
+                      },
+                      {
+                        key: "email",
+                        heading: (
+                          <span className="flex min-h-12 items-end justify-between gap-2">
+                            <span>Email</span>
+                          </span>
+                        ),
+                      },
+                      {
+                        key: "username",
+                        heading: (
+                          <span className="flex min-h-12 items-end justify-between gap-2">
+                            <span>Username</span>
+                          </span>
+                        ),
+                      },
+                      {
+                        key: "role",
+                        heading: (
+                          <span className="flex min-h-12 items-end justify-between gap-2">
+                            <span>Role</span>
+                          </span>
+                        ),
+                      },
+                      ...(canManageStaff
+                        ? [
+                            {
+                              key: "action",
+                              heading: (
+                                <span className="flex min-h-12 items-end justify-between gap-2">
+                                  <span>Action</span>
+                                </span>
+                              ),
+                            },
+                          ]
+                        : []),
+                    ]}
+                    emptyCellClassName="px-3 py-6 text-center text-txt-secondary"
+                    emptyMessage="No staff members found."
+                    headerRowClassName="border-b-2 text-txt-primary"
+                    isEmpty={pagedStaff.length === 0}
+                    minWidthClassName=""
+                    wrapperClassName="overflow-x-auto px-5"
+                  >
+                    {pagedStaff.map((member) => (
                       <tr
                         className="border-b border-background-secondary bg-background-secondary last:border-0"
                         key={member.id}
@@ -279,121 +372,154 @@ export function StaffDirectory() {
                         <td className="border-r border-background-secondary px-1 py-3">
                           {usernameFromEmail(member.email)}
                         </td>
-                        <td className="border-r border-background-secondary px-1 py-3">
-                          Protected
-                        </td>
                         <td className="border-r border-background-secondary px-1 py-3 capitalize">
                           {member.portal_role}
                         </td>
-                        <td className="px-1 py-3">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              aria-label={`Edit ${member.display_name}`}
-                              className="flex size-9 items-center justify-center rounded-full bg-button-primary text-txt-primary transition hover:opacity-85"
-                              onClick={() => {
-                                setOpenStaffInEditMode(true);
-                                setSelectedStaff(member);
-                              }}
-                              title="Edit"
-                              type="button"
-                            >
-                              <Pencil aria-hidden="true" size={17} strokeWidth={2.4} />
-                            </button>
-                            {member.staff_status === "deactivated" ? (
+                        {canManageStaff ? (
+                          <td className="px-1 py-3">
+                            <div className="flex items-center justify-center gap-2">
                               <button
-                                aria-label={`Activate ${member.display_name}`}
-                                className="flex size-9 items-center justify-center rounded-full bg-success text-white transition hover:opacity-85"
-                                onClick={() => setPendingAction({ action: "reactivate", member })}
-                                title="Activate"
+                                aria-label={`Edit ${member.display_name}`}
+                                className="flex size-9 items-center justify-center rounded-full bg-button-primary text-txt-primary transition hover:opacity-85"
+                                onClick={() => {
+                                  setOpenStaffInEditMode(true);
+                                  setSelectedStaff(member);
+                                }}
+                                title="Edit"
                                 type="button"
                               >
-                                <UserCheck aria-hidden="true" size={18} strokeWidth={2.4} />
+                                <Pencil
+                                  aria-hidden="true"
+                                  size={17}
+                                  strokeWidth={2.4}
+                                />
                               </button>
-                            ) : (
+                              {member.staff_status === "deactivated" ? (
+                                <button
+                                  aria-label={`Activate ${member.display_name}`}
+                                  className="flex size-9 items-center justify-center rounded-full bg-success text-white transition hover:opacity-85"
+                                  onClick={() =>
+                                    setPendingAction({
+                                      action: "reactivate",
+                                      member,
+                                    })
+                                  }
+                                  title="Activate"
+                                  type="button"
+                                >
+                                  <UserCheck
+                                    aria-hidden="true"
+                                    size={18}
+                                    strokeWidth={2.4}
+                                  />
+                                </button>
+                              ) : (
+                                <button
+                                  aria-label={`Deactivate ${member.display_name}`}
+                                  className="flex size-9 items-center justify-center rounded-full bg-warning text-white transition hover:opacity-85"
+                                  onClick={() =>
+                                    setPendingAction({
+                                      action: "deactivate",
+                                      member,
+                                    })
+                                  }
+                                  title="Deactivate"
+                                  type="button"
+                                >
+                                  <UserX
+                                    aria-hidden="true"
+                                    size={18}
+                                    strokeWidth={2.4}
+                                  />
+                                </button>
+                              )}
                               <button
-                                aria-label={`Deactivate ${member.display_name}`}
-                                className="flex size-9 items-center justify-center rounded-full bg-warning text-white transition hover:opacity-85"
-                                onClick={() => setPendingAction({ action: "deactivate", member })}
-                                title="Deactivate"
+                                aria-label={`Delete ${member.display_name}`}
+                                className="flex size-9 items-center justify-center rounded-full bg-error text-white transition hover:opacity-85"
+                                onClick={() =>
+                                  setPendingAction({ action: "delete", member })
+                                }
+                                title="Delete"
                                 type="button"
                               >
-                                <UserX aria-hidden="true" size={18} strokeWidth={2.4} />
+                                <Trash2
+                                  aria-hidden="true"
+                                  size={18}
+                                  strokeWidth={2.4}
+                                />
                               </button>
-                            )}
-                            <button
-                              aria-label={`Delete ${member.display_name}`}
-                              className="flex size-9 items-center justify-center rounded-full bg-error text-white transition hover:opacity-85"
-                              onClick={() => setPendingAction({ action: "delete", member })}
-                              title="Delete"
-                              type="button"
-                            >
-                              <Trash2 aria-hidden="true" size={18} strokeWidth={2.4} />
-                            </button>
-                          </div>
-                        </td>
+                            </div>
+                          </td>
+                        ) : null}
                       </tr>
-              ))}
-            </DataTable>
-
-            <footer className="flex flex-col gap-4 px-5 py-5 text-base text-txt-secondary md:flex-row md:items-center md:justify-between">
-              <label className="flex items-center gap-4">
-                <span className="relative inline-flex">
-                  <select
-                    aria-label="Records per page"
-                    className="min-h-12 appearance-none rounded-sm border border-background-secondary bg-card-bg-primary px-4 pr-10 text-txt-primary outline-none focus:border-primary"
-                    onChange={(event) => {
-                      setPageSize(Number(event.target.value));
-                      setCurrentPage(1);
-                    }}
-                    value={pageSize}
-                  >
-                    {pageSizeOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
                     ))}
-                  </select>
-                  <ChevronDown
-                    aria-hidden="true"
-                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
-                    size={16}
-                  />
-                </span>
-                records per page
-              </label>
+                  </DataTable>
 
-              <p>
-                Showing {visibleStart} to {visibleEnd} of {filteredStaff.length} entries
-              </p>
+                  <footer className="flex flex-col gap-4 px-5 py-5 text-base text-txt-secondary md:flex-row md:items-center md:justify-between">
+                    <label className="flex items-center gap-4">
+                      <span className="relative inline-flex">
+                        <select
+                          aria-label="Records per page"
+                          className="min-h-12 appearance-none rounded-sm border border-background-secondary bg-card-bg-primary px-4 pr-10 text-txt-primary outline-none focus:border-primary"
+                          onChange={(event) => {
+                            setPageSize(Number(event.target.value));
+                            setCurrentPage(1);
+                          }}
+                          value={pageSize}
+                        >
+                          {pageSizeOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown
+                          aria-hidden="true"
+                          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-secondary"
+                          size={16}
+                        />
+                      </span>
+                      records per page
+                    </label>
 
-              <nav aria-label="Staff list pagination" className="flex items-center">
-                <button
-                  className="min-h-11 rounded-l-sm border border-background-secondary px-4 text-txt-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={safeCurrentPage === 1}
-                  onClick={() =>
-                    setCurrentPage(() => Math.max(1, safeCurrentPage - 1))
-                  }
-                  type="button"
-                >
-                  Previous
-                </button>
-                <span className="flex min-h-11 min-w-11 items-center justify-center bg-button-primary px-4 font-medium text-white">
-                  {safeCurrentPage}
-                </span>
-                <button
-                  className="min-h-11 rounded-r-sm border border-background-secondary px-4 text-txt-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={safeCurrentPage >= pageCount}
-                  onClick={() =>
-                    setCurrentPage(() => Math.min(pageCount, safeCurrentPage + 1))
-                  }
-                  type="button"
-                >
-                  Next
-                </button>
-              </nav>
-            </footer>
-          </>
-        )}
+                    <p>
+                      Showing {visibleStart} to {visibleEnd} of{" "}
+                      {filteredStaff.length} entries
+                    </p>
+
+                    <nav
+                      aria-label="Staff list pagination"
+                      className="flex items-center"
+                    >
+                      <button
+                        className="min-h-11 rounded-l-sm border border-background-secondary px-4 text-txt-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={safeCurrentPage === 1}
+                        onClick={() =>
+                          setCurrentPage(() => Math.max(1, safeCurrentPage - 1))
+                        }
+                        type="button"
+                      >
+                        Previous
+                      </button>
+                      <span className="flex min-h-11 min-w-11 items-center justify-center bg-button-primary px-4 font-medium text-white">
+                        {safeCurrentPage}
+                      </span>
+                      <button
+                        className="min-h-11 rounded-r-sm border border-background-secondary px-4 text-txt-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={safeCurrentPage >= pageCount}
+                        onClick={() =>
+                          setCurrentPage(() =>
+                            Math.min(pageCount, safeCurrentPage + 1),
+                          )
+                        }
+                        type="button"
+                      >
+                        Next
+                      </button>
+                    </nav>
+                  </footer>
+                </>
+              )}
             </section>
           </>
         )}
@@ -413,7 +539,7 @@ export function StaffDirectory() {
             updateAvailability={updateAvailability}
           />
         ) : null}
-        {pendingAction ? (
+        {canManageStaff && pendingAction ? (
           <ConfirmationOverlay>
             <ConfirmationCard
               cancelLabel="Cancel"
@@ -423,7 +549,9 @@ export function StaffDirectory() {
               onCancel={() => setPendingAction(null)}
               onConfirm={() => void runStaffTableAction()}
               title={`${statusLabel(pendingAction.action === "reactivate" ? "activate" : pendingAction.action)} staff member?`}
-              tone={pendingAction.action === "reactivate" ? "default" : "danger"}
+              tone={
+                pendingAction.action === "reactivate" ? "default" : "danger"
+              }
             />
           </ConfirmationOverlay>
         ) : null}

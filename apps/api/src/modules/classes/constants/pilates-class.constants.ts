@@ -6,6 +6,8 @@
  * - Defines Pilates class statuses, schedule statuses, levels, route prefixes,
  *   validation limits, pagination defaults, realtime event names, and role access.
  * - Keeps DTOs, services, repositories, controllers, and Swagger aligned.
+ * - Defines admin, super_admin, staff, and trainer as the current operational
+ *   Pilates class/schedule management roles.
  *
  * Important:
  * - This file contains constants and lightweight type guards only.
@@ -13,12 +15,15 @@
  * - Do not place service logic here.
  * - Do not place environment-derived values here.
  * - Pilates flow must remain separate from the future Salon flow.
+ * - Staff and trainer users are intentionally treated the same for current
+ *   Pilates class and schedule management access.
  */
 
 import {
   AUTH_ADMIN_ROLE,
   AUTH_CUSTOMER_ROLE,
   AUTH_GUEST_ROLE,
+  AUTH_STAFF_ROLE,
   AUTH_SUPER_ADMIN_ROLE,
   AUTH_TRAINER_ROLE,
   type AuthUserRole,
@@ -276,12 +281,14 @@ export const PILATES_CLASS_DEFAULT_LEVEL =
 
 export type PilatesClassAdminManagementRole = Extract<
   AuthUserRole,
-  'admin' | 'super_admin'
+  'admin' | 'super_admin' | 'staff' | 'trainer'
 >;
 
 export const PILATES_CLASS_ADMIN_MANAGEMENT_ROLES = [
   AUTH_ADMIN_ROLE,
   AUTH_SUPER_ADMIN_ROLE,
+  AUTH_STAFF_ROLE,
+  AUTH_TRAINER_ROLE,
 ] as const satisfies readonly PilatesClassAdminManagementRole[];
 
 export type PilatesClassTrainerRole = Extract<AuthUserRole, 'trainer'>;

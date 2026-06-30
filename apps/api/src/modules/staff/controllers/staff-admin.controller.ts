@@ -1,17 +1,21 @@
 // apps/api/src/modules/staff/controllers/staff-admin.controller.ts
+// apps/api/src/modules/staff/controllers/staff-admin.controller.ts
 /**
  * LAFAM Staff admin controller.
  *
  * Role:
- * - Exposes protected admin Staff Module endpoints.
- * - Allows admins/super-admins to create, list, read, update, deactivate,
- *   reactivate, soft-delete, and replace staff availability.
+ * - Exposes protected Staff Module endpoints.
+ * - Allows admin and super-admin users to create, list, read, update,
+ *   deactivate, reactivate, soft-delete, and replace staff availability.
+ * - Allows staff and trainer users to read staff/trainer directory records only.
  * - Keeps controller logic thin and delegates business rules to StaffAdminService.
  *
  * Important:
  * - AuthGuard resolves the Bearer token and attaches Auth context.
  * - ActiveSessionGuard rejects revoked, expired, deleted, deactivated, and invalid guest sessions.
- * - RolesGuard enforces route-level admin/super-admin access.
+ * - RolesGuard enforces route-level role access.
+ * - Class-level role access remains admin/super-admin only.
+ * - Method-level role overrides allow staff/trainer read access for list/detail endpoints.
  * - StaffAdminService performs Staff Module business validation.
  * - Controllers must not log raw access tokens, refresh tokens, passwords, OTPs, or token hashes.
  */
@@ -37,7 +41,9 @@ import {
 } from '../../../common/responses/api-response';
 import {
   AUTH_ADMIN_ROLE,
+  AUTH_STAFF_ROLE,
   AUTH_SUPER_ADMIN_ROLE,
+  AUTH_TRAINER_ROLE,
 } from '../../auth/constants/auth-role.constants';
 import { CurrentAuth } from '../../auth/decorators/current-user.decorator';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -75,6 +81,12 @@ export class StaffAdminController {
   constructor(private readonly staffAdminService: StaffAdminService) {}
 
   @Get()
+  @Roles(
+    AUTH_ADMIN_ROLE,
+    AUTH_SUPER_ADMIN_ROLE,
+    AUTH_STAFF_ROLE,
+    AUTH_TRAINER_ROLE,
+  )
   async listStaff(
     @CurrentAuth() auth: AuthInternalContext | undefined,
     @Query() query: ListStaffQueryDto,
@@ -111,6 +123,12 @@ export class StaffAdminController {
   }
 
   @Get(':staffId')
+  @Roles(
+    AUTH_ADMIN_ROLE,
+    AUTH_SUPER_ADMIN_ROLE,
+    AUTH_STAFF_ROLE,
+    AUTH_TRAINER_ROLE,
+  )
   async getStaffById(
     @CurrentAuth() auth: AuthInternalContext | undefined,
     @Param() params: StaffParamDto,

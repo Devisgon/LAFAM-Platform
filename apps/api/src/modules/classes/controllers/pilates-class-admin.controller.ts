@@ -3,16 +3,17 @@
  * LAFAM Pilates Classes admin controllers.
  *
  * Role:
- * - Exposes protected admin Pilates class management endpoints.
- * - Exposes protected admin Pilates schedule management endpoints.
+ * - Exposes protected admin/staff/trainer Pilates class management endpoints.
+ * - Exposes protected admin/staff/trainer Pilates schedule management endpoints.
+ * - Allows admin, super-admin, staff, and trainer users to manage Pilates classes and schedules.
  * - Keeps controller logic thin and delegates business rules to PilatesClassAdminService.
  * - Accepts backend-owned class/schedule pricing fields through DTO validation.
- * - Accepts recurring multi-time schedule slots through DTO validation.
+ * - Accepts weekly schedule-plan payloads through DTO validation.
  *
  * Important:
  * - AuthGuard resolves the Bearer token and attaches Auth context.
  * - ActiveSessionGuard rejects revoked, expired, deleted, deactivated, and invalid guest sessions.
- * - RolesGuard enforces route-level admin/super-admin access.
+ * - RolesGuard enforces route-level admin/super-admin/staff/trainer access.
  * - PilatesClassAdminService owns class/schedule business validation.
  * - Controllers must not calculate prices, create payments, or create wallet records.
  * - Controllers must not log raw access tokens, refresh tokens, passwords, OTPs, or token hashes.
@@ -42,7 +43,9 @@ import {
 } from '../../../common/responses/api-response';
 import {
   AUTH_ADMIN_ROLE,
+  AUTH_STAFF_ROLE,
   AUTH_SUPER_ADMIN_ROLE,
+  AUTH_TRAINER_ROLE,
 } from '../../auth/constants/auth-role.constants';
 import { CurrentAuth } from '../../auth/decorators/current-user.decorator';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -108,7 +111,12 @@ function resolveAuthContext(
 
 @Controller(PILATES_ADMIN_CLASSES_ROUTE_PREFIX)
 @UseGuards(AuthGuard, ActiveSessionGuard, RolesGuard)
-@Roles(AUTH_ADMIN_ROLE, AUTH_SUPER_ADMIN_ROLE)
+@Roles(
+  AUTH_ADMIN_ROLE,
+  AUTH_SUPER_ADMIN_ROLE,
+  AUTH_STAFF_ROLE,
+  AUTH_TRAINER_ROLE,
+)
 export class PilatesClassAdminController {
   constructor(
     private readonly pilatesClassAdminService: PilatesClassAdminService,
@@ -214,7 +222,12 @@ export class PilatesClassAdminController {
 
 @Controller(PILATES_ADMIN_SCHEDULES_ROUTE_PREFIX)
 @UseGuards(AuthGuard, ActiveSessionGuard, RolesGuard)
-@Roles(AUTH_ADMIN_ROLE, AUTH_SUPER_ADMIN_ROLE)
+@Roles(
+  AUTH_ADMIN_ROLE,
+  AUTH_SUPER_ADMIN_ROLE,
+  AUTH_STAFF_ROLE,
+  AUTH_TRAINER_ROLE,
+)
 export class PilatesScheduleAdminController {
   constructor(
     private readonly pilatesClassAdminService: PilatesClassAdminService,

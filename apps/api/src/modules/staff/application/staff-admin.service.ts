@@ -1,9 +1,12 @@
 // apps/api/src/modules/staff/application/staff-admin.service.ts
+// apps/api/src/modules/staff/application/staff-admin.service.ts
 /**
  * LAFAM Staff admin service.
  *
  * Role:
- * - Owns Staff Module business rules for admin-managed staff records.
+ * - Owns Staff Module business rules for staff/trainer records.
+ * - Allows admin and super-admin users to manage staff/trainer records.
+ * - Allows staff and trainer users to read staff/trainer directory records.
  * - Coordinates Supabase Auth staff user creation with staff profile creation.
  * - Converts database/auth repository results into safe API response objects.
  *
@@ -13,6 +16,9 @@
  * - Admin-created staff users are created as active/verified users and do not require email OTP verification.
  * - Staff profile data stays separate from Auth identity data.
  * - Staff deletion is soft-delete by default.
+ * - Staff/trainer read responses include availability through the existing staff availability mapper.
+ * - Staff and trainer users must not be allowed to create, update, deactivate, reactivate, delete,
+ *   or replace availability through this service.
  */
 
 import { Injectable } from '@nestjs/common';
@@ -84,6 +90,19 @@ function resolveAdminActorId(auth: AuthInternalContext): string {
   }
 
   return auth.profile.id;
+}
+
+function resolveStaffReadActorId(auth: AuthInternalContext): string {
+  if (
+    isStaffAdminManagementRole(auth.profile.role) ||
+    isStaffPortalRole(auth.profile.role)
+  ) {
+    return auth.profile.id;
+  }
+
+  throw AppError.adminAccessRequired(
+    'Staff directory read access is required to view staff records.',
+  );
 }
 
 function resolveStaffPortalRole(value: string): StaffPortalRole {
@@ -393,7 +412,7 @@ export class StaffAdminService {
     auth: AuthInternalContext,
     dto: ListStaffQueryDto,
   ): Promise<StaffListResult> {
-    resolveAdminActorId(auth);
+    resolveStaffReadActorId(auth);
 
     const result = await this.staffRepository.listStaff(
       buildStaffListQuery(dto),
@@ -411,7 +430,7 @@ export class StaffAdminService {
     auth: AuthInternalContext,
     staffId: string,
   ): Promise<StaffMutationResult> {
-    resolveAdminActorId(auth);
+    resolveStaffReadActorId(auth);
 
     const staff = await this.staffRepository.getById({
       staffProfileId: staffId,
