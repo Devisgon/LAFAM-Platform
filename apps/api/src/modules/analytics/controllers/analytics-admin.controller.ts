@@ -4,14 +4,14 @@
  *
  * Role:
  * - Exposes protected Admin Analytics Dashboard endpoints.
- * - Allows admin and super-admin users to retrieve read-only dashboard metrics.
+ * - Allows admin, super-admin, staff, and trainer users to retrieve read-only dashboard metrics.
  * - Keeps analytics route handling thin and delegates calculation logic to
  *   AnalyticsDashboardService.
  *
  * Important:
  * - AuthGuard resolves the Bearer token and attaches Auth context.
  * - ActiveSessionGuard rejects revoked, expired, deleted, deactivated, and invalid sessions.
- * - RolesGuard restricts this endpoint to admin and super-admin users.
+ * - RolesGuard restricts this endpoint to admin, super-admin, staff, and trainer users.
  * - Controller does not calculate analytics.
  * - Controller does not query the database.
  * - Controller does not mutate bookings, payments, wallets, users, classes,
@@ -26,7 +26,9 @@ import {
 } from '../../../common/responses/api-response';
 import {
   AUTH_ADMIN_ROLE,
+  AUTH_STAFF_ROLE,
   AUTH_SUPER_ADMIN_ROLE,
+  AUTH_TRAINER_ROLE,
 } from '../../auth/constants/auth-role.constants';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { ActiveSessionGuard } from '../../auth/guards/active-session.guard';
@@ -43,7 +45,12 @@ import type { AnalyticsDashboardResponse } from '../types/analytics.types';
 
 @Controller(ANALYTICS_ADMIN_ROUTE_PREFIX)
 @UseGuards(AuthGuard, ActiveSessionGuard, RolesGuard)
-@Roles(AUTH_ADMIN_ROLE, AUTH_SUPER_ADMIN_ROLE)
+@Roles(
+  AUTH_ADMIN_ROLE,
+  AUTH_SUPER_ADMIN_ROLE,
+  AUTH_STAFF_ROLE,
+  AUTH_TRAINER_ROLE,
+)
 export class AnalyticsAdminController {
   constructor(
     private readonly analyticsDashboardService: AnalyticsDashboardService,

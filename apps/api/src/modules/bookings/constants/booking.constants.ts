@@ -8,6 +8,7 @@
  *   pagination defaults, RPC action results, calendar event types,
  *   domain event names, payment-flow state groups, and role access rules.
  * - Keeps DTOs, services, repositories, controllers, and Swagger aligned.
+ * - Defines staff and trainer as the same operational booking-management access level.
  *
  * Important:
  * - This file contains constants and lightweight type guards only.
@@ -19,6 +20,7 @@
  * - Pilates class bookings and private trainer bookings must remain separate flows.
  * - Bookings that require payment must start as pending_payment.
  * - Bookings must not be confirmed by the frontend.
+ * - Staff and trainer users are not scoped differently for current admin booking access.
  */
 
 import {
@@ -724,30 +726,49 @@ export const BOOKING_ADMIN_ACCESS_ROLES = [
   AUTH_SUPER_ADMIN_ROLE,
 ] as const satisfies readonly AuthUserRole[];
 
-export const BOOKING_STAFF_ADMIN_ACCESS_ROLES = [
+export const BOOKING_OPERATIONAL_ADMIN_ACCESS_ROLES = [
   AUTH_ADMIN_ROLE,
   AUTH_SUPER_ADMIN_ROLE,
   AUTH_STAFF_ROLE,
-] as const satisfies readonly AuthUserRole[];
-
-export const BOOKING_TRAINER_SCOPED_ACCESS_ROLES = [
   AUTH_TRAINER_ROLE,
 ] as const satisfies readonly AuthUserRole[];
 
-export const BOOKING_ADMIN_AND_STAFF_ACCESS_ROLES = [
-  ...BOOKING_STAFF_ADMIN_ACCESS_ROLES,
-  ...BOOKING_TRAINER_SCOPED_ACCESS_ROLES,
-] as const satisfies readonly AuthUserRole[];
+/**
+ * Backward-compatible alias used by existing Booking controller imports.
+ *
+ * Important:
+ * - The historical name says "staff", but the current access group includes
+ *   admin, super_admin, staff, and trainer.
+ * - Do not use this name for new code. Prefer BOOKING_OPERATIONAL_ADMIN_ACCESS_ROLES.
+ */
+export const BOOKING_STAFF_ADMIN_ACCESS_ROLES =
+  BOOKING_OPERATIONAL_ADMIN_ACCESS_ROLES;
 
-export const BOOKING_FULL_MANAGEMENT_ROLES = [
-  AUTH_ADMIN_ROLE,
-  AUTH_SUPER_ADMIN_ROLE,
-  AUTH_STAFF_ROLE,
-] as const satisfies readonly AuthUserRole[];
+/**
+ * Backward-compatible empty alias for the old trainer-scoped access model.
+ *
+ * Important:
+ * - Trainer is no longer scoped for current admin booking access.
+ * - Trainer is included in BOOKING_OPERATIONAL_ADMIN_ACCESS_ROLES and
+ *   BOOKING_FULL_MANAGEMENT_ROLES.
+ * - This export is kept to avoid breaking existing imports until the policy
+ *   and service files are cleaned up in the next steps.
+ */
+export const BOOKING_TRAINER_SCOPED_ACCESS_ROLES: readonly AuthUserRole[] = [];
 
-export const BOOKING_SCOPED_MANAGEMENT_ROLES = [
-  AUTH_TRAINER_ROLE,
-] as const satisfies readonly AuthUserRole[];
+export const BOOKING_ADMIN_AND_STAFF_ACCESS_ROLES =
+  BOOKING_OPERATIONAL_ADMIN_ACCESS_ROLES;
+
+export const BOOKING_FULL_MANAGEMENT_ROLES =
+  BOOKING_OPERATIONAL_ADMIN_ACCESS_ROLES;
+
+/**
+ * No role currently uses scoped booking management.
+ *
+ * Trainer used to enter this group, but the approved access model now gives
+ * trainer the same booking-management scope as staff.
+ */
+export const BOOKING_SCOPED_MANAGEMENT_ROLES: readonly AuthUserRole[] = [];
 
 export const BOOKING_DEFAULT_LIMIT = 20 as const;
 export const BOOKING_MAX_LIMIT = 100 as const;

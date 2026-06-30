@@ -3,23 +3,23 @@
  * LAFAM admin/staff/trainer booking controller.
  *
  * Role:
- * - Exposes protected admin Booking Module endpoints.
- * - Allows admins and staff to list and read all customer bookings.
- * - Allows admins, staff, and scoped trainers to manage Pilates bookings.
- * - Allows admins, staff, and scoped trainers to create backend-owned bulk booking orders.
- * - Allows admins, staff, and scoped trainers to read booking orders.
- * - Allows admins and staff to manage private trainer bookings.
- * - Allows admins and staff to access the full admin booking calendar.
- * - Allows admins, staff, and scoped trainers to inspect schedule waitlists.
- * - Allows admins, staff, and scoped trainers to remove waitlist entries.
+ * - Exposes protected operational Booking Module endpoints.
+ * - Allows admin, super_admin, staff, and trainer users to list and read customer bookings.
+ * - Allows admin, super_admin, staff, and trainer users to manage Pilates bookings.
+ * - Allows admin, super_admin, staff, and trainer users to create backend-owned bulk booking orders.
+ * - Allows admin, super_admin, staff, and trainer users to read booking orders.
+ * - Allows admin, super_admin, staff, and trainer users to manage private trainer bookings.
+ * - Allows admin, super_admin, staff, and trainer users to access the admin booking calendar.
+ * - Allows admin, super_admin, staff, and trainer users to inspect schedule waitlists.
+ * - Allows admin, super_admin, staff, and trainer users to remove waitlist entries.
  *
  * Important:
  * - AuthGuard resolves the Bearer token and attaches Auth context.
  * - ActiveSessionGuard rejects revoked, expired, deleted, deactivated, and invalid sessions.
- * - RolesGuard allows admin, super-admin, staff, and trainer access where appropriate.
- * - Controller role checks are not enough for trainer-scoped access.
- * - BookingAdminService must receive the authenticated actor context.
- * - BookingAdminService enforces trainer ownership for scoped booking management.
+ * - RolesGuard allows admin, super_admin, staff, and trainer access where appropriate.
+ * - BookingAdminService must receive the authenticated actor context for booking-management flows.
+ * - BookingAdminService and BookingAccessPolicy enforce service-level booking access.
+ * - Staff and trainer users intentionally share the same operational booking-management access.
  * - Controllers must stay thin.
  * - Controllers must not calculate booking capacity.
  * - Controllers must not calculate booking-order totals.
@@ -58,7 +58,7 @@ import {
 import { BookingCalendarService } from '../application/booking-calendar.service';
 import { PrivateBookingAvailabilityService } from '../application/private-booking-availability.service';
 import {
-  BOOKING_ADMIN_AND_STAFF_ACCESS_ROLES,
+  BOOKING_OPERATIONAL_ADMIN_ACCESS_ROLES,
   BOOKING_ADMIN_BULK_ROUTE_PREFIX,
   BOOKING_ADMIN_CALENDAR_ROUTE_PREFIX,
   BOOKING_ADMIN_ORDER_ROUTE_PREFIX,
@@ -131,7 +131,7 @@ function resolveAuthenticatedActorContext(
 
 @Controller()
 @UseGuards(AuthGuard, ActiveSessionGuard, RolesGuard)
-@Roles(...BOOKING_ADMIN_AND_STAFF_ACCESS_ROLES)
+@Roles(...BOOKING_OPERATIONAL_ADMIN_ACCESS_ROLES)
 export class BookingAdminController {
   constructor(
     private readonly bookingAdminService: BookingAdminService,

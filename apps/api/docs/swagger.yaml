@@ -41,15 +41,15 @@ tags:
   - name: Customers - Public
     description: Public customer invitation acceptance endpoints.
   - name: Staff - Admin
-    description: Protected admin staff and trainer management endpoints
+    description: Protected staff and trainer management endpoints. Admin and super_admin can manage staff/trainer records. Staff and trainer can read staff/trainer directory records and availability only.
   - name: Pilates - Public
     description: Public Pilates class and schedule browsing endpoints
   - name: Pilates - Admin
-    description: Protected admin Pilates class and schedule management endpoints
+    description: Protected Pilates class and schedule management endpoints for admin, super_admin, staff, and trainer roles.
   - name: Bookings - Customer
     description: Protected customer Pilates booking, bulk booking order, private trainer booking, availability, and waitlist endpoints.
   - name: Bookings - Admin
-    description: Protected admin/staff/trainer booking endpoints. Admin, super_admin, and staff have full booking scope. Trainer booking access is service-scoped to schedules assigned to the authenticated trainer.
+    description: Protected operational booking endpoints. Admin, super_admin, staff, and trainer have full booking-management scope in the current access model.
   - name: Payments - Customer
     description: Protected customer checkout, booking-order checkout, payment history, payment detail, transaction, and verification endpoints.
   - name: Payments - Public
@@ -61,7 +61,7 @@ tags:
   - name: Wallet - Admin
     description: Protected admin wallet listing, wallet detail, wallet ledger, and audited adjustment endpoints
   - name: Analytics - Admin
-    description: Protected admin dashboard analytics, KPI cards, revenue chart, booking feeds, wallet summary, and calendar overview endpoints
+    description: Protected dashboard analytics, KPI cards, revenue chart, booking feeds, wallet summary, and calendar overview endpoints for admin, super_admin, staff, and trainer roles.
 paths:
   /:
     get:
@@ -1286,7 +1286,7 @@ paths:
   /admin/staff:
     get:
       summary: List staff members
-      description: Lists staff and trainer records for the admin dashboard. Requires admin or super_admin.
+      description: Lists staff and trainer records for the dashboard. Requires admin, super_admin, staff, or trainer. Staff and trainer users receive read-only directory access, including availability returned by the Staff response schema.
       operationId: staffAdminListStaff
       tags:
         - Staff - Admin
@@ -1388,7 +1388,7 @@ paths:
   /admin/staff/{staffId}:
     get:
       summary: Get staff member
-      description: Returns one staff or trainer record by staff profile id. Requires admin or super_admin.
+      description: Returns one staff or trainer record by staff profile id. Requires admin, super_admin, staff, or trainer. Staff and trainer users receive read-only directory access, including availability returned by the Staff response schema.
       operationId: staffAdminGetStaffById
       tags:
         - Staff - Admin
@@ -1818,7 +1818,7 @@ paths:
   /admin/pilates/classes:
     get:
       summary: List admin Pilates classes
-      description: Returns Pilates class definitions for admin management.
+      description: Returns Pilates class definitions for management. Requires admin, super_admin, staff, or trainer.
       operationId: pilatesAdminListClasses
       tags:
         - Pilates - Admin
@@ -1888,7 +1888,7 @@ paths:
 
     post:
       summary: Create Pilates class
-      description: Creates a reusable Pilates class definition. Schedules are created separately.
+      description: Creates a reusable Pilates class definition. Schedules are created separately. Requires admin, super_admin, staff, or trainer.
       operationId: pilatesAdminCreateClass
       tags:
         - Pilates - Admin
@@ -1922,7 +1922,7 @@ paths:
   /admin/pilates/classes/{classId}:
     get:
       summary: Get admin Pilates class details
-      description: Returns one Pilates class definition for admin management.
+      description: Returns one Pilates class definition for management. Requires admin, super_admin, staff, or trainer.
       operationId: pilatesAdminGetClassById
       tags:
         - Pilates - Admin
@@ -1954,7 +1954,7 @@ paths:
 
     patch:
       summary: Update Pilates class
-      description: Updates a reusable Pilates class definition. Existing schedules are not automatically modified.
+      description: Updates a reusable Pilates class definition. Existing schedules are not automatically modified. Requires admin, super_admin, staff, or trainer.
       operationId: pilatesAdminUpdateClass
       tags:
         - Pilates - Admin
@@ -1997,7 +1997,7 @@ paths:
 
     delete:
       summary: Delete Pilates class
-      description: Soft deletes a Pilates class when no scheduled active occurrences depend on it.
+      description: Soft deletes a Pilates class when no scheduled active occurrences depend on it. Requires admin, super_admin, staff, or trainer.
       operationId: pilatesAdminDeleteClass
       tags:
         - Pilates - Admin
@@ -2032,7 +2032,7 @@ paths:
   /admin/pilates/schedules:
     get:
       summary: List admin Pilates schedules
-      description: Returns Pilates class schedules for admin management.
+      description: Returns Pilates class schedules for management. Requires admin, super_admin, staff, or trainer.
       operationId: pilatesAdminListSchedules
       tags:
         - Pilates - Admin
@@ -2135,7 +2135,7 @@ paths:
 
     post:
       summary: Create Pilates weekly schedule plan
-      description: Creates one weekly Pilates schedule plan and generates concrete bookable schedule rows between start_date and end_date. Backend calculates each end_time from start_time and duration_minutes.
+      description: Creates one weekly Pilates schedule plan and generates concrete bookable schedule rows between start_date and end_date. Backend calculates each end_time from start_time and duration_minutes. Requires admin, super_admin, staff, or trainer.
       operationId: pilatesAdminCreateSchedule
       tags:
         - Pilates - Admin
@@ -2192,7 +2192,7 @@ paths:
   /admin/pilates/schedules/{scheduleId}:
     get:
       summary: Get admin Pilates schedule details
-      description: Returns one Pilates class schedule for admin management.
+      description: Returns one Pilates class schedule for management. Requires admin, super_admin, staff, or trainer.
       operationId: pilatesAdminGetScheduleById
       tags:
         - Pilates - Admin
@@ -2224,7 +2224,7 @@ paths:
 
     patch:
       summary: Update Pilates schedule
-      description: Updates a scheduled Pilates occurrence. Lifecycle changes use dedicated cancel, complete, or delete endpoints.
+      description: Updates a scheduled Pilates occurrence. Lifecycle changes use dedicated cancel, complete, or delete endpoints. Requires admin, super_admin, staff, or trainer.
       operationId: pilatesAdminUpdateSchedule
       tags:
         - Pilates - Admin
@@ -2264,7 +2264,7 @@ paths:
 
     delete:
       summary: Delete Pilates schedule
-      description: Soft deletes a Pilates schedule when allowed by lifecycle rules.
+      description: Soft deletes a Pilates schedule when allowed by lifecycle rules. Requires admin, super_admin, staff, or trainer.
       operationId: pilatesAdminDeleteSchedule
       tags:
         - Pilates - Admin
@@ -2299,7 +2299,7 @@ paths:
   /admin/pilates/schedules/{scheduleId}/cancel:
     post:
       summary: Cancel Pilates schedule
-      description: Cancels a scheduled Pilates occurrence and stores a cancellation reason.
+      description: Cancels a scheduled Pilates occurrence and stores a cancellation reason. Requires admin, super_admin, staff, or trainer.
       operationId: pilatesAdminCancelSchedule
       tags:
         - Pilates - Admin
@@ -2340,7 +2340,7 @@ paths:
   /admin/pilates/schedules/{scheduleId}/complete:
     post:
       summary: Complete Pilates schedule
-      description: Marks a scheduled Pilates occurrence as completed.
+      description: Marks a scheduled Pilates occurrence as completed. Requires admin, super_admin, staff, or trainer.
       operationId: pilatesAdminCompleteSchedule
       tags:
         - Pilates - Admin
@@ -2891,7 +2891,7 @@ paths:
   /admin/bookings/bulk:
     post:
       summary: Create admin/staff/trainer bulk Pilates booking order
-      description: Creates one backend-owned booking order for a selected customer. Admin, super_admin, and staff can create orders for any schedule. Trainers can create orders only for schedules assigned to their trainer staff profile. The request must not include payment_required, payment_status, status, price, currency, or created_by fields.
+      description: Creates one backend-owned booking order for a selected customer. Admin, super_admin, staff, and trainer have full booking-management scope in the current access model. The request must not include payment_required, payment_status, status, price, currency, or created_by fields.
       operationId: bookingAdminCreateBulkBooking
       tags:
         - Bookings - Admin
@@ -2934,7 +2934,7 @@ paths:
   /admin/bookings/orders/{bookingOrderId}:
     get:
       summary: Get admin/staff/trainer booking order
-      description: Returns one booking order. Admin, super_admin, and staff have full access. Trainers can read only booking orders whose schedules are assigned to their trainer staff profile.
+      description: Returns one booking order. Admin, super_admin, staff, and trainer have full booking-management scope in the current access model.
       operationId: bookingAdminGetBookingOrderById
       tags:
         - Bookings - Admin
@@ -3082,7 +3082,7 @@ paths:
   /admin/bookings:
     get:
       summary: List admin bookings
-      description: Lists all customer bookings for the admin dashboard.
+      description: Lists all customer bookings for the operational dashboard. Requires admin, super_admin, staff, or trainer.
       operationId: bookingAdminListBookings
       tags:
         - Bookings - Admin
@@ -3185,7 +3185,7 @@ paths:
   /admin/bookings/calendar:
     get:
       summary: List admin booking calendar
-      description: Returns a normalized calendar feed combining Pilates schedules, optional class bookings, optional waitlist entries, and private trainer bookings.
+      description: Returns a normalized calendar feed combining Pilates schedules, optional class bookings, optional waitlist entries, and private trainer bookings. Requires admin, super_admin, staff, or trainer.
       operationId: bookingAdminListCalendar
       tags:
         - Bookings - Admin
@@ -3275,7 +3275,7 @@ paths:
   /admin/bookings/private-trainer:
     post:
       summary: Create admin private trainer booking
-      description: Creates a private one-on-one trainer booking from the admin dashboard. Admin-created private bookings require an explicit customer user_id.
+      description: Creates a private one-on-one trainer booking from the operational dashboard. Admin/staff/trainer-created private bookings require an explicit customer user_id. Requires admin, super_admin, staff, or trainer.
       operationId: bookingAdminCreatePrivateBooking
       tags:
         - Bookings - Admin
@@ -3306,7 +3306,7 @@ paths:
           $ref: '#/components/responses/Conflict'
     get:
       summary: List admin private trainer bookings
-      description: Lists private trainer bookings for the admin dashboard.
+      description: Lists private trainer bookings for the operational dashboard. Requires admin, super_admin, staff, or trainer.
       operationId: bookingAdminListPrivateBookings
       tags:
         - Bookings - Admin
@@ -3397,7 +3397,7 @@ paths:
   /admin/bookings/private-trainer/{privateBookingId}:
     get:
       summary: Get admin private trainer booking
-      description: Returns one private trainer booking for the admin dashboard.
+      description: Returns one private trainer booking for the operational dashboard. Requires admin, super_admin, staff, or trainer.
       operationId: bookingAdminGetPrivateBookingById
       tags:
         - Bookings - Admin
@@ -3430,7 +3430,7 @@ paths:
   /admin/bookings/private-trainer/{privateBookingId}/cancel:
     post:
       summary: Cancel private trainer booking as admin
-      description: Cancels a private trainer booking from the admin dashboard with a required audit reason.
+      description: Cancels a private trainer booking from the operational dashboard with a required audit reason. Requires admin, super_admin, staff, or trainer.
       operationId: bookingAdminCancelPrivateBooking
       tags:
         - Bookings - Admin
@@ -3471,7 +3471,7 @@ paths:
   /admin/bookings/private-trainer/{privateBookingId}/reschedule:
     post:
       summary: Reschedule private trainer booking as admin
-      description: Reschedules a private trainer booking from the admin dashboard.
+      description: Reschedules a private trainer booking from the operational dashboard. Requires admin, super_admin, staff, or trainer.
       operationId: bookingAdminReschedulePrivateBooking
       tags:
         - Bookings - Admin
@@ -3512,7 +3512,7 @@ paths:
   /admin/pilates/schedules/{scheduleId}/waitlist:
     get:
       summary: List schedule waitlist
-      description: Lists FIFO waitlist entries for a Pilates schedule.
+      description: Lists FIFO waitlist entries for a Pilates schedule. Requires admin, super_admin, staff, or trainer.
       operationId: bookingAdminListScheduleWaitlist
       tags:
         - Bookings - Admin
@@ -3580,7 +3580,7 @@ paths:
   /admin/bookings/{bookingId}:
     get:
       summary: Get admin booking
-      description: Returns one booking for the admin dashboard.
+      description: Returns one booking for the operational dashboard. Requires admin, super_admin, staff, or trainer.
       operationId: bookingAdminGetBookingById
       tags:
         - Bookings - Admin
@@ -3613,7 +3613,7 @@ paths:
   /admin/bookings/{bookingId}/cancel:
     post:
       summary: Cancel booking as admin
-      description: Cancels a booking from the admin dashboard with a required audit reason.
+      description: Cancels a booking from the operational dashboard with a required audit reason. Requires admin, super_admin, staff, or trainer.
       operationId: bookingAdminCancelBooking
       tags:
         - Bookings - Admin
@@ -3654,7 +3654,7 @@ paths:
   /admin/bookings/{bookingId}/reschedule:
     post:
       summary: Reschedule booking as admin
-      description: Reschedules a confirmed booking from the admin dashboard.
+      description: Reschedules a confirmed booking from the operational dashboard. Requires admin, super_admin, staff, or trainer.
       operationId: bookingAdminRescheduleBooking
       tags:
         - Bookings - Admin
@@ -3695,7 +3695,7 @@ paths:
   /admin/bookings/{bookingId}/override:
     post:
       summary: Override booking status
-      description: Applies a controlled admin booking status override with required audit reason.
+      description: Applies a controlled booking status override with required audit reason. Requires admin, super_admin, staff, or trainer.
       operationId: bookingAdminOverrideBookingStatus
       tags:
         - Bookings - Admin
@@ -4683,7 +4683,7 @@ paths:
   /admin/analytics/dashboard:
     get:
       summary: Get admin analytics dashboard
-      description: Returns read-only dashboard analytics for admin and super-admin users, including summary KPIs, weekly revenue overview, payment summary, upcoming bookings, recent bookings, top Pilates classes, optional wallet summary, and optional calendar events.
+      description: Returns read-only dashboard analytics for admin, super_admin, staff, and trainer users, including summary KPIs, weekly revenue overview, payment summary, upcoming bookings, recent bookings, top Pilates classes, optional wallet summary, and optional calendar events.
       operationId: analyticsAdminGetDashboard
       tags:
         - Analytics - Admin
@@ -5115,6 +5115,7 @@ components:
         - avatar:upload
         - password:change
         - booking:create_confirmed
+        - booking:create_bulk
         - booking:view_history
         - booking:cancel
         - booking:reschedule
@@ -5122,9 +5123,42 @@ components:
         - wallet:read
         - staff:access_dashboard
         - admin:access_dashboard
+        - admin:analytics:read
         - admin:users:read
         - admin:users:deactivate
         - admin:users:reactivate
+        - admin:staff:read
+        - admin:customers:read
+        - admin:customers:lookup
+        - admin:customers:create
+        - admin:customers:update
+        - admin:customers:deactivate
+        - admin:customers:reactivate
+        - admin:customers:delete
+        - admin:customers:manage
+        - admin:pilates:classes:read
+        - admin:pilates:classes:create
+        - admin:pilates:classes:update
+        - admin:pilates:classes:delete
+        - admin:pilates:classes:manage
+        - admin:pilates:schedules:read
+        - admin:pilates:schedules:create
+        - admin:pilates:schedules:update
+        - admin:pilates:schedules:cancel
+        - admin:pilates:schedules:complete
+        - admin:pilates:schedules:delete
+        - admin:pilates:schedules:manage
+        - admin:bookings:read
+        - admin:bookings:create
+        - admin:bookings:bulk_create
+        - admin:bookings:update
+        - admin:bookings:cancel
+        - admin:bookings:reschedule
+        - admin:bookings:override
+        - admin:bookings:waitlist
+        - admin:bookings:calendar
+        - admin:bookings:manage
+        - admin:bookings:manage_scoped
         - super_admin:users:hard_delete
     AuthSafeUser:
       type: object

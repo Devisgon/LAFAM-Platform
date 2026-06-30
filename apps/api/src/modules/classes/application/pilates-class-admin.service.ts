@@ -3,7 +3,7 @@
  * LAFAM Pilates Classes admin service.
  *
  * Role:
- * - Owns admin-facing Pilates class and schedule business rules.
+ * - Owns operational Pilates class and schedule business rules for admin, super_admin, staff, and trainer users.
  * - Validates trainer assignment, trainer availability, schedule conflicts, class status, and lifecycle transitions.
  * - Supports one weekly Pilates schedule plan that generates concrete schedule rows.
  * - Converts repository records into admin-safe response contracts.
@@ -14,6 +14,8 @@
  * - This service does not create bookings, payments, memberships, or waitlist rows.
  * - Customers book concrete pilates_class_schedules rows, not schedule plan templates.
  * - Schedule policy generates candidate occurrences only; repository/service logic validates trainer availability and conflicts.
+ * - Service-level Pilates management access is resolved through isPilatesClassAdminManagementRole.
+ * - Staff and trainer users are intentionally treated the same for current Pilates class and schedule management access.
  * - This service prepares the Classes module for realtime updates through event payloads.
  */
 
@@ -154,7 +156,7 @@ type PilatesClassImageUrlResolver = (imagePath: string | null) => string | null;
 function resolveAdminActorId(auth: AuthInternalContext): string {
   if (!isPilatesClassAdminManagementRole(auth.profile.role)) {
     throw AppError.adminAccessRequired(
-      'Admin access is required to manage Pilates classes.',
+      'Pilates class management access is required.',
     );
   }
 

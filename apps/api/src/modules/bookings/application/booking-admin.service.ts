@@ -11,7 +11,8 @@
  * - Reschedules bookings through the atomic reschedule RPC.
  * - Performs controlled admin status overrides.
  * - Lists and removes schedule waitlist entries.
- * - Enforces trainer schedule ownership for scoped booking management.
+ * - Allows admin, super_admin, staff, and trainer users to use the same
+ *   operational booking-management scope.
  *
  * Important:
  * - This service does not calculate seat capacity in TypeScript.
@@ -21,8 +22,10 @@
  * - Booking-order RPC functions remain the all-or-nothing bulk booking authority.
  * - Private booking RPC functions remain the trainer conflict authority.
  * - Admin mutation flows must leave audit/history records.
- * - Controller role checks are not enough for trainers.
- * - Trainer scope must be enforced in this service.
+ * - Controller role checks are not enough for booking management.
+ * - BookingAccessPolicy remains the service-level authorization authority.
+ * - Staff and trainer users are intentionally treated the same for current
+ *   booking admin access.
  */
 
 import { Injectable } from '@nestjs/common';
@@ -36,10 +39,8 @@ import type {
 } from '../../../database/database.types';
 import {
   AUTH_ADMIN_ROLE,
-  AUTH_TRAINER_ROLE,
   type AuthUserRole,
 } from '../../auth/constants/auth-role.constants';
-import { StaffRepository } from '../../staff/repositories/staff.repository';
 import { EmailNotificationService } from '../../notifications/application/email-notification.service';
 import {
   EMAIL_NOTIFICATION_ENTITY_TYPE_BOOKING,
@@ -173,10 +174,6 @@ export interface BookingAdminActorContext {
 
 type BookingHydratedStaffProfile = NonNullable<
   BookingHydratedRow['staff_profiles']
->;
-
-type BookingOrderHydratedStaffProfile = NonNullable<
-  BookingOrderHydratedRow['staff_profiles']
 >;
 
 type BookingOrderItemHydratedStaffProfile = NonNullable<
@@ -888,7 +885,6 @@ export class BookingAdminService {
   constructor(
     private readonly bookingRepository: BookingRepository,
     private readonly bookingAvailabilityService: BookingAvailabilityService,
-    private readonly staffRepository: StaffRepository,
     private readonly emailNotificationService: EmailNotificationService,
   ) {}
 
@@ -896,7 +892,7 @@ export class BookingAdminService {
     dto: ListAdminBookingsQueryDto,
     actor?: BookingAdminActorContext,
   ): Promise<BookingListResult> {
-    const scope = await this.resolveManagementScope(actor);
+    const scope = this.resolveManagementScope(actor);
     const filters = this.buildAdminBookingFilters(dto, scope);
     const result = await this.bookingRepository.listAdminBookings(filters);
 
@@ -912,7 +908,7 @@ export class BookingAdminService {
     dto: ListAdminPrivateBookingsQueryDto,
     actor?: BookingAdminActorContext,
   ): Promise<PrivateBookingListResult> {
-    const scope = await this.resolveManagementScope(actor);
+    const scope = this.resolveManagementScope(actor);
     BookingAccessPolicy.assertFullManagementScope(scope);
 
     const filters = this.buildAdminPrivateBookingFilters(dto);
@@ -937,7 +933,7 @@ export class BookingAdminService {
       dto.schedule_ids,
     );
 
-    const scope = await this.resolveManagementScope(actor);
+    const scope = this.resolveManagementScope(actor);
     const scheduleScopes = await this.bookingRepository.findScheduleScopesByIds(
       {
         schedule_ids: dto.schedule_ids,
@@ -1009,7 +1005,7 @@ export class BookingAdminService {
     dto: CreateAdminPrivateBookingDto,
     actor?: BookingAdminActorContext,
   ): Promise<PrivateBookingCreateResult> {
-    const scope = await this.resolveManagementScope(
+    const scope = this.resolveManagementScope(
       actor ?? {
         user_id: adminUserId,
         role: AUTH_ADMIN_ROLE,
@@ -1078,7 +1074,7 @@ export class BookingAdminService {
     bookingId: string,
     actor?: BookingAdminActorContext,
   ): Promise<BookingDetail> {
-    const scope = await this.resolveManagementScope(actor);
+    const scope = this.resolveManagementScope(actor);
     const lookup = await this.bookingRepository.findBookingById({
       booking_id: bookingId,
       include_deleted: false,
@@ -1106,7 +1102,7 @@ export class BookingAdminService {
     bookingOrderId: string,
     actor?: BookingAdminActorContext,
   ): Promise<BookingOrderDetail> {
-    const scope = await this.resolveManagementScope(actor);
+    const scope = this.resolveManagementScope(actor);
     const bookingOrder = await this.getRequiredBookingOrderRow(bookingOrderId);
 
     this.assertBookingOrderWithinManagementScope(scope, bookingOrder);
@@ -1118,7 +1114,7 @@ export class BookingAdminService {
     privateBookingId: string,
     actor?: BookingAdminActorContext,
   ): Promise<PrivateBookingDetail> {
-    const scope = await this.resolveManagementScope(actor);
+    const scope = this.resolveManagementScope(actor);
     BookingAccessPolicy.assertFullManagementScope(scope);
 
     const lookup = await this.bookingRepository.findPrivateBookingById({
@@ -1142,7 +1138,7 @@ export class BookingAdminService {
     dto: AdminCancelBookingDto,
     actor?: BookingAdminActorContext,
   ): Promise<BookingCancelResult> {
-    const scope = await this.resolveManagementScope(
+    const scope = this.resolveManagementScope(
       actor ?? {
         user_id: adminUserId,
         role: AUTH_ADMIN_ROLE,
@@ -1209,7 +1205,7 @@ export class BookingAdminService {
     dto: AdminCancelBookingDto,
     actor?: BookingAdminActorContext,
   ): Promise<PrivateBookingCancelResult> {
-    const scope = await this.resolveManagementScope(
+    const scope = this.resolveManagementScope(
       actor ?? {
         user_id: adminUserId,
         role: AUTH_ADMIN_ROLE,
@@ -1256,7 +1252,7 @@ export class BookingAdminService {
     dto: RescheduleBookingDto,
     actor?: BookingAdminActorContext,
   ): Promise<BookingRescheduleResult> {
-    const scope = await this.resolveManagementScope(
+    const scope = this.resolveManagementScope(
       actor ?? {
         user_id: adminUserId,
         role: AUTH_ADMIN_ROLE,
@@ -1341,7 +1337,7 @@ export class BookingAdminService {
     dto: ReschedulePrivateBookingDto,
     actor?: BookingAdminActorContext,
   ): Promise<PrivateBookingRescheduleResult> {
-    const scope = await this.resolveManagementScope(
+    const scope = this.resolveManagementScope(
       actor ?? {
         user_id: adminUserId,
         role: AUTH_ADMIN_ROLE,
@@ -1428,7 +1424,7 @@ export class BookingAdminService {
     dto: AdminOverrideBookingDto,
     actor?: BookingAdminActorContext,
   ): Promise<BookingDetail> {
-    const scope = await this.resolveManagementScope(
+    const scope = this.resolveManagementScope(
       actor ?? {
         user_id: adminUserId,
         role: AUTH_ADMIN_ROLE,
@@ -1473,7 +1469,7 @@ export class BookingAdminService {
     offset = BOOKING_ADMIN_DEFAULT_OFFSET,
     actor?: BookingAdminActorContext,
   ): Promise<BookingWaitlistListResult> {
-    const scope = await this.resolveManagementScope(actor);
+    const scope = this.resolveManagementScope(actor);
 
     await this.assertScheduleWithinManagementScope(scope, scheduleId);
 
@@ -1497,7 +1493,7 @@ export class BookingAdminService {
     reason: string | null = null,
     actor?: BookingAdminActorContext,
   ): Promise<BookingWaitlistListItem> {
-    const scope = await this.resolveManagementScope(actor);
+    const scope = this.resolveManagementScope(actor);
     const lookup = await this.bookingRepository.findWaitlistById({
       waitlist_id: waitlistId,
     });
@@ -2386,24 +2382,6 @@ export class BookingAdminService {
     };
   }
 
-  private toBookingOrderStaffSnapshot(
-    row: BookingOrderHydratedStaffProfile | null,
-  ): BookingTrainerSnapshot | null {
-    if (!row) {
-      return null;
-    }
-
-    return {
-      staff_profile_id: row.id,
-      app_user_id: row.app_user_id,
-      display_name: row.display_name,
-      post_title: row.post_title,
-      email: row.app_users?.email ?? null,
-      phone: row.app_users?.phone ?? null,
-      avatar_path: row.app_users?.avatar_path ?? null,
-    };
-  }
-
   private toBookingOrderItemTrainerSnapshot(
     row: BookingOrderItemHydratedStaffProfile | null,
   ): BookingTrainerSnapshot | null {
@@ -2477,23 +2455,10 @@ export class BookingAdminService {
     };
   }
 
-  private async resolveManagementScope(
+  private resolveManagementScope(
     actor?: BookingAdminActorContext,
-  ): Promise<ResolvedBookingManagementScope> {
+  ): ResolvedBookingManagementScope {
     const effectiveActor = actor ?? LEGACY_ADMIN_ACTOR_CONTEXT;
-
-    if (effectiveActor.role === AUTH_TRAINER_ROLE) {
-      const trainer =
-        await this.staffRepository.getActiveTrainerStaffProfileByAppUserId({
-          appUserId: effectiveActor.user_id,
-        });
-
-      return BookingAccessPolicy.resolveManagementScope({
-        actor_user_id: effectiveActor.user_id,
-        actor_role: effectiveActor.role,
-        trainer_staff_profile_id: trainer.profile.id,
-      });
-    }
 
     return BookingAccessPolicy.resolveManagementScope({
       actor_user_id: effectiveActor.user_id,

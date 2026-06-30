@@ -5,12 +5,14 @@
  * Role:
  * - Defines stable permission strings returned by /auth/context.
  * - Maps Auth roles to permission sets.
- * - Keeps guest/customer/staff/admin access decisions consistent across guards, services, and frontend bootstrapping.
+ * - Keeps guest/customer/staff/trainer/admin access decisions consistent across guards, services, and frontend bootstrapping.
  *
  * Important:
  * - Permissions are application-level authorization hints.
  * - Frontend permission rendering is usability only.
  * - Backend guards/services remain the final authority.
+ * - Staff and trainer currently share the same operational permission set for selected admin surfaces.
+ * - Stylists are intentionally kept separate from the staff/trainer operational expansion.
  */
 
 import {
@@ -66,9 +68,13 @@ export const AUTH_PERMISSIONS = [
   'staff:access_dashboard',
 
   'admin:access_dashboard',
+  'admin:analytics:read',
+
   'admin:users:read',
   'admin:users:deactivate',
   'admin:users:reactivate',
+
+  'admin:staff:read',
 
   'admin:customers:read',
   'admin:customers:lookup',
@@ -78,6 +84,20 @@ export const AUTH_PERMISSIONS = [
   'admin:customers:reactivate',
   'admin:customers:delete',
   'admin:customers:manage',
+
+  'admin:pilates:classes:read',
+  'admin:pilates:classes:create',
+  'admin:pilates:classes:update',
+  'admin:pilates:classes:delete',
+  'admin:pilates:classes:manage',
+
+  'admin:pilates:schedules:read',
+  'admin:pilates:schedules:create',
+  'admin:pilates:schedules:update',
+  'admin:pilates:schedules:cancel',
+  'admin:pilates:schedules:complete',
+  'admin:pilates:schedules:delete',
+  'admin:pilates:schedules:manage',
 
   'admin:bookings:read',
   'admin:bookings:create',
@@ -178,6 +198,36 @@ export const AUTH_ADMIN_BOOKING_PERMISSIONS = [
   'admin:bookings:calendar',
   'admin:bookings:manage',
 ] as const satisfies readonly AuthPermission[];
+export const AUTH_ADMIN_ANALYTICS_PERMISSIONS = [
+  'admin:analytics:read',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_ADMIN_STAFF_READ_PERMISSIONS = [
+  'admin:staff:read',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_ADMIN_PILATES_CLASS_PERMISSIONS = [
+  'admin:pilates:classes:read',
+  'admin:pilates:classes:create',
+  'admin:pilates:classes:update',
+  'admin:pilates:classes:delete',
+  'admin:pilates:classes:manage',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_ADMIN_PILATES_SCHEDULE_PERMISSIONS = [
+  'admin:pilates:schedules:read',
+  'admin:pilates:schedules:create',
+  'admin:pilates:schedules:update',
+  'admin:pilates:schedules:cancel',
+  'admin:pilates:schedules:complete',
+  'admin:pilates:schedules:delete',
+  'admin:pilates:schedules:manage',
+] as const satisfies readonly AuthPermission[];
+
+export const AUTH_ADMIN_PILATES_PERMISSIONS = [
+  ...AUTH_ADMIN_PILATES_CLASS_PERMISSIONS,
+  ...AUTH_ADMIN_PILATES_SCHEDULE_PERMISSIONS,
+] as const satisfies readonly AuthPermission[];
 
 export const AUTH_TRAINER_SCOPED_BOOKING_PERMISSIONS = [
   'admin:bookings:read',
@@ -193,17 +243,26 @@ export const AUTH_TRAINER_SCOPED_BOOKING_PERMISSIONS = [
   'admin:bookings:manage_scoped',
 ] as const satisfies readonly AuthPermission[];
 
-export const AUTH_STAFF_PERMISSIONS = [
+export const AUTH_STYLIST_PERMISSIONS = [
   ...AUTH_STAFF_BASE_PERMISSIONS,
   ...AUTH_ADMIN_CUSTOMER_PERMISSIONS,
   ...AUTH_ADMIN_BOOKING_PERMISSIONS,
 ] as const satisfies readonly AuthPermission[];
 
-export const AUTH_TRAINER_PERMISSIONS = [
+export const AUTH_STAFF_AND_TRAINER_PERMISSIONS = [
   ...AUTH_STAFF_BASE_PERMISSIONS,
   ...AUTH_ADMIN_CUSTOMER_PERMISSIONS,
-  ...AUTH_TRAINER_SCOPED_BOOKING_PERMISSIONS,
+  ...AUTH_ADMIN_BOOKING_PERMISSIONS,
+  ...AUTH_ADMIN_ANALYTICS_PERMISSIONS,
+  ...AUTH_ADMIN_STAFF_READ_PERMISSIONS,
+  ...AUTH_ADMIN_PILATES_PERMISSIONS,
 ] as const satisfies readonly AuthPermission[];
+
+export const AUTH_STAFF_PERMISSIONS =
+  AUTH_STAFF_AND_TRAINER_PERMISSIONS satisfies readonly AuthPermission[];
+
+export const AUTH_TRAINER_PERMISSIONS =
+  AUTH_STAFF_AND_TRAINER_PERMISSIONS satisfies readonly AuthPermission[];
 
 export const AUTH_ADMIN_PERMISSIONS = [
   ...AUTH_STAFF_BASE_PERMISSIONS,
@@ -213,6 +272,9 @@ export const AUTH_ADMIN_PERMISSIONS = [
   'admin:users:reactivate',
   ...AUTH_ADMIN_CUSTOMER_PERMISSIONS,
   ...AUTH_ADMIN_BOOKING_PERMISSIONS,
+  ...AUTH_ADMIN_ANALYTICS_PERMISSIONS,
+  ...AUTH_ADMIN_STAFF_READ_PERMISSIONS,
+  ...AUTH_ADMIN_PILATES_PERMISSIONS,
 ] as const satisfies readonly AuthPermission[];
 
 export const AUTH_SUPER_ADMIN_PERMISSIONS = [
@@ -234,9 +296,11 @@ export const AUTH_GUEST_DENIED_PERMISSIONS = [
   'password:change',
   'staff:access_dashboard',
   'admin:access_dashboard',
+  'admin:analytics:read',
   'admin:users:read',
   'admin:users:deactivate',
   'admin:users:reactivate',
+  'admin:staff:read',
   'admin:customers:read',
   'admin:customers:lookup',
   'admin:customers:create',
@@ -245,6 +309,18 @@ export const AUTH_GUEST_DENIED_PERMISSIONS = [
   'admin:customers:reactivate',
   'admin:customers:delete',
   'admin:customers:manage',
+  'admin:pilates:classes:read',
+  'admin:pilates:classes:create',
+  'admin:pilates:classes:update',
+  'admin:pilates:classes:delete',
+  'admin:pilates:classes:manage',
+  'admin:pilates:schedules:read',
+  'admin:pilates:schedules:create',
+  'admin:pilates:schedules:update',
+  'admin:pilates:schedules:cancel',
+  'admin:pilates:schedules:complete',
+  'admin:pilates:schedules:delete',
+  'admin:pilates:schedules:manage',
   'admin:bookings:read',
   'admin:bookings:create',
   'admin:bookings:bulk_create',
@@ -263,7 +339,7 @@ export const AUTH_ROLE_PERMISSIONS = {
   [AUTH_GUEST_ROLE]: AUTH_GUEST_PERMISSIONS,
   [AUTH_CUSTOMER_ROLE]: AUTH_CUSTOMER_PERMISSIONS,
   [AUTH_TRAINER_ROLE]: AUTH_TRAINER_PERMISSIONS,
-  [AUTH_STYLIST_ROLE]: AUTH_STAFF_PERMISSIONS,
+  [AUTH_STYLIST_ROLE]: AUTH_STYLIST_PERMISSIONS,
   [AUTH_STAFF_ROLE]: AUTH_STAFF_PERMISSIONS,
   [AUTH_ADMIN_ROLE]: AUTH_ADMIN_PERMISSIONS,
   [AUTH_SUPER_ADMIN_ROLE]: AUTH_SUPER_ADMIN_PERMISSIONS,

@@ -4,17 +4,23 @@
  *
  * Role:
  * - Owns pure booking-management access checks.
- * - Separates full booking management from trainer-scoped booking management.
- * - Allows admin/super_admin/staff to manage all booking records.
- * - Allows trainer to manage only bookings tied to their own Pilates schedules.
- * - Validates selected schedule ownership before trainer bulk booking.
+ * - Resolves full booking-management access for approved operational roles.
+ * - Allows admin, super_admin, staff, and trainer to manage booking records
+ *   through the current operational admin booking scope.
+ * - Preserves legacy scoped-management helpers for compatibility with existing
+ *   booking types and service call sites.
+ * - Validates selected schedule, booking, waitlist, and calendar targets against
+ *   the resolved management scope.
  *
  * Important:
  * - This policy does not query the database.
  * - This policy does not call Supabase.
  * - This policy does not mutate bookings, schedules, waitlists, or customers.
- * - Services must resolve trainer staff profile IDs before calling trainer-scoped checks.
- * - Repositories remain responsible for loading schedules/bookings/waitlist targets.
+ * - Repositories remain responsible for loading schedules, bookings, waitlist
+ *   records, and calendar scope snapshots.
+ * - Current approved behavior treats staff and trainer the same for admin booking access.
+ * - No current role should enter scoped booking management while
+ *   BOOKING_SCOPED_MANAGEMENT_ROLES is empty.
  */
 
 import { AppError } from '../../../common/errors/app-error';
@@ -62,9 +68,7 @@ function isFullManagementRole(role: AuthUserRole): boolean {
 }
 
 function isScopedManagementRole(role: AuthUserRole): boolean {
-  return BOOKING_SCOPED_MANAGEMENT_ROLES.includes(
-    role as (typeof BOOKING_SCOPED_MANAGEMENT_ROLES)[number],
-  );
+  return BOOKING_SCOPED_MANAGEMENT_ROLES.includes(role);
 }
 
 function buildAccessDetails(
@@ -123,6 +127,13 @@ function resolveFullManagementScope(
 function resolveTrainerScopedManagementScope(
   input: ResolveBookingManagementScopeInput,
 ): BookingTrainerScopedManagementScope {
+  /**
+   * Legacy compatibility path.
+   *
+   * Current approved behavior gives trainer full booking-management access through
+   * BOOKING_FULL_MANAGEMENT_ROLES. This function should not be reached while
+   * BOOKING_SCOPED_MANAGEMENT_ROLES is empty.
+   */
   if (input.trainer_staff_profile_id) {
     return {
       scope_kind: 'trainer_scoped',
@@ -133,7 +144,7 @@ function resolveTrainerScopedManagementScope(
   }
 
   throw AppError.trainerStaffProfileNotFound(
-    'The active trainer staff profile for this user was not found.',
+    'Scoped booking management requires an active trainer staff profile.',
     {
       actor_user_id: input.actor_user_id,
       actor_role: input.actor_role,
@@ -149,6 +160,13 @@ export class BookingAccessPolicy {
       return resolveFullManagementScope(input);
     }
 
+    /**
+     * Legacy compatibility branch.
+     *
+     * Current approved access model places admin, super_admin, staff, and trainer
+     * in BOOKING_FULL_MANAGEMENT_ROLES. BOOKING_SCOPED_MANAGEMENT_ROLES should be
+     * empty, so no current role should enter this branch.
+     */
     if (isScopedManagementRole(input.actor_role)) {
       return resolveTrainerScopedManagementScope(input);
     }
@@ -198,7 +216,7 @@ export class BookingAccessPolicy {
     }
 
     throw AppError.trainerStaffProfileNotFound(
-      'The active trainer staff profile for this user was not found.',
+      'Scoped booking management requires an active trainer staff profile.',
       buildAccessDetails(scope),
     );
   }
@@ -245,7 +263,7 @@ export class BookingAccessPolicy {
     }
 
     throw AppError.trainerScheduleScopeDenied(
-      'Trainer access is limited to bookings for their own schedules.',
+      'Scoped booking access is limited to bookings for assigned schedules.',
       buildAccessDetails(input.scope, {
         out_of_scope_schedule_ids: outOfScopeScheduleIds,
       }),
@@ -269,7 +287,7 @@ export class BookingAccessPolicy {
     }
 
     throw AppError.trainerScheduleScopeDenied(
-      'Trainer access is limited to bookings for their own schedules.',
+      'Scoped booking access is limited to bookings for assigned schedules.',
       buildAccessDetails(input.scope, {
         booking_id: input.target.booking_id,
         schedule_id: input.target.schedule_id,
@@ -295,7 +313,7 @@ export class BookingAccessPolicy {
     }
 
     throw AppError.trainerScheduleScopeDenied(
-      'Trainer access is limited to waitlist records for their own schedules.',
+      'Scoped booking access is limited to waitlist records for assigned schedules.',
       buildAccessDetails(input.scope, {
         waitlist_id: input.target.waitlist_id,
         schedule_id: input.target.schedule_id,
@@ -321,7 +339,7 @@ export class BookingAccessPolicy {
     }
 
     throw AppError.trainerScheduleScopeDenied(
-      'Trainer calendar access is limited to their own schedules.',
+      'Scoped calendar access is limited to assigned schedules.',
       buildAccessDetails(scope, {
         schedule_id: scheduleScope.schedule_id,
         target_trainer_staff_profile_id: scheduleScope.trainer_staff_profile_id,
