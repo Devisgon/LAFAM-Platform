@@ -1,9 +1,3 @@
-Replace the full file:
-
-```text id="7pcywy"
-README.md
-```
-
 <div align="center">
   <div style="display: inline-block; padding: 16px 24px; background: #ffffff; border-radius: 24px;">
     <img src="apps/web/public/logo.svg" alt="LAFAM logo" width="180" />
