@@ -17,7 +17,9 @@ export const buttonClass =
 const detailCacheKey = (classId: string) =>
   `lafam:admin:pilates:class:${classId}`;
 
-export function readDetailCache(classId: string): PilatesClassDefinition | null {
+export function readDetailCache(
+  classId: string,
+): PilatesClassDefinition | null {
   if (typeof window === "undefined") return null;
   try {
     return JSON.parse(
@@ -101,7 +103,15 @@ export function classPayload(form: HTMLFormElement): CreatePilatesClassPayload {
   };
 }
 
-export const calendarDayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+export const calendarDayNames = [
+  "Sun",
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+];
 export const scheduleWeekDays = [
   { label: "Monday", shortLabel: "Mon", value: 1 },
   { label: "Tuesday", shortLabel: "Tue", value: 2 },
@@ -152,6 +162,25 @@ export function monthLabel(monthValue: string): string {
     month: "long",
     year: "numeric",
   }).format(date);
+}
+
+export function buildCalendarMonthOptions(): Array<[string, string]> {
+  return Array.from({ length: 12 }, (_, monthIndex) => {
+    const value = String(monthIndex + 1).padStart(2, "0");
+    const label = new Intl.DateTimeFormat("en", { month: "long" }).format(
+      new Date(2026, monthIndex, 1),
+    );
+
+    return [value, label];
+  });
+}
+
+export function buildUpcomingYearOptions(count = 10): string[] {
+  const currentYear = new Date().getFullYear();
+
+  return Array.from({ length: count }, (_, index) =>
+    String(currentYear + index),
+  );
 }
 
 export function buildMonthOptions(): Array<[string, string]> {

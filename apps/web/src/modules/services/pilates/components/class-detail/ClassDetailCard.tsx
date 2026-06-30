@@ -3,10 +3,14 @@
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 
-import type { PilatesClassDefinition, PilatesSchedule } from "../../api/pilatesApi";
+import type {
+  PilatesClassDefinition,
+  PilatesSchedule,
+} from "../../api/pilatesApi";
 import {
   buildCalendarDays,
-  buildMonthOptions,
+  buildCalendarMonthOptions,
+  buildUpcomingYearOptions,
   buttonClass,
   calendarDayNames,
   classTone,
@@ -43,6 +47,10 @@ export function ClassDetailCard({
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(
     null,
   );
+  const calendarMonthOptions = useMemo(() => buildCalendarMonthOptions(), []);
+  const calendarYearOptions = useMemo(() => buildUpcomingYearOptions(10), []);
+  const selectedYear = selectedMonth.slice(0, 4);
+  const selectedMonthNumber = selectedMonth.slice(5, 7);
   const { fromDate, toDate } = useMemo(
     () => monthDateRange(selectedMonth),
     [selectedMonth],
@@ -85,6 +93,10 @@ export function ClassDetailCard({
         : null,
     [selectedScheduleId, visibleSchedules],
   );
+  const updateCalendarMonth = (nextYear: string, nextMonth: string) => {
+    setSelectedMonth(`${nextYear}-${nextMonth}`);
+    setSelectedScheduleId(null);
+  };
 
   return (
     <article className="overflow-hidden rounded-3xl border border-background-secondary bg-card-bg-primary shadow-sm">
@@ -176,23 +188,40 @@ export function ClassDetailCard({
               Showing schedules for {detail.title}.
             </p>
           </div>
-          <label className="grid max-w-xs gap-1.5 text-xs font-bold">
-            Month
-            <select
-              className={fieldClass}
-              onChange={(event) => {
-                setSelectedMonth(event.target.value);
-                setSelectedScheduleId(null);
-              }}
-              value={selectedMonth}
-            >
-              {buildMonthOptions().map(([value, optionLabel]) => (
-                <option key={value} value={value}>
-                  {optionLabel}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="grid w-full max-w-md gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+            <label className="grid gap-1.5 text-xs font-bold">
+              Month
+              <select
+                className={fieldClass}
+                onChange={(event) =>
+                  updateCalendarMonth(selectedYear, event.target.value)
+                }
+                value={selectedMonthNumber}
+              >
+                {calendarMonthOptions.map(([value, optionLabel]) => (
+                  <option key={value} value={value}>
+                    {optionLabel}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1.5 text-xs font-bold">
+              Year
+              <select
+                className={fieldClass}
+                onChange={(event) =>
+                  updateCalendarMonth(event.target.value, selectedMonthNumber)
+                }
+                value={selectedYear}
+              >
+                {calendarYearOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </header>
 
         {schedules.length === 0 ? (

@@ -1,19 +1,30 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { adminCustomersClient, type CustomerProfile } from "@/modules/customers";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  adminCustomersClient,
+  type CustomerProfile,
+} from "@/modules/customers";
 
 import { getErrorMessage } from "../utils/bookingFormatters";
 import {
   bookingPhoneLocalValue,
   buildManualAttendeePayload,
-  isValidKuwaitBookingPhone,
+  isValidBookingPhone,
   normalizeBookingCivilId,
+  normalizeBookingPhoneCountryCode,
   normalizeBookingPhone,
+  resolveBookingPhoneCountryCode,
 } from "../utils/bookingNormalizers";
+import { DEFAULT_BOOKING_PHONE_COUNTRY_CODE } from "../constants/bookingUi.constants";
 import type { CustomerDraft, LookupStatus } from "../types/bookingUi.types";
 
 export function useBookingCustomerLookup() {
+  const inFlightLookupKeyRef = useRef<string | null>(null);
+  const lastLookupKeyRef = useRef<string | null>(null);
+  const [lookupPhoneCountryCode, setLookupPhoneCountryCode] = useState(
+    DEFAULT_BOOKING_PHONE_COUNTRY_CODE,
+  );
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupCivilId, setLookupCivilId] = useState("");
   const [lookupCustomer, setLookupCustomer] = useState<CustomerProfile | null>(
@@ -33,8 +44,11 @@ export function useBookingCustomerLookup() {
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
 
   const selectCustomer = useCallback((customer: CustomerProfile) => {
+    const countryCode = resolveBookingPhoneCountryCode(customer.phone);
+
     setLookupCustomer(customer);
-    setLookupPhone(bookingPhoneLocalValue(customer.phone));
+    setLookupPhoneCountryCode(countryCode);
+    setLookupPhone(bookingPhoneLocalValue(customer.phone, countryCode));
     setLookupCivilId(customer.civil_id);
     setCustomerDraft({
       civilId: customer.civil_id,
@@ -46,12 +60,23 @@ export function useBookingCustomerLookup() {
   }, []);
 
   const updateLookupPhone = (value: string) => {
-    const localPhone = bookingPhoneLocalValue(value);
+    const localPhone = bookingPhoneLocalValue(value, lookupPhoneCountryCode);
 
     setLookupPhone(localPhone);
     setCustomerDraft((current) => ({
       ...current,
-      phone: normalizeBookingPhone(localPhone),
+      phone: normalizeBookingPhone(localPhone, lookupPhoneCountryCode),
+    }));
+  };
+
+  const updateLookupPhoneCountryCode = (value: string) => {
+    const countryCode = normalizeBookingPhoneCountryCode(value);
+
+    setLookupPhoneCountryCode(countryCode);
+    setLookupCustomer(null);
+    setCustomerDraft((current) => ({
+      ...current,
+      phone: normalizeBookingPhone(lookupPhone, countryCode),
     }));
   };
 
@@ -99,14 +124,24 @@ export function useBookingCustomerLookup() {
   };
 
   useEffect(() => {
-    const phone = normalizeBookingPhone(lookupPhone);
+    const phone = normalizeBookingPhone(lookupPhone, lookupPhoneCountryCode);
     const civilId = normalizeBookingCivilId(lookupCivilId);
     const civilDigits = civilId.replace(/\D/g, "");
-    const canLookupByPhone = isValidKuwaitBookingPhone(phone);
+    const canLookupByPhone = isValidBookingPhone(
+      lookupPhone,
+      lookupPhoneCountryCode,
+    );
     const canLookupByCivilId = civilDigits.length === 12;
+    const lookupInput = {
+      ...(canLookupByPhone ? { phone } : {}),
+      ...(canLookupByCivilId ? { civil_id: civilId } : {}),
+    };
+    const lookupKey = new URLSearchParams(lookupInput).toString();
 
     if (!canLookupByPhone && !canLookupByCivilId) {
       const reset = window.setTimeout(() => {
+        inFlightLookupKeyRef.current = null;
+        lastLookupKeyRef.current = null;
         setLookupCustomer(null);
         setLookupStatus({
           tone: civilDigits.length > 0 ? "warning" : "idle",
@@ -120,18 +155,34 @@ export function useBookingCustomerLookup() {
       return () => window.clearTimeout(reset);
     }
 
+    if (lookupCustomer) {
+      const customerPhone = normalizeBookingPhone(lookupCustomer.phone);
+      const customerCivilId = normalizeBookingCivilId(lookupCustomer.civil_id);
+      const matchesPhone = !canLookupByPhone || customerPhone === phone;
+      const matchesCivilId = !canLookupByCivilId || customerCivilId === civilId;
+
+      if (matchesPhone && matchesCivilId) {
+        return;
+      }
+    }
+
+    if (
+      lookupKey &&
+      (inFlightLookupKeyRef.current === lookupKey ||
+        lastLookupKeyRef.current === lookupKey)
+    ) {
+      return;
+    }
+
     const controller = new AbortController();
     const request = window.setTimeout(() => {
+      inFlightLookupKeyRef.current = lookupKey;
       setLookupStatus({ tone: "loading", message: "Looking up attendee..." });
       void adminCustomersClient
-        .lookup(
-          {
-            ...(canLookupByPhone ? { phone } : {}),
-            ...(canLookupByCivilId ? { civil_id: civilId } : {}),
-          },
-          controller.signal,
-        )
+        .lookup(lookupInput, controller.signal)
         .then((result) => {
+          lastLookupKeyRef.current = lookupKey;
+
           if (!result.customer) {
             setLookupCustomer(null);
             setCustomerDraft((current) => ({
@@ -168,6 +219,11 @@ export function useBookingCustomerLookup() {
             tone: "error",
             message: getErrorMessage(requestError),
           });
+        })
+        .finally(() => {
+          if (inFlightLookupKeyRef.current === lookupKey) {
+            inFlightLookupKeyRef.current = null;
+          }
         });
     }, 120);
 
@@ -175,7 +231,13 @@ export function useBookingCustomerLookup() {
       window.clearTimeout(request);
       controller.abort();
     };
-  }, [lookupCivilId, lookupPhone, selectCustomer]);
+  }, [
+    lookupCivilId,
+    lookupCustomer,
+    lookupPhone,
+    lookupPhoneCountryCode,
+    selectCustomer,
+  ]);
 
   return {
     customerDraft,
@@ -183,10 +245,12 @@ export function useBookingCustomerLookup() {
     lookupCivilId,
     lookupCustomer,
     lookupPhone,
+    lookupPhoneCountryCode,
     lookupStatus,
     resolveAttendee,
     updateCustomerDraft,
     updateLookupCivilId,
     updateLookupPhone,
+    updateLookupPhoneCountryCode,
   };
 }

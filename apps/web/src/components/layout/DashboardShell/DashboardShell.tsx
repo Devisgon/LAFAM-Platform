@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
@@ -14,7 +14,7 @@ const pageDetails: Record<string, { activeItem: string; title: string }> = {
   "/services/pilates": { activeItem: "Pilates", title: "Pilates Classes" },
   "/settings": { activeItem: "Settings", title: "Settings" },
   "/staff": { activeItem: "Staff", title: "Staff" },
-  "/users": { activeItem: "Users", title: "Users" },
+  "/users": { activeItem: "User Management", title: "User Management" },
   "/wallet": { activeItem: "Wallet", title: "Wallet" },
 };
 
@@ -26,11 +26,15 @@ export function DashboardShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const settingsView = searchParams.get("view");
   const details = pathname.startsWith("/services/pilates/")
     ? pageDetails["/services/pilates"]
     : pathname.startsWith("/settings/customers/")
-      ? { activeItem: "Settings", title: "Customer Detail" }
-    : pageDetails[pathname] ?? pageDetails["/dashboard"];
+      ? { activeItem: "User Management", title: "Customer Detail" }
+      : pathname === "/settings" && settingsView === "users"
+        ? { activeItem: "User Management", title: "User Management" }
+        : (pageDetails[pathname] ?? pageDetails["/dashboard"]);
 
   return (
     <div className="min-h-screen bg-background-primary">

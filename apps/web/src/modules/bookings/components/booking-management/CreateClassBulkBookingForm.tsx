@@ -189,7 +189,7 @@ export function CreateClassBulkBookingForm({
               />
               <label className="grid gap-1.5 text-xs font-bold">
                 Session Time
-                <span className="relative flex min-h-16 items-center gap-2 rounded-sm border border-background-secondary bg-card-bg-primary px-3 py-2 focus-within:border-primary">
+                <span className="relative flex min-h-16 flex-col items-stretch gap-2 rounded-sm border border-background-secondary bg-card-bg-primary px-3 py-2 focus-within:border-primary sm:flex-row sm:items-center">
                   <SelectedScheduleTags
                     onRemove={removeSchedule}
                     schedules={selectedSchedules}
@@ -197,11 +197,7 @@ export function CreateClassBulkBookingForm({
                   <span className="relative min-w-0 flex-1">
                     <select
                       aria-label="Session Time"
-                      className={`min-h-10 w-full appearance-none rounded-sm bg-transparent text-base text-txt-primary outline-none disabled:cursor-not-allowed disabled:opacity-60 ${
-                        selectedSchedules.length > 0
-                          ? "absolute inset-y-0 right-0 z-10 cursor-pointer opacity-0"
-                          : "px-2 pr-10"
-                      }`}
+                      className="min-h-10 w-full appearance-none rounded-sm bg-transparent px-2 pr-10 text-base text-txt-primary outline-none disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={!classId || scheduleOptions.length === 0}
                       defaultValue=""
                       onChange={(event) => {
