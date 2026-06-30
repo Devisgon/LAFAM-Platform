@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
+import { CACHE_KEYS } from "@/lib/cache/cacheKeys";
+import { useCachedQuery } from "@/hooks/useCachedQuery";
 import {
   adminAnalyticsClient,
   type AnalyticsDashboard,
   type AnalyticsDashboardFilters,
 } from "@/modules/dashboard";
-import { useCachedQuery } from "@/hooks/useCachedQuery";
 
 const EMPTY_DASHBOARD: AnalyticsDashboard = {
   calendar_events: null,
@@ -43,14 +44,10 @@ export function useAdminAnalyticsDashboard(filters: AnalyticsDashboardFilters) {
     () => adminAnalyticsClient.getDashboard(filters),
     [filters],
   );
-  const key = useMemo(
-    () => `admin-analytics:dashboard:${JSON.stringify(filters)}`,
-    [filters],
-  );
 
   return useCachedQuery({
     initialData: EMPTY_DASHBOARD,
-    key,
+    queryKey: [...CACHE_KEYS.dashboard.analytics, filters],
     queryFn,
   });
 }
