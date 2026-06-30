@@ -1,69 +1,20 @@
 "use client";
 
-import {
-  type FormEvent,
-  type InputHTMLAttributes,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { usePilates } from "@/modules/services/pilates";
-import {
-  type CreatePilatesClassPayload,
-  type PilatesClassLevel,
-  type PilatesClassStatus,
-  type PilatesSchedule,
-} from "@/modules/services/pilates";
-import { ClassCard, type ClassCardBookingSummary } from "@/components/data-display/ClassCard";
+import type { PilatesSchedule } from "@/modules/services/pilates";
+import { ClassCard } from "@/components/data-display/ClassCard";
 import { LoadingState } from "@/components/data-display/LoadingState";
 import { Toast } from "@/components/ui/Toast";
 
-const fieldClass =
-  "min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-3 py-2 text-sm text-txt-primary outline-none focus:border-primary disabled:opacity-60";
-const buttonClass =
-  "inline-flex min-h-10 items-center justify-center rounded-lg border border-background-secondary px-4 py-2 text-xs font-bold transition hover:bg-background-secondary";
-
-function label(value: string): string {
-  return value.replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());
-}
-
-function classPayload(form: HTMLFormElement): CreatePilatesClassPayload {
-  const data = new FormData(form);
-  const image = data.get("image");
-  return {
-    title: String(data.get("title")).trim(),
-    description: String(data.get("description")).trim() || null,
-    default_duration_minutes: Number(data.get("default_duration_minutes")),
-    default_capacity: Number(data.get("default_capacity")),
-    default_price_amount: Number(data.get("default_price_amount")),
-    currency: "KWD",
-    level: String(data.get("level")) as PilatesClassLevel,
-    status: String(data.get("status")) as Exclude<PilatesClassStatus, "deleted">,
-    ...(image instanceof File && image.size > 0 ? { image } : {}),
-  };
-}
-
-function scheduleStartTimestamp(schedule: PilatesSchedule): number {
-  return new Date(
-    `${schedule.class_date}T${schedule.start_time.slice(0, 8)}`,
-  ).getTime();
-}
-
-function bookingSummary(schedule: PilatesSchedule): ClassCardBookingSummary {
-  return {
-    availableSeats: schedule.availability.available_seats,
-    bookedCount: schedule.availability.booked_count,
-    capacity: schedule.capacity,
-  };
-}
-
-function defaultBookingSummary(defaultCapacity: number): ClassCardBookingSummary {
-  return {
-    availableSeats: defaultCapacity,
-    bookedCount: 0,
-    capacity: defaultCapacity,
-  };
-}
+import {
+  bookingSummary,
+  classListButtonClass,
+  classPayload,
+  defaultBookingSummary,
+  scheduleStartTimestamp,
+} from "../utils/pilatesClassListUtils";
+import { CreateClassCard } from "./class-list/CreateClassCard";
 
 export function PilatesClassManager() {
   const api = usePilates();
@@ -134,7 +85,7 @@ export function PilatesClassManager() {
       {api.error ? (
         <section className="mb-5 rounded-xl border border-error/30 bg-error/10 p-4">
           <p className="text-sm text-error" role="alert">{api.error}</p>
-          <button className={`${buttonClass} mt-3`} onClick={() => void api.load()} type="button">Try again</button>
+          <button className={`${classListButtonClass} mt-3`} onClick={() => void api.load()} type="button">Try again</button>
         </section>
       ) : null}
 
@@ -200,71 +151,4 @@ export function PilatesClassManager() {
       ) : null}
     </>
   );
-}
-
-function CreateClassCard({
-  isSaving,
-  onCancel,
-  onSubmit,
-}: {
-  isSaving: boolean;
-  onCancel: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  return (
-    <form
-      className="overflow-hidden rounded-md border border-background-secondary bg-card-bg-primary text-txt-primary shadow-sm"
-      id="create-class"
-      onSubmit={onSubmit}
-    >
-      <header className="border-b border-background-secondary bg-card-bg-primary px-5 py-5">
-        <h2 className="text-2xl font-medium" id="create-class-title">
-          Add New Class
-        </h2>
-      </header>
-      <div className="px-5 py-5">
-        <p className="mb-5 text-sm text-txt-secondary">
-          After creation, open the class page to edit it and add schedules.
-        </p>
-        <div className="grid gap-5 md:grid-cols-2">
-          <FormInput className="md:col-span-2" label="Class title" maxLength={160} name="title" required />
-          <label className="grid gap-1.5 text-xs font-bold md:col-span-2">
-            Description
-            <textarea className={`${fieldClass} min-h-24 resize-y`} maxLength={2000} name="description" />
-          </label>
-          <FormInput defaultValue={60} label="Default duration (minutes)" max={240} min={15} name="default_duration_minutes" required type="number" />
-          <FormInput defaultValue={8} label="Default capacity" max={100} min={1} name="default_capacity" required type="number" />
-          <FormInput defaultValue={15} label="Price per booking (KWD)" min={0} name="default_price_amount" required step="0.001" type="number" />
-          <FormInput defaultValue="KWD" disabled label="Currency" readOnly type="text" />
-          <Select defaultValue="all_levels" label="Level" name="level" options={["beginner", "intermediate", "advanced", "all_levels"]} />
-          <Select defaultValue="active" label="Status" name="status" options={["draft", "active", "inactive"]} />
-          <label className="grid gap-1.5 text-xs font-bold md:col-span-2">
-            Cover image
-            <input accept="image/jpeg,image/png,image/webp" className={fieldClass} name="image" type="file" />
-          </label>
-        </div>
-      </div>
-      <footer className="flex justify-start gap-2 border-t border-background-secondary px-5 py-5">
-        <button className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-xs font-bold text-white disabled:opacity-60" disabled={isSaving} type="submit">
-          {isSaving ? "Creating..." : "Create class"}
-        </button>
-        <button
-          className="min-h-11 rounded-sm border border-background-secondary px-4 py-3 text-xs font-bold text-txt-secondary transition hover:bg-background-secondary disabled:opacity-60"
-          disabled={isSaving}
-          onClick={onCancel}
-          type="button"
-        >
-          Back to classes
-        </button>
-      </footer>
-    </form>
-  );
-}
-
-function FormInput({ className, label: inputLabel, ...props }: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
-  return <label className={`grid gap-1.5 text-xs font-bold ${className ?? ""}`}>{inputLabel}<input className={fieldClass} {...props} /></label>;
-}
-
-function Select({ defaultValue, label: selectLabel, name, options }: { defaultValue: string; label: string; name: string; options: string[] }) {
-  return <label className="grid gap-1.5 text-xs font-bold">{selectLabel}<select className={fieldClass} defaultValue={defaultValue} name={name}>{options.map((option) => <option key={option} value={option}>{label(option)}</option>)}</select></label>;
 }

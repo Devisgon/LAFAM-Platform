@@ -4,6 +4,10 @@ import {
   LEGACY_AUTH_SESSION_MAX_AGE_SECONDS,
   resolveSessionCookieMaxAgeSeconds,
 } from "@/lib/auth/session-cookie";
+import {
+  ADMIN_ROUTE_ACCESS,
+  isAdminRole as isSharedAdminRole,
+} from "@/constants/permissions";
 
 const ACCESS_TOKEN_COOKIE = "lafam_access_token";
 const REFRESH_TOKEN_COOKIE = "lafam_refresh_token";
@@ -11,14 +15,6 @@ const ROLE_COOKIE = "lafam_role";
 const SESSION_ID_COOKIE = "lafam_session_id";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
-const adminRoles = new Set(["admin", "super_admin"]);
-const dashboardShellRoles = new Set([
-  "admin",
-  "super_admin",
-  "staff",
-  "trainer",
-  "stylist",
-]);
 const staffDashboardRoles = new Set(["staff", "trainer", "stylist"]);
 
 type ProxyRefreshApiData = {
@@ -36,6 +32,23 @@ type ProxyRefreshApiData = {
   } | null;
 };
 
+type ProxyAuthContext = {
+  access?: {
+    can_access_admin_dashboard?: boolean;
+    can_access_staff_dashboard?: boolean;
+  };
+  permissions?: readonly string[];
+  user?: {
+    role?: string | null;
+  } | null;
+};
+
+type ProxyAuthContextApiResponse = {
+  data?: {
+    context?: ProxyAuthContext;
+  };
+};
+
 type ProxyRefreshSession = {
   accessToken: string;
   refreshToken: string;
@@ -46,6 +59,7 @@ type ProxyRefreshSession = {
 };
 
 type VerifiedProxySession = {
+  context: ProxyAuthContext;
   role: string;
   refreshedSession: ProxyRefreshSession | null;
 };
@@ -74,16 +88,8 @@ function isRouteMatch(pathname: string, route: string): boolean {
   return pathname === route || pathname.startsWith(`${route}/`);
 }
 
-function isAdminRole(role?: string): boolean {
-  return Boolean(role && adminRoles.has(role));
-}
-
-function canEnterDashboardShell(role?: string): boolean {
-  return Boolean(role && dashboardShellRoles.has(role));
-}
-
 function getDashboardPath(role?: string): string {
-  if (isAdminRole(role)) return "/dashboard";
+  if (isSharedAdminRole(role)) return "/dashboard";
 
   if (role && staffDashboardRoles.has(role)) return "/bookings";
 
@@ -92,11 +98,24 @@ function getDashboardPath(role?: string): string {
   return "/";
 }
 
-function canAccessPath(pathname: string, role?: string): boolean {
-  if (!role) return false;
-  return (
-    canEnterDashboardShell(role) &&
-    protectedRoutes.some((route) => isRouteMatch(pathname, route))
+const routePermissionMap = Object.entries(ADMIN_ROUTE_ACCESS)
+  .map(([route, access]) => ({ route, permissions: access.anyPermissions }))
+  .sort((left, right) => right.route.length - left.route.length);
+
+function canAccessPath(pathname: string, context: ProxyAuthContext): boolean {
+  if (context.access?.can_access_admin_dashboard) return true;
+  if (!context.access?.can_access_staff_dashboard) return false;
+
+  const routeAccess = routePermissionMap.find(({ route }) =>
+    isRouteMatch(pathname, route),
+  );
+
+  if (!routeAccess) return false;
+
+  const permissions = new Set(context.permissions ?? []);
+
+  return routeAccess.permissions.some((permission) =>
+    permissions.has(permission),
   );
 }
 
@@ -250,29 +269,24 @@ function rewriteUnauthorized(request: NextRequest): NextResponse {
   return NextResponse.redirect(unauthorizedUrl);
 }
 
-function extractRole(payload: unknown): string | null {
-  const data = (payload as { data?: unknown } | null)?.data;
+function extractAuthContext(payload: unknown): ProxyAuthContext | null {
+  const context = (payload as ProxyAuthContextApiResponse | null)?.data
+    ?.context;
 
-  if (!data || typeof data !== "object") return null;
+  if (!context?.user?.role) return null;
 
-  const user = (data as { user?: unknown }).user;
-
-  if (user && typeof user === "object") {
-    const role = (user as { role?: unknown }).role;
-    return typeof role === "string" ? role : null;
-  }
-
-  const role = (data as { role?: unknown }).role;
-  return typeof role === "string" ? role : null;
+  return context;
 }
 
-async function getVerifiedRole(accessToken?: string): Promise<string | null> {
-  const authMeUrl = getApiUrl("/auth/me");
+async function getVerifiedContext(
+  accessToken?: string,
+): Promise<ProxyAuthContext | null> {
+  const authContextUrl = getApiUrl("/auth/context");
 
-  if (!accessToken || !authMeUrl) return null;
+  if (!accessToken || !authContextUrl) return null;
 
   try {
-    const response = await fetch(authMeUrl, {
+    const response = await fetch(authContextUrl, {
       cache: "no-store",
       headers: {
         Accept: "application/json",
@@ -282,7 +296,7 @@ async function getVerifiedRole(accessToken?: string): Promise<string | null> {
 
     if (!response.ok) return null;
 
-    return extractRole(await response.json());
+    return extractAuthContext(await response.json());
   } catch {
     return null;
   }
@@ -292,25 +306,24 @@ async function resolveValidSession(
   accessToken?: string,
   refreshToken?: string,
 ): Promise<VerifiedProxySession | null> {
-  let verifiedRole = await getVerifiedRole(accessToken);
+  let verifiedContext = await getVerifiedContext(accessToken);
   let refreshedSession: ProxyRefreshSession | null = null;
 
-  if (!verifiedRole && refreshToken) {
+  if (!verifiedContext && refreshToken) {
     refreshedSession = await refreshSessionInProxy(refreshToken);
 
     if (refreshedSession) {
-      verifiedRole =
-        refreshedSession.role ??
-        (await getVerifiedRole(refreshedSession.accessToken));
+      verifiedContext = await getVerifiedContext(refreshedSession.accessToken);
     }
   }
 
-  if (!verifiedRole) {
+  if (!verifiedContext?.user?.role) {
     return null;
   }
 
   return {
-    role: verifiedRole,
+    context: verifiedContext,
+    role: verifiedContext.user.role,
     refreshedSession,
   };
 }
@@ -359,7 +372,7 @@ export async function proxy(request: NextRequest) {
       return redirectToLoginWithClearedSession(request, pathname);
     }
 
-    if (!canAccessPath(pathname, session.role)) {
+    if (!canAccessPath(pathname, session.context)) {
       return rewriteUnauthorized(request);
     }
 

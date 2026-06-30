@@ -4,7 +4,7 @@ import Script from "next/script";
 import { AuthProvider } from "@/modules/auth";
 import { QueryProvider } from "@/lib/cache/QueryProvider";
 
-import "./globals.css";
+import "../styles/globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
