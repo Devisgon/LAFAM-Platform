@@ -182,6 +182,7 @@ export const AUTH_ADMIN_BOOKING_PERMISSIONS = [
 export const AUTH_TRAINER_SCOPED_BOOKING_PERMISSIONS = [
   'admin:bookings:read',
   'admin:bookings:create',
+  'booking:create_confirmed',
   'admin:bookings:bulk_create',
   'admin:bookings:update',
   'admin:bookings:cancel',

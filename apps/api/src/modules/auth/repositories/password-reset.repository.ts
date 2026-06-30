@@ -290,6 +290,7 @@ export class PasswordResetRepository {
       .update(updatePayload)
       .eq('email', input.email)
       .is('used_at', null)
+      .not('verified_at', 'is', null)
       .select('id');
 
     if (error) {
