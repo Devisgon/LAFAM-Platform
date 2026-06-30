@@ -51,6 +51,25 @@ export function monthLabel(monthValue: string): string {
   }).format(date);
 }
 
+export function buildCalendarMonthOptions(): Array<[string, string]> {
+  return Array.from({ length: 12 }, (_, monthIndex) => {
+    const value = String(monthIndex + 1).padStart(2, "0");
+    const label = new Intl.DateTimeFormat("en", { month: "long" }).format(
+      new Date(2026, monthIndex, 1),
+    );
+
+    return [value, label];
+  });
+}
+
+export function buildUpcomingYearOptions(count = 10): string[] {
+  const currentYear = new Date().getFullYear();
+
+  return Array.from({ length: count }, (_, index) =>
+    String(currentYear + index),
+  );
+}
+
 export function buildMonthOptions(): Array<[string, string]> {
   const now = new Date();
   const startYear = now.getFullYear() - 1;

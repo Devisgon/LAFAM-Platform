@@ -1,9 +1,10 @@
 import type { CreateCustomerPayload } from "@/modules/customers";
 
 import {
+  BOOKING_PHONE_COUNTRY_CODES,
   BOOKING_EMAIL_PATTERN,
-  KUWAIT_PHONE_CODE,
-  KUWAIT_PHONE_DIGIT_COUNT,
+  BOOKING_PHONE_PATTERN,
+  DEFAULT_BOOKING_PHONE_COUNTRY_CODE,
 } from "../constants/bookingUi.constants";
 import type { CreatePrivateTrainerBookingPayload } from "../api/adminBookingsApi";
 import type { BookingPermission } from "../types/bookingUi.types";
@@ -43,25 +44,69 @@ export function normalizeBookingText(value: FormDataEntryValue | null): string {
   return String(value ?? "").trim();
 }
 
-export function normalizeBookingPhone(value: string): string {
+export function normalizeBookingPhoneCountryCode(value: string): string {
   const digits = value.replace(/\D/g, "");
-  const localDigits = digits.startsWith("965") ? digits.slice(3) : digits;
 
-  return localDigits ? `${KUWAIT_PHONE_CODE}${localDigits}` : "";
+  return digits ? `+${digits}` : DEFAULT_BOOKING_PHONE_COUNTRY_CODE;
+}
+
+export function normalizeBookingPhone(
+  value: string,
+  countryCode = DEFAULT_BOOKING_PHONE_COUNTRY_CODE,
+): string {
+  const rawValue = value.trim();
+  const digits = rawValue.replace(/\D/g, "");
+
+  if (!digits) return "";
+  if (rawValue.startsWith("+")) return `+${digits}`;
+
+  const normalizedCountryCode = normalizeBookingPhoneCountryCode(countryCode);
+  const countryDigits = normalizedCountryCode.replace(/\D/g, "");
+  const localDigits =
+    digits.startsWith(countryDigits) && digits.length > countryDigits.length + 3
+      ? digits.slice(countryDigits.length)
+      : digits;
+
+  return `${normalizedCountryCode}${localDigits}`;
 }
 
 export function normalizeBookingCivilId(value: string): string {
   return value.trim().replace(/[^\d -]/g, "");
 }
 
-export function bookingPhoneLocalValue(value: string): string {
+export function resolveBookingPhoneCountryCode(value: string): string {
   const digits = value.replace(/\D/g, "");
+  const match = [...BOOKING_PHONE_COUNTRY_CODES]
+    .sort(
+      (left, right) =>
+        right.code.replace(/\D/g, "").length -
+        left.code.replace(/\D/g, "").length,
+    )
+    .find((option) => digits.startsWith(option.code.replace(/\D/g, "")));
 
-  return digits.startsWith("965") ? digits.slice(3) : digits;
+  return match?.code ?? DEFAULT_BOOKING_PHONE_COUNTRY_CODE;
 }
 
-export function isValidKuwaitBookingPhone(value: string): boolean {
-  return bookingPhoneLocalValue(value).length === KUWAIT_PHONE_DIGIT_COUNT;
+export function bookingPhoneLocalValue(
+  value: string,
+  countryCode = resolveBookingPhoneCountryCode(value),
+): string {
+  const digits = value.replace(/\D/g, "");
+  const countryDigits = normalizeBookingPhoneCountryCode(countryCode).replace(
+    /\D/g,
+    "",
+  );
+
+  return digits.startsWith(countryDigits)
+    ? digits.slice(countryDigits.length)
+    : digits;
+}
+
+export function isValidBookingPhone(
+  value: string,
+  countryCode = DEFAULT_BOOKING_PHONE_COUNTRY_CODE,
+): boolean {
+  return BOOKING_PHONE_PATTERN.test(normalizeBookingPhone(value, countryCode));
 }
 
 function createGeneratedAttendeePassword(): string {
@@ -89,8 +134,8 @@ function assertAttendeeInput(input: {
   if (!BOOKING_EMAIL_PATTERN.test(input.email)) {
     throw new Error("Enter a valid email address.");
   }
-  if (!isValidKuwaitBookingPhone(input.phone)) {
-    throw new Error("Enter a valid Kuwait phone number.");
+  if (!isValidBookingPhone(input.phone)) {
+    throw new Error("Enter a valid international phone number.");
   }
   if (input.civilId.replace(/\D/g, "").length !== 12) {
     throw new Error("Invalid Civil ID.");
@@ -106,6 +151,10 @@ export function buildManualAttendeePayload(
   ).toLowerCase();
   const phone = normalizeBookingPhone(
     String(formData.get("lookup_phone") ?? ""),
+    String(
+      formData.get("lookup_phone_country_code") ??
+        DEFAULT_BOOKING_PHONE_COUNTRY_CODE,
+    ),
   );
   const civilId = normalizeBookingCivilId(
     String(formData.get("lookup_civil_id") ?? ""),

@@ -12,6 +12,7 @@ import {
   Menu,
   Settings,
   UserRound,
+  UsersRound,
   ListChecks,
   WalletCards,
   X,
@@ -32,6 +33,7 @@ type IconName =
   | "services"
   | "settings"
   | "staff"
+  | "users"
   | "wallet";
 
 type NavItem = {
@@ -58,18 +60,50 @@ const icons: Record<IconName, LucideIcon> = {
   services: ListChecks,
   settings: Settings,
   staff: UserRound,
+  users: UsersRound,
   wallet: WalletCards,
 };
 
 const primaryItems: NavItem[] = [
-  { accessRoute: "/dashboard", href: "/dashboard", icon: "dashboard", label: "Dashboard" },
-  { accessRoute: "/bookings", href: "/bookings", icon: "bookings", label: "Bookings" },
-  { accessRoute: "/calendar", href: "/calendar", icon: "calendar", label: "Calendar" },
+  {
+    accessRoute: "/dashboard",
+    href: "/dashboard",
+    icon: "dashboard",
+    label: "Dashboard",
+  },
+  {
+    accessRoute: "/bookings",
+    href: "/bookings",
+    icon: "bookings",
+    label: "Bookings",
+  },
+  {
+    accessRoute: "/calendar",
+    href: "/calendar",
+    icon: "calendar",
+    label: "Calendar",
+  },
 ];
 
 const managementItems: NavItem[] = [
-  { accessRoute: "/payments", href: "/payments", icon: "payments", label: "Payments" },
-  { accessRoute: "/settings", href: "/settings", icon: "settings", label: "Settings" },
+  {
+    accessRoute: "/payments",
+    href: "/payments",
+    icon: "payments",
+    label: "Payments",
+  },
+  {
+    accessRoute: "/users",
+    href: "/settings?view=users",
+    icon: "users",
+    label: "User Management",
+  },
+  {
+    accessRoute: "/settings",
+    href: "/settings",
+    icon: "settings",
+    label: "Settings",
+  },
 ];
 
 function Icon({ name }: { name: IconName }) {
@@ -155,7 +189,9 @@ function NavigationGroup({
 }) {
   const [open, setOpen] = useState(true);
   const firstChild = children[0];
-  const firstChildLocked = firstChild ? !resolveAccess(firstChild.accessRoute) : true;
+  const firstChildLocked = firstChild
+    ? !resolveAccess(firstChild.accessRoute)
+    : true;
 
   if (collapsed) {
     return (
@@ -333,9 +369,7 @@ function NavigationChildLink({
   onNavigate?: () => void;
 }) {
   const className = `flex w-full items-center gap-2 px-[72px] py-2 text-left text-[16px] font-medium text-black transition ${
-    disabled
-      ? "cursor-not-allowed opacity-55"
-      : "hover:bg-black/10"
+    disabled ? "cursor-not-allowed opacity-55" : "hover:bg-black/10"
   } ${active ? "bg-black/10" : ""}`;
 
   if (disabled) {
