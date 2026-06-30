@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import {
   ADMIN_ROUTE_ACCESS,
   type AdminRouteKey,
-  hasAdminRouteAccess,
-} from "@/lib/auth/admin-access";
+} from "@/constants/permissions";
+import { hasRoutePermission } from "@/hooks/usePermission";
 import { getServerAuthContext } from "@/lib/auth/auth-context";
 import { AccessDeniedPanel } from "./AccessDeniedPanel";
 
@@ -21,7 +21,7 @@ export async function PermissionGuard({
     redirect("/login");
   }
 
-  if (!hasAdminRouteAccess(context, route)) {
+  if (!hasRoutePermission(context, route)) {
     return (
       <AccessDeniedPanel
         description={ADMIN_ROUTE_ACCESS[route].lockedLabel}

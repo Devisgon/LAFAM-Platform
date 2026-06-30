@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
-import { useAuth } from "@/modules/auth";
-import { useProfileSessions } from "@/modules/auth";
-import type { ActiveSession } from "@/modules/auth";
+import { useAuth, useProfileSessions } from "@/modules/auth";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -12,52 +10,15 @@ import { Input } from "@/components/ui/Input";
 import { LoadingState } from "@/components/data-display/LoadingState";
 import { Toast } from "@/components/ui/Toast";
 
-type Confirmation =
-  | { action: "revoke"; session: ActiveSession }
-  | { action: "logout-current" | "logout-all" | "delete-account" };
-
-type ResultToast = {
-  title: string;
-  message: string;
-  tone: "success" | "error";
-};
-
-const fallbackTimezones = ["Asia/Kuwait", "UTC"];
-
-type IconName = "camera" | "chevron" | "edit" | "key";
-
-function formatDate(value: string | null): string {
-  if (!value) return "Not available";
-
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
-function label(value: string): string {
-  return value
-    .replaceAll("_", " ")
-    .replace(/^\w/, (letter) => letter.toUpperCase());
-}
-
-function getTimezoneOptions(currentTimezone?: string | null): string[] {
-  let supportedTimezones = fallbackTimezones;
-
-  try {
-    supportedTimezones = Intl.supportedValuesOf("timeZone");
-  } catch {
-    // Keep the stable fallback list when runtime enumeration is unavailable.
-  }
-
-  return Array.from(
-    new Set([
-      ...supportedTimezones,
-      ...fallbackTimezones,
-      ...(currentTimezone ? [currentTimezone] : []),
-    ]),
-  ).sort((left, right) => left.localeCompare(right));
-}
+import type { Confirmation, ResultToast } from "../types/settingsUi.types";
+import {
+  formatDate,
+  getConfirmationCopy,
+  getTimezoneOptions,
+  label,
+} from "../utils/profileSettingsUtils";
+import { Icon } from "./profile-settings/ProfileIcon";
+import { SessionDetail } from "./profile-settings/SessionDetail";
 
 export function ProfileSettings() {
   const { avatarUrl, user } = useAuth();
@@ -618,94 +579,4 @@ export function ProfileSettings() {
       ) : null}
     </>
   );
-}
-
-function SessionDetail({
-  label: detailLabel,
-  value,
-}: {
-  label: string;
-  value: string | null;
-}) {
-  return (
-    <div>
-      <dt className="font-bold text-txt-primary">{detailLabel}</dt>
-      <dd className="mt-0.5">{value ?? "Not available"}</dd>
-    </div>
-  );
-}
-
-function Icon({ name }: { name: IconName }) {
-  const paths: Record<IconName, React.ReactNode> = {
-    camera: (
-      <>
-        <path d="M14.5 5.5 13.4 4H8.6L7.5 5.5H5A2 2 0 0 0 3 7.5v8A2 2 0 0 0 5 17.5h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-2.5Z" />
-        <circle cx="11" cy="11.5" r="3" />
-      </>
-    ),
-    chevron: <path d="m6 9 5 5 5-5" />,
-    edit: (
-      <>
-        <path d="M13.5 5.5 16 8" />
-        <path d="m4 16 .8-3.3L14.9 2.6a1.4 1.4 0 0 1 2 0l.5.5a1.4 1.4 0 0 1 0 2L7.3 15.2 4 16Z" />
-      </>
-    ),
-    key: (
-      <>
-        <circle cx="8" cy="11" r="4" />
-        <path d="M12 11h7m-2 0v3m-3-3v2" />
-      </>
-    ),
-  };
-
-  return (
-    <svg
-      aria-hidden="true"
-      className="size-5"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      viewBox="0 0 22 22"
-    >
-      {paths[name]}
-    </svg>
-  );
-}
-
-function getConfirmationCopy(confirmation: Confirmation | null) {
-  if (!confirmation) return null;
-
-  if (confirmation.action === "revoke") {
-    return {
-      title: "Revoke this session?",
-      description: `${confirmation.session.device_name ?? "This device"} will be signed out and must authenticate again.`,
-      confirmLabel: "Yes, revoke session",
-    };
-  }
-
-  if (confirmation.action === "logout-all") {
-    return {
-      title: "Logout all sessions?",
-      description:
-        "Every active device, including this one, will be signed out of your account.",
-      confirmLabel: "Yes, logout all",
-    };
-  }
-
-  if (confirmation.action === "delete-account") {
-    return {
-      title: "Delete your account?",
-      description:
-        "Your account will be soft-deleted and every active session will be revoked. This action cannot be undone from the portal.",
-      confirmLabel: "Yes, delete my account",
-    };
-  }
-
-  return {
-    title: "Logout current session?",
-    description: "You will be signed out of this device.",
-    confirmLabel: "Yes, logout",
-  };
 }
