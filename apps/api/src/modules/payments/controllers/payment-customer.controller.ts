@@ -263,6 +263,7 @@ function mapPaymentDiscountToSummary(
     id: discount.id,
     payment_id: discount.payment_id,
     promo_code_id: discount.promo_code_id,
+    promo_code_redemption_id: discount.promo_code_redemption_id,
     code: discount.code,
     discount_amount: discount.discount_amount,
     metadata: discount.metadata,

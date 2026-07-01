@@ -21,7 +21,7 @@
  * - Booking-order wallet checkout must debit once for the whole order.
  */
 
-import { Inject, Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 
 import { currentPaymentConfig } from '../../../common/config';
 import { AppError } from '../../../common/errors/app-error';
@@ -40,6 +40,19 @@ import {
 } from '../../notifications/constants/notification.constants';
 import { createWalletLedgerEmailIdempotencyKey } from '../../notifications/domain/email-idempotency.policy';
 import type { EmailRecipient } from '../../notifications/types/notification.types';
+import { PromoCodeCustomerService } from '../../promo-codes/application/promo-code-customer.service';
+import {
+  PROMO_CODE_ALLOWED_PAYMENT_METHODS,
+  PROMO_CODE_ALLOWED_TARGET_TYPES,
+} from '../../promo-codes/constants/promo-code.constants';
+import type {
+  PromoCodeAllowedPaymentMethod,
+  PromoCodeAllowedTargetType,
+} from '../../promo-codes/constants/promo-code.constants';
+import type {
+  PromoCodeReservationResult,
+  PromoCodeResolvedCheckoutTarget,
+} from '../../promo-codes/types/promo-code.types';
 import {
   PAYMENT_CHECKOUT_INTENT_TTL_MINUTES,
   PAYMENT_METHOD_WALLET,
@@ -84,6 +97,8 @@ import type {
   PaymentCheckoutWalletResult,
   PaymentGatewayCreateHostedPaymentResult,
   PaymentPriceResolutionResult,
+  PaymentPromoCodeCheckoutContext,
+  PaymentPromoCodeReservationSnapshot,
   PaymentRecord,
   PaymentTransactionCreateRecord,
 } from '../types/payment.types';
@@ -102,8 +117,21 @@ interface CheckoutUserContext {
 
 interface CheckoutIntentContext {
   readonly pricing: PaymentPriceResolutionResult;
+  readonly promo_code_checkout: PaymentPromoCodeCheckoutContext;
   readonly command: CreateCheckoutPaymentCommand;
   readonly payment: PaymentRecord;
+}
+
+interface CheckoutPaymentIntentAtomicResult {
+  readonly payment_id: string;
+  readonly payment_number: string;
+  readonly status: PaymentRecord['status'];
+  readonly target_type: PaymentRecord['target_type'];
+  readonly booking_id: string | null;
+  readonly private_booking_id: string | null;
+  readonly booking_order_id: string | null;
+  readonly final_amount: number;
+  readonly currency: string;
 }
 
 interface PaymentTransactionAuditInput {
@@ -214,10 +242,175 @@ function safeFailureMessage(error: unknown): string {
 
   return 'Payment provider request failed.';
 }
+function isPromoCodeRequested(input: PaymentCheckoutServiceInput): boolean {
+  return hasText(input.promo_code);
+}
+
+function isPromoCodeAllowedPaymentMethod(
+  paymentMethod: string,
+): paymentMethod is PromoCodeAllowedPaymentMethod {
+  return PROMO_CODE_ALLOWED_PAYMENT_METHODS.some(
+    (allowedPaymentMethod) => allowedPaymentMethod === paymentMethod,
+  );
+}
+
+function resolvePromoCodePaymentMethod(
+  paymentMethod: PaymentCheckoutServiceInput['payment_method'],
+): PromoCodeAllowedPaymentMethod {
+  if (isPromoCodeAllowedPaymentMethod(paymentMethod)) {
+    return paymentMethod;
+  }
+
+  throw AppError.promoCodePaymentMethodNotAllowed(
+    'Promo codes are not supported for this payment method.',
+    {
+      payment_method: paymentMethod,
+    },
+  );
+}
+
+function isPromoCodeAllowedTargetType(
+  targetType: string,
+): targetType is PromoCodeAllowedTargetType {
+  return PROMO_CODE_ALLOWED_TARGET_TYPES.some(
+    (allowedTargetType) => allowedTargetType === targetType,
+  );
+}
+
+function resolvePromoCodeTargetType(
+  targetType: PaymentPriceResolutionResult['target']['target_type'],
+): PromoCodeAllowedTargetType {
+  if (isPromoCodeAllowedTargetType(targetType)) {
+    return targetType;
+  }
+
+  throw AppError.promoCodeTargetNotAllowed(
+    'Promo codes are not supported for this checkout target.',
+    {
+      target_type: targetType,
+    },
+  );
+}
+
+function emptyPromoCodeCheckoutContext(
+  promoCode?: string | null,
+): PaymentPromoCodeCheckoutContext {
+  return {
+    promo_code: normalizeOptionalText(promoCode),
+    reservation: null,
+  };
+}
+
+function toPromoCodeResolvedCheckoutTarget(input: {
+  readonly user_id: string;
+  readonly pricing: PaymentPriceResolutionResult;
+  readonly payment_method: PromoCodeAllowedPaymentMethod;
+}): PromoCodeResolvedCheckoutTarget {
+  return {
+    user_id: input.user_id,
+    target_type: resolvePromoCodeTargetType(input.pricing.target.target_type),
+    booking_id: input.pricing.target.booking_id,
+    private_booking_id: input.pricing.target.private_booking_id,
+    booking_order_id: input.pricing.target.booking_order_id,
+    subtotal_amount: input.pricing.amount,
+    currency: input.pricing.currency,
+    payment_method: input.payment_method,
+    class_id: null,
+    schedule_id: null,
+    trainer_staff_profile_id: null,
+    metadata: {
+      source: 'payment_checkout_service',
+    },
+  };
+}
+
+function toPromoCodeReservationSnapshot(input: {
+  readonly reservation: PromoCodeReservationResult;
+  readonly pricing: PaymentPriceResolutionResult;
+}): PaymentPromoCodeReservationSnapshot {
+  return {
+    promo_code_id: input.reservation.promo_code.id,
+    promo_code: input.reservation.promo_code.code,
+    promo_code_redemption_id: input.reservation.redemption.redemption_id,
+    subtotal_amount: input.reservation.pricing.subtotal_amount,
+    discount_amount: input.reservation.pricing.discount_amount,
+    final_amount: input.reservation.pricing.final_amount,
+    currency: input.pricing.currency,
+    expires_at: input.reservation.redemption.expires_at ?? null,
+    metadata: {
+      source: 'payment_checkout_service',
+      target_type: input.pricing.target.target_type,
+      booking_id: input.pricing.target.booking_id,
+      private_booking_id: input.pricing.target.private_booking_id,
+      booking_order_id: input.pricing.target.booking_order_id,
+    },
+  };
+}
+
+function toPromoCodeReservationMetadata(
+  reservation: PaymentPromoCodeReservationSnapshot | null,
+): DatabaseJsonObject | null {
+  if (!reservation) {
+    return null;
+  }
+
+  return {
+    promo_code_id: reservation.promo_code_id,
+    promo_code: reservation.promo_code,
+    promo_code_redemption_id: reservation.promo_code_redemption_id,
+    subtotal_amount: reservation.subtotal_amount,
+    discount_amount: reservation.discount_amount,
+    final_amount: reservation.final_amount,
+    currency: reservation.currency,
+    expires_at: reservation.expires_at,
+    metadata: reservation.metadata,
+  };
+}
+
+function applyPromoCodeCheckoutToPricing(input: {
+  readonly pricing: PaymentPriceResolutionResult;
+  readonly promo_code_checkout: PaymentPromoCodeCheckoutContext;
+}): PaymentPriceResolutionResult {
+  const reservation = input.promo_code_checkout.reservation;
+
+  if (!reservation) {
+    return input.pricing;
+  }
+
+  return {
+    ...input.pricing,
+    discount_amount: reservation.discount_amount,
+    final_amount: reservation.final_amount,
+    promo_code_id: reservation.promo_code_id,
+    promo_code: reservation.promo_code,
+    promo_code_redemption_id: reservation.promo_code_redemption_id,
+    discount_metadata: reservation.metadata,
+  };
+}
+
+function resolvePromoCodeReservationIdempotencyKey(
+  input: PaymentCheckoutServiceInput,
+): string {
+  const explicitIdempotencyKey = normalizeOptionalText(input.idempotency_key);
+
+  if (explicitIdempotencyKey !== null) {
+    return explicitIdempotencyKey;
+  }
+
+  const promoCode = normalizeOptionalText(input.promo_code) ?? 'promo';
+  const targetId =
+    normalizeOptionalText(input.booking_id) ??
+    normalizeOptionalText(input.private_booking_id) ??
+    normalizeOptionalText(input.booking_order_id) ??
+    'target';
+
+  return `checkout:${input.target_type}:${targetId}:${promoCode}`;
+}
 
 function buildCheckoutMetadata(input: {
   readonly originalInput: PaymentCheckoutServiceInput;
   readonly pricing: PaymentPriceResolutionResult;
+  readonly promoCodeCheckout: PaymentPromoCodeCheckoutContext;
   readonly sanitizedClientMetadata: DatabaseJsonObject;
   readonly removedMetadataKeys: readonly string[];
 }): DatabaseJsonObject {
@@ -232,6 +425,8 @@ function buildCheckoutMetadata(input: {
       payment_method: input.originalInput.payment_method,
       idempotency_key: input.originalInput.idempotency_key ?? null,
       promo_code: input.originalInput.promo_code ?? null,
+      promo_code_redemption_id:
+        input.promoCodeCheckout.reservation?.promo_code_redemption_id ?? null,
     },
     pricing: {
       target_type: input.pricing.target.target_type,
@@ -244,8 +439,12 @@ function buildCheckoutMetadata(input: {
       currency: input.pricing.currency,
       promo_code_id: input.pricing.promo_code_id,
       promo_code: input.pricing.promo_code,
+      promo_code_redemption_id: input.pricing.promo_code_redemption_id,
       discount_metadata: input.pricing.discount_metadata,
     },
+    promo_code_reservation: toPromoCodeReservationMetadata(
+      input.promoCodeCheckout.reservation,
+    ),
   };
 }
 
@@ -264,6 +463,7 @@ function buildHostedPaymentRequestPayload(
     payment_provider: command.payment_provider,
     callback_url: command.callback_url,
     idempotency_key: command.idempotency_key,
+    promo_code_redemption_id: command.promo_code_redemption_id,
   };
 }
 
@@ -474,21 +674,41 @@ export class PaymentCheckoutService {
     private readonly walletRepository: WalletRepository,
     private readonly authUserRepository: AuthUserRepository,
     private readonly emailNotificationService: EmailNotificationService,
+    @Inject(forwardRef(() => PromoCodeCustomerService))
+    private readonly promoCodeCustomerService: PromoCodeCustomerService,
   ) {}
 
   async createCheckoutPayment(
     input: PaymentCheckoutServiceInput,
   ): Promise<PaymentCheckoutResult> {
     const userContext = await this.resolveCheckoutUserContext(input);
-    const pricing = await this.paymentPricingService.resolveCheckoutPricing({
-      user_id: input.user_id,
-      target_type: input.target_type,
-      booking_id: input.booking_id,
-      private_booking_id: input.private_booking_id,
-      booking_order_id: input.booking_order_id,
-      wallet_top_up_amount: input.wallet_top_up_amount,
-      currency: input.currency,
-      promo_code: input.promo_code,
+    const basePricing = await this.paymentPricingService.resolveCheckoutPricing(
+      {
+        user_id: input.user_id,
+        target_type: input.target_type,
+        booking_id: input.booking_id,
+        private_booking_id: input.private_booking_id,
+        booking_order_id: input.booking_order_id,
+        wallet_top_up_amount: input.wallet_top_up_amount,
+        currency: input.currency,
+        promo_code: input.promo_code,
+      },
+    );
+
+    this.assertCheckoutAllowed({
+      input,
+      pricing: basePricing,
+      userContext,
+    });
+
+    const promoCodeCheckout = await this.resolvePromoCodeCheckoutContext({
+      input,
+      pricing: basePricing,
+    });
+
+    const pricing = applyPromoCodeCheckoutToPricing({
+      pricing: basePricing,
+      promo_code_checkout: promoCodeCheckout,
     });
 
     this.assertCheckoutAllowed({
@@ -501,12 +721,14 @@ export class PaymentCheckoutService {
       return this.createWalletCheckoutPayment({
         input,
         pricing,
+        promoCodeCheckout,
       });
     }
 
     return this.createHostedCheckoutPayment({
       input,
       pricing,
+      promoCodeCheckout,
     });
   }
 
@@ -536,6 +758,7 @@ export class PaymentCheckoutService {
   private async createHostedCheckoutPayment(input: {
     readonly input: PaymentCheckoutServiceInput;
     readonly pricing: PaymentPriceResolutionResult;
+    readonly promoCodeCheckout: PaymentPromoCodeCheckoutContext;
   }): Promise<PaymentCheckoutHostedRedirectResult> {
     const hostedPaymentMethod = assertHostedCheckoutMethod(
       input.input.payment_method,
@@ -545,6 +768,7 @@ export class PaymentCheckoutService {
     const intentContext = await this.createCheckoutIntent({
       originalInput: input.input,
       pricing: input.pricing,
+      promoCodeCheckout: input.promoCodeCheckout,
       payment_provider: gatewayProvider,
       callback_url: currentPaymentConfig.redirect.knetCallbackUrl,
     });
@@ -588,6 +812,8 @@ export class PaymentCheckoutService {
       gateway_request: buildHostedPaymentRequestPayload(intentContext.command),
       metadata: {
         checkout_stage: 'hosted_provider_request',
+        promo_code_redemption_id:
+          intentContext.command.promo_code_redemption_id,
       },
     });
 
@@ -596,6 +822,7 @@ export class PaymentCheckoutService {
       command: intentContext.command,
       hostedPaymentMethod,
       gatewayProvider,
+      promoCodeCheckout: input.promoCodeCheckout,
     });
 
     const updatedPayment = await this.paymentRepository.updatePayment(
@@ -626,6 +853,7 @@ export class PaymentCheckoutService {
     readonly command: CreateCheckoutPaymentCommand;
     readonly hostedPaymentMethod: PaymentHostedRedirectMethod;
     readonly gatewayProvider: PaymentExternalGatewayProvider;
+    readonly promoCodeCheckout: PaymentPromoCodeCheckoutContext;
   }): Promise<PaymentGatewayCreateHostedPaymentResult> {
     try {
       const providerResult =
@@ -661,6 +889,7 @@ export class PaymentCheckoutService {
         gateway_response: buildProviderResponsePayload(providerResult),
         metadata: {
           checkout_stage: 'hosted_provider_response',
+          promo_code_redemption_id: input.command.promo_code_redemption_id,
         },
       });
 
@@ -681,6 +910,17 @@ export class PaymentCheckoutService {
         failure_message: safeFailureMessage(error),
         metadata: {
           checkout_stage: 'hosted_provider_response',
+          promo_code_redemption_id: input.command.promo_code_redemption_id,
+        },
+      });
+
+      await this.releasePromoCodeCheckoutReservation({
+        promoCodeCheckout: input.promoCodeCheckout,
+        paymentId: input.payment.id,
+        releaseReason: 'hosted_provider_create_failed',
+        metadata: {
+          checkout_stage: 'hosted_provider_response',
+          failure_code: CHECKOUT_FAILURE_CODE_PROVIDER_CREATE_FAILED,
         },
       });
 
@@ -691,10 +931,12 @@ export class PaymentCheckoutService {
   private async createWalletCheckoutPayment(input: {
     readonly input: PaymentCheckoutServiceInput;
     readonly pricing: PaymentPriceResolutionResult;
+    readonly promoCodeCheckout: PaymentPromoCodeCheckoutContext;
   }): Promise<PaymentCheckoutWalletResult> {
     const intentContext = await this.createCheckoutIntent({
       originalInput: input.input,
       pricing: input.pricing,
+      promoCodeCheckout: input.promoCodeCheckout,
       payment_provider: PAYMENT_PROVIDER_WALLET,
       callback_url: null,
     });
@@ -705,34 +947,93 @@ export class PaymentCheckoutService {
       return this.resolveExistingWalletCheckoutResult(payment);
     }
 
-    PaymentLifecyclePolicy.assertPaymentNotExpired({
-      payment,
-    });
-
-    const entryType = resolveDebitLedgerEntryTypeForCheckoutTarget(
-      payment.target_type,
-    );
-    const description = resolveWalletDebitDescription(payment);
-
-    WalletLedgerPolicy.assertDebitInput({
-      user_id: payment.user_id,
-      payment_id: payment.id,
-      currency: input.pricing.currency,
-      amount: input.pricing.final_amount,
-      entry_type: entryType,
-      booking_id: payment.booking_id,
-      private_booking_id: payment.private_booking_id,
-      booking_order_id: payment.booking_order_id,
-      description,
-      metadata: buildWalletDebitMetadata({
-        checkout_stage: 'wallet_debit_validation',
+    try {
+      PaymentLifecyclePolicy.assertPaymentNotExpired({
         payment,
-      }),
-    });
+      });
 
-    if (payment.target_type === PAYMENT_TARGET_TYPE_BOOKING_ORDER) {
+      const entryType = resolveDebitLedgerEntryTypeForCheckoutTarget(
+        payment.target_type,
+      );
+      const description = resolveWalletDebitDescription(payment);
+
+      WalletLedgerPolicy.assertDebitInput({
+        user_id: payment.user_id,
+        payment_id: payment.id,
+        currency: input.pricing.currency,
+        amount: input.pricing.final_amount,
+        entry_type: entryType,
+        booking_id: payment.booking_id,
+        private_booking_id: payment.private_booking_id,
+        booking_order_id: payment.booking_order_id,
+        description,
+        metadata: buildWalletDebitMetadata({
+          checkout_stage: 'wallet_debit_validation',
+          payment,
+        }),
+      });
+
+      if (payment.target_type === PAYMENT_TARGET_TYPE_BOOKING_ORDER) {
+        const walletDebit =
+          await this.walletRepository.debitWalletForBookingOrderAtomic({
+            payment_id: payment.id,
+            description,
+            metadata: buildWalletDebitMetadata({
+              checkout_stage: 'wallet_debit',
+              payment,
+            }),
+          });
+
+        await this.markPromoCodeRedemptionRedeemedForPayment({
+          promoCodeCheckout: input.promoCodeCheckout,
+          paymentId: payment.id,
+          metadata: {
+            checkout_stage: 'wallet_debit',
+            wallet_ledger_entry_id: walletDebit.ledger_entry_id,
+          },
+        });
+
+        await this.createPaymentTransaction({
+          payment_id: payment.id,
+          transaction_type: PAYMENT_TRANSACTION_TYPE_WALLET_DEBIT,
+          transaction_status: PAYMENT_TRANSACTION_STATUS_SUCCEEDED,
+          provider: PAYMENT_PROVIDER_WALLET,
+          gateway_response: {
+            wallet_account_id: walletDebit.wallet_account_id,
+            wallet_ledger_entry_id: walletDebit.ledger_entry_id,
+            available_balance: walletDebit.available_balance,
+            booking_id: null,
+            private_booking_id: null,
+            booking_order_id: walletDebit.booking_order_id,
+          },
+          metadata: {
+            checkout_stage: 'wallet_debit',
+            promo_code_redemption_id:
+              input.promoCodeCheckout.reservation?.promo_code_redemption_id ??
+              null,
+          },
+        });
+
+        const updatedPayment = await this.getPaymentOrThrow(payment.id);
+
+        await this.notifyWalletBookingDebitSuccess({
+          payment: updatedPayment,
+          walletDebit,
+        });
+
+        return {
+          payment: updatedPayment,
+          status: updatedPayment.status,
+          requires_redirect: false,
+          wallet_account_id: walletDebit.wallet_account_id,
+          wallet_ledger_entry_id: walletDebit.ledger_entry_id,
+          available_balance: walletDebit.available_balance,
+          booking_order_id: walletDebit.booking_order_id,
+        };
+      }
+
       const walletDebit =
-        await this.walletRepository.debitWalletForBookingOrderAtomic({
+        await this.walletRepository.debitWalletForBookingAtomic({
           payment_id: payment.id,
           description,
           metadata: buildWalletDebitMetadata({
@@ -740,6 +1041,15 @@ export class PaymentCheckoutService {
             payment,
           }),
         });
+
+      await this.markPromoCodeRedemptionRedeemedForPayment({
+        promoCodeCheckout: input.promoCodeCheckout,
+        paymentId: payment.id,
+        metadata: {
+          checkout_stage: 'wallet_debit',
+          wallet_ledger_entry_id: walletDebit.ledger_entry_id,
+        },
+      });
 
       await this.createPaymentTransaction({
         payment_id: payment.id,
@@ -750,12 +1060,15 @@ export class PaymentCheckoutService {
           wallet_account_id: walletDebit.wallet_account_id,
           wallet_ledger_entry_id: walletDebit.ledger_entry_id,
           available_balance: walletDebit.available_balance,
-          booking_id: null,
-          private_booking_id: null,
-          booking_order_id: walletDebit.booking_order_id,
+          booking_id: walletDebit.booking_id,
+          private_booking_id: walletDebit.private_booking_id,
+          booking_order_id: null,
         },
         metadata: {
           checkout_stage: 'wallet_debit',
+          promo_code_redemption_id:
+            input.promoCodeCheckout.reservation?.promo_code_redemption_id ??
+            null,
         },
       });
 
@@ -773,57 +1086,22 @@ export class PaymentCheckoutService {
         wallet_account_id: walletDebit.wallet_account_id,
         wallet_ledger_entry_id: walletDebit.ledger_entry_id,
         available_balance: walletDebit.available_balance,
-        booking_order_id: walletDebit.booking_order_id,
+        booking_order_id: updatedPayment.booking_order_id,
       };
-    }
-
-    const walletDebit = await this.walletRepository.debitWalletForBookingAtomic(
-      {
-        payment_id: payment.id,
-        description,
-        metadata: buildWalletDebitMetadata({
+    } catch (error) {
+      await this.releasePromoCodeCheckoutReservation({
+        promoCodeCheckout: input.promoCodeCheckout,
+        paymentId: payment.id,
+        releaseReason: 'wallet_checkout_failed',
+        metadata: {
           checkout_stage: 'wallet_debit',
-          payment,
-        }),
-      },
-    );
+          failure_message: safeFailureMessage(error),
+        },
+      });
 
-    await this.createPaymentTransaction({
-      payment_id: payment.id,
-      transaction_type: PAYMENT_TRANSACTION_TYPE_WALLET_DEBIT,
-      transaction_status: PAYMENT_TRANSACTION_STATUS_SUCCEEDED,
-      provider: PAYMENT_PROVIDER_WALLET,
-      gateway_response: {
-        wallet_account_id: walletDebit.wallet_account_id,
-        wallet_ledger_entry_id: walletDebit.ledger_entry_id,
-        available_balance: walletDebit.available_balance,
-        booking_id: walletDebit.booking_id,
-        private_booking_id: walletDebit.private_booking_id,
-        booking_order_id: null,
-      },
-      metadata: {
-        checkout_stage: 'wallet_debit',
-      },
-    });
-
-    const updatedPayment = await this.getPaymentOrThrow(payment.id);
-
-    await this.notifyWalletBookingDebitSuccess({
-      payment: updatedPayment,
-      walletDebit,
-    });
-
-    return {
-      payment: updatedPayment,
-      status: updatedPayment.status,
-      requires_redirect: false,
-      wallet_account_id: walletDebit.wallet_account_id,
-      wallet_ledger_entry_id: walletDebit.ledger_entry_id,
-      available_balance: walletDebit.available_balance,
-      booking_order_id: updatedPayment.booking_order_id,
-    };
+      throw error;
+    }
   }
-
   private async notifyWalletBookingDebitSuccess(input: {
     readonly payment: PaymentRecord;
     readonly walletDebit: WalletBookingDebitResult;
@@ -906,6 +1184,7 @@ export class PaymentCheckoutService {
   private async createCheckoutIntent(input: {
     readonly originalInput: PaymentCheckoutServiceInput;
     readonly pricing: PaymentPriceResolutionResult;
+    readonly promoCodeCheckout: PaymentPromoCodeCheckoutContext;
     readonly payment_provider: PaymentProvider;
     readonly callback_url: string | null;
   }): Promise<CheckoutIntentContext> {
@@ -931,16 +1210,21 @@ export class PaymentCheckoutService {
       gateway_payment_id: null,
       gateway_invoice_id: null,
       expires_at: resolveIntentExpiresAt(input.originalInput.target_type),
+      promo_code_redemption_id:
+        input.promoCodeCheckout.reservation?.promo_code_redemption_id ?? null,
       metadata: buildCheckoutMetadata({
         originalInput: input.originalInput,
         pricing: input.pricing,
+        promoCodeCheckout: input.promoCodeCheckout,
         sanitizedClientMetadata: sanitizedMetadataResult.sanitized,
         removedMetadataKeys: sanitizedMetadataResult.removed_keys,
       }),
     };
 
-    const paymentIntent =
-      await this.paymentRepository.createPaymentIntentAtomic({
+    let paymentIntent: CheckoutPaymentIntentAtomicResult;
+
+    try {
+      paymentIntent = await this.paymentRepository.createPaymentIntentAtomic({
         user_id: command.user_id,
         target_type: command.target.target_type,
         booking_id: command.target.booking_id,
@@ -960,10 +1244,48 @@ export class PaymentCheckoutService {
         gateway_invoice_id: command.gateway_invoice_id,
         expires_at: command.expires_at,
         idempotency_key: command.idempotency_key,
+        promo_code_redemption_id: command.promo_code_redemption_id,
         metadata: command.metadata,
       });
+    } catch (error) {
+      await this.releasePromoCodeCheckoutReservation({
+        promoCodeCheckout: input.promoCodeCheckout,
+        paymentId: null,
+        releaseReason: 'payment_intent_create_failed',
+        metadata: {
+          checkout_stage: 'payment_intent_create',
+          failure_message: safeFailureMessage(error),
+        },
+      });
+
+      throw error;
+    }
 
     const payment = await this.getPaymentOrThrow(paymentIntent.payment_id);
+
+    try {
+      await this.attachPromoCodeReservationToPayment({
+        payment,
+        promoCodeCheckout: input.promoCodeCheckout,
+      });
+
+      await this.createPaymentDiscountForPromoCode({
+        payment,
+        promoCodeCheckout: input.promoCodeCheckout,
+      });
+    } catch (error) {
+      await this.releasePromoCodeCheckoutReservation({
+        promoCodeCheckout: input.promoCodeCheckout,
+        paymentId: payment.id,
+        releaseReason: 'promo_code_payment_attach_failed',
+        metadata: {
+          checkout_stage: 'promo_code_payment_attach',
+          failure_message: safeFailureMessage(error),
+        },
+      });
+
+      throw error;
+    }
 
     await this.createPaymentTransaction({
       payment_id: payment.id,
@@ -980,17 +1302,160 @@ export class PaymentCheckoutService {
         booking_order_id: paymentIntent.booking_order_id,
         final_amount: paymentIntent.final_amount,
         currency: paymentIntent.currency,
+        promo_code_redemption_id: command.promo_code_redemption_id,
       },
       metadata: {
         checkout_stage: 'payment_intent_created',
+        promo_code_redemption_id: command.promo_code_redemption_id,
       },
     });
 
     return {
       pricing: input.pricing,
+      promo_code_checkout: input.promoCodeCheckout,
       command,
       payment,
     };
+  }
+
+  private async resolvePromoCodeCheckoutContext(input: {
+    readonly input: PaymentCheckoutServiceInput;
+    readonly pricing: PaymentPriceResolutionResult;
+  }): Promise<PaymentPromoCodeCheckoutContext> {
+    const promoCode = normalizeOptionalText(input.input.promo_code);
+
+    if (!isPromoCodeRequested(input.input) || promoCode === null) {
+      return emptyPromoCodeCheckoutContext(input.input.promo_code);
+    }
+
+    const paymentMethod = resolvePromoCodePaymentMethod(
+      input.input.payment_method,
+    );
+
+    const reservation = await this.promoCodeCustomerService.reservePromoCode({
+      code: promoCode,
+      user_id: input.input.user_id,
+      payment_method: paymentMethod,
+      target: toPromoCodeResolvedCheckoutTarget({
+        user_id: input.input.user_id,
+        pricing: input.pricing,
+        payment_method: paymentMethod,
+      }),
+      idempotency_key: resolvePromoCodeReservationIdempotencyKey(input.input),
+      expires_at: resolveIntentExpiresAt(input.input.target_type),
+      metadata: {
+        checkout_stage: 'promo_code_reservation',
+        target_type: input.pricing.target.target_type,
+        booking_id: input.pricing.target.booking_id,
+        private_booking_id: input.pricing.target.private_booking_id,
+        booking_order_id: input.pricing.target.booking_order_id,
+        payment_method: input.input.payment_method,
+      },
+    });
+
+    return {
+      promo_code: promoCode,
+      reservation: toPromoCodeReservationSnapshot({
+        reservation,
+        pricing: input.pricing,
+      }),
+    };
+  }
+
+  private async attachPromoCodeReservationToPayment(input: {
+    readonly payment: PaymentRecord;
+    readonly promoCodeCheckout: PaymentPromoCodeCheckoutContext;
+  }): Promise<void> {
+    const reservation = input.promoCodeCheckout.reservation;
+
+    if (!reservation) {
+      return;
+    }
+
+    await this.promoCodeCustomerService.attachPromoCodeRedemptionPayment({
+      redemption_id: reservation.promo_code_redemption_id,
+      payment_id: input.payment.id,
+      metadata: {
+        checkout_stage: 'promo_code_payment_attach',
+        payment_number: input.payment.payment_number,
+      },
+    });
+  }
+
+  private async createPaymentDiscountForPromoCode(input: {
+    readonly payment: PaymentRecord;
+    readonly promoCodeCheckout: PaymentPromoCodeCheckoutContext;
+  }): Promise<void> {
+    const reservation = input.promoCodeCheckout.reservation;
+
+    if (!reservation) {
+      return;
+    }
+
+    const existingDiscounts = await this.paymentRepository.findPaymentDiscounts(
+      input.payment.id,
+    );
+
+    const existingDiscount = existingDiscounts.find(
+      (discount) =>
+        discount.promo_code_redemption_id ===
+        reservation.promo_code_redemption_id,
+    );
+
+    if (existingDiscount) {
+      return;
+    }
+
+    await this.paymentRepository.createPaymentDiscount({
+      payment_id: input.payment.id,
+      promo_code_id: reservation.promo_code_id,
+      promo_code_redemption_id: reservation.promo_code_redemption_id,
+      code: reservation.promo_code,
+      discount_amount: reservation.discount_amount,
+      metadata: reservation.metadata,
+    });
+  }
+
+  private async markPromoCodeRedemptionRedeemedForPayment(input: {
+    readonly promoCodeCheckout: PaymentPromoCodeCheckoutContext;
+    readonly paymentId: string;
+    readonly metadata: DatabaseJsonObject;
+  }): Promise<void> {
+    const reservation = input.promoCodeCheckout.reservation;
+
+    if (!reservation) {
+      return;
+    }
+
+    await this.promoCodeCustomerService.markPromoCodeRedemptionRedeemed({
+      redemption_id: reservation.promo_code_redemption_id,
+      payment_id: input.paymentId,
+      metadata: input.metadata,
+    });
+  }
+
+  private async releasePromoCodeCheckoutReservation(input: {
+    readonly promoCodeCheckout: PaymentPromoCodeCheckoutContext;
+    readonly paymentId: string | null;
+    readonly releaseReason: string;
+    readonly metadata: DatabaseJsonObject;
+  }): Promise<void> {
+    const reservation = input.promoCodeCheckout.reservation;
+
+    if (!reservation) {
+      return;
+    }
+
+    try {
+      await this.promoCodeCustomerService.releasePromoCodeRedemption({
+        redemption_id: reservation.promo_code_redemption_id,
+        payment_id: input.paymentId,
+        release_reason: input.releaseReason,
+        metadata: input.metadata,
+      });
+    } catch {
+      // Cleanup failure must not hide the original checkout failure.
+    }
   }
 
   private async createPaymentTransaction(
