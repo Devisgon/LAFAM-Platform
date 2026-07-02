@@ -70,7 +70,7 @@ export function ModalFooter({
         Close
       </button>
       <button
-        className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-xs font-bold text-white disabled:opacity-60"
+        className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-xs font-bold text-txt-primary disabled:opacity-60"
         disabled={isSaving}
         type="submit"
       >

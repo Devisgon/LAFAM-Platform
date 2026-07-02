@@ -113,10 +113,10 @@ export default async function CustomerDetailPage({
     <section className="grid gap-5">
       <nav aria-label="Customer detail navigation">
         <Link
-          className="inline-flex min-h-10 items-center rounded-sm border border-background-secondary px-4 text-sm font-bold text-txt-secondary transition hover:bg-background-secondary hover:text-txt-primary"
-          href="/settings?view=users"
+          className="inline-flex min-h-10 items-center rounded-sm border border-background-secondary bg-card-bg-primary px-4 text-sm font-bold text-txt-primary shadow-sm transition hover:bg-background-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          href="/users"
         >
-          Back to settings users
+          Back to user management
         </Link>
       </nav>
 

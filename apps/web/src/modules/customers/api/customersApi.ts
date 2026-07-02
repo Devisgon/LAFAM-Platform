@@ -2,10 +2,33 @@ import { type ApiResponse, authFetch } from "@/modules/auth";
 
 export type CustomerAuthStatus =
   | "guest_active"
+  | "invited"
   | "active"
   | "pending_email_verification"
   | "deactivated"
   | "deleted";
+
+export type CustomerInvitationStatus =
+  | "pending"
+  | "accepted"
+  | "expired"
+  | "revoked";
+
+export type CustomerInvitation = {
+  accepted_at: string | null;
+  accepted_by_app_user_id: string | null;
+  app_user_id: string;
+  created_at: string;
+  created_by_admin_id: string;
+  email: string;
+  expires_at: string;
+  expired_at: string | null;
+  id: string;
+  revoked_at: string | null;
+  revoked_by_admin_id: string | null;
+  status: CustomerInvitationStatus;
+  updated_at: string;
+};
 
 export type CustomerProfile = {
   id: string;
@@ -26,12 +49,15 @@ export type CustomerProfile = {
   updated_at: string;
   deactivated_at: string | null;
   deleted_at: string | null;
+  latest_invitation?: CustomerInvitation | null;
 };
 
 export type CustomerFilters = {
   search?: string;
   auth_status?: CustomerAuthStatus;
   include_deleted?: boolean;
+  limit?: number;
+  offset?: number;
 };
 
 export type CustomerListResult = {
@@ -51,8 +77,8 @@ export type CreateCustomerPayload = {
   email: string;
   phone: string;
   civil_id: string;
-  password: string;
-  confirm_password: string;
+  password?: string;
+  confirm_password?: string;
   timezone?: string | null;
 };
 
@@ -67,8 +93,16 @@ type CustomerMutationResult = {
   customer: CustomerProfile;
 };
 
+type CustomerInvitationMutationResult = {
+  customer: CustomerProfile;
+  invitation: CustomerInvitation;
+};
+
 function buildQuery(filters: CustomerFilters): string {
-  const params = new URLSearchParams({ limit: "100", offset: "0" });
+  const params = new URLSearchParams({
+    limit: String(filters.limit ?? 50),
+    offset: String(filters.offset ?? 0),
+  });
 
   if (filters.search?.trim()) {
     params.set("search", filters.search.trim());
@@ -96,7 +130,9 @@ export const adminCustomersClient = {
   },
 
   async create(payload: CreateCustomerPayload): Promise<CustomerProfile> {
-    const response = await authFetch<ApiResponse<CustomerMutationResult>>(
+    const response = await authFetch<
+      ApiResponse<CustomerMutationResult | CustomerInvitationMutationResult>
+    >(
       "/admin/customers",
       {
         method: "POST",
@@ -105,6 +141,16 @@ export const adminCustomersClient = {
     );
 
     return response.data.customer;
+  },
+
+  async delete(customerId: string): Promise<{ customer_id: string; deleted: true }> {
+    const response = await authFetch<
+      ApiResponse<{ customer_id: string; deleted: true }>
+    >(`/admin/customers/${encodeURIComponent(customerId)}`, {
+      method: "DELETE",
+    });
+
+    return response.data;
   },
 
   async get(customerId: string): Promise<CustomerProfile> {
@@ -169,5 +215,19 @@ export const adminCustomersClient = {
     );
 
     return response.data.customer;
+  },
+
+  async resendInvitation(invitationId: string): Promise<CustomerProfile> {
+    const response = await authFetch<
+      ApiResponse<CustomerInvitationMutationResult>
+    >(
+      `/admin/customers/invitations/${encodeURIComponent(invitationId)}/resend`,
+      { method: "POST" },
+    );
+
+    return {
+      ...response.data.customer,
+      latest_invitation: response.data.invitation,
+    };
   },
 };

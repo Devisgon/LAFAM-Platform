@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   CalendarDays,
+  BadgePercent,
   ChevronDown,
   CreditCard,
   Dumbbell,
@@ -30,6 +31,7 @@ type IconName =
   | "classes"
   | "dashboard"
   | "payments"
+  | "promos"
   | "services"
   | "settings"
   | "staff"
@@ -57,6 +59,7 @@ const icons: Record<IconName, LucideIcon> = {
   classes: Dumbbell,
   dashboard: Gauge,
   payments: CreditCard,
+  promos: BadgePercent,
   services: ListChecks,
   settings: Settings,
   staff: UserRound,
@@ -93,8 +96,14 @@ const managementItems: NavItem[] = [
     label: "Payments",
   },
   {
+    accessRoute: "/promos",
+    href: "/promos",
+    icon: "promos",
+    label: "Promo",
+  },
+  {
     accessRoute: "/users",
-    href: "/settings?view=users",
+    href: "/users",
     icon: "users",
     label: "User Management",
   },

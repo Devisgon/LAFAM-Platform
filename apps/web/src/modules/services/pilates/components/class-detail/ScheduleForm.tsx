@@ -515,7 +515,7 @@ function MonthlySchedulePlanner({
                       : "No slots"}
                 </span>
                 {selectedCount > 0 ? (
-                  <span className="absolute right-1.5 top-1.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  <span className="absolute right-1.5 top-1.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-txt-primary">
                     {selectedCount}
                   </span>
                 ) : null}

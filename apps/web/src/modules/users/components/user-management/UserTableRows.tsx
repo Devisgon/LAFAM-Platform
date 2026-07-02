@@ -4,13 +4,15 @@ import { Badge } from "@/components/ui/Badge";
 
 import type { AdminUser } from "../../api/usersApi";
 import { isActiveUser, label, usernameFromUser } from "../../utils/userFormatters";
-import { ActionButton, ViewCustomerLink } from "./UserControls";
+import { ActionButton, UserStatusToggle, ViewCustomerLink } from "./UserControls";
 
 export function UserRow({
   onAction,
+  showViewAction = true,
   user,
 }: {
   onAction: (action: "deactivate" | "reactivate" | "delete", user: AdminUser) => void;
+  showViewAction?: boolean;
   user: AdminUser;
 }) {
   const customerDetailHref = user.customer_profile_id
@@ -24,12 +26,9 @@ export function UserRow({
     >
       <td className="px-4 py-4 alignment-fix">
         <div className="flex items-center justify-center gap-3">
-          <input
-            aria-label={`${user.full_name ?? user.email ?? "User"} active status`}
+          <UserStatusToggle
             checked={isActiveUser(user)}
-            className="size-5 rounded border-background-secondary accent-primary cursor-default"
-            readOnly
-            type="checkbox"
+            label={`${user.full_name ?? user.email ?? "User"} active status`}
           />
           <Badge tone="neutral">{label(user.status)}</Badge>
         </div>
@@ -55,7 +54,7 @@ export function UserRow({
       </td>
       <td className="px-4 py-4">
         <div className="flex items-center justify-center gap-2">
-          {customerDetailHref ? (
+          {showViewAction && customerDetailHref ? (
             <ViewCustomerLink
               href={customerDetailHref}
               label={`View ${user.full_name ?? user.email ?? "customer"}`}

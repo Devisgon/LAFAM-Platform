@@ -48,7 +48,7 @@ export function CreateClassCard({
         </div>
       </div>
       <footer className="flex justify-start gap-2 border-t border-background-secondary px-5 py-5">
-        <button className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-xs font-bold text-white disabled:opacity-60" disabled={isSaving} type="submit">
+        <button className="min-h-11 rounded-sm bg-button-primary px-4 py-3 text-xs font-bold text-txt-primary disabled:opacity-60" disabled={isSaving} type="submit">
           {isSaving ? "Creating..." : "Create class"}
         </button>
         <button

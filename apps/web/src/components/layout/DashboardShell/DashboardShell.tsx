@@ -11,6 +11,7 @@ const pageDetails: Record<string, { activeItem: string; title: string }> = {
   "/bookings": { activeItem: "Bookings", title: "Bookings" },
   "/calendar": { activeItem: "Calendar", title: "Calendar" },
   "/payments": { activeItem: "Payments", title: "Payments" },
+  "/promos": { activeItem: "Promo", title: "Promo Codes" },
   "/services/pilates": { activeItem: "Pilates", title: "Pilates Classes" },
   "/settings": { activeItem: "Settings", title: "Settings" },
   "/staff": { activeItem: "Staff", title: "Staff" },
@@ -30,10 +31,12 @@ export function DashboardShell({
   const settingsView = searchParams.get("view");
   const details = pathname.startsWith("/services/pilates/")
     ? pageDetails["/services/pilates"]
+    : pathname.startsWith("/promos/")
+      ? pageDetails["/promos"]
     : pathname.startsWith("/settings/customers/")
       ? { activeItem: "User Management", title: "Customer Detail" }
       : pathname === "/settings" && settingsView === "users"
-        ? { activeItem: "User Management", title: "User Management" }
+        ? { activeItem: "Settings", title: "Settings" }
         : (pageDetails[pathname] ?? pageDetails["/dashboard"]);
 
   return (

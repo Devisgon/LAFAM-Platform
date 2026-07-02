@@ -3,11 +3,10 @@
 import { useState } from "react";
 import { LockKeyhole } from "lucide-react";
 import { AccessDeniedPanel } from "@/components/guards/AccessDeniedPanel";
-import { AdminCustomerManager } from "@/modules/customers";
 import { AdminUserManager } from "@/modules/users";
 import { ProfileSettings } from "./ProfileSettings";
 
-type SettingsView = "profile" | "users" | "history";
+type SettingsView = "profile" | "users";
 
 function hasPermission(
   permissions: readonly string[],
@@ -23,13 +22,9 @@ export function AdminSettings({
   initialView?: SettingsView;
   permissions?: readonly string[];
 }) {
-  const canManageCustomers =
-    hasPermission(permissions, "admin:customers:create") ||
-    hasPermission(permissions, "admin:customers:read");
   const canManageUsers = hasPermission(permissions, "admin:users:read");
-  const canOpenUsersTab = canManageCustomers || canManageUsers;
   const [view, setView] = useState<SettingsView>(
-    initialView === "users" && !canOpenUsersTab ? "profile" : initialView,
+    initialView === "users" && !canManageUsers ? "profile" : initialView,
   );
 
   return (
@@ -47,7 +42,7 @@ export function AdminSettings({
             {
               id: "users" as const,
               label: "Users",
-              disabled: !canOpenUsersTab,
+              disabled: !canManageUsers,
             },
           ].map((item) => (
             <button
@@ -73,27 +68,13 @@ export function AdminSettings({
       >
         {view === "profile" ? (
           <ProfileSettings />
-        ) : view === "users" ? (
-          <div className="grid gap-6">
-            {canManageCustomers ? (
-              <AdminCustomerManager />
-            ) : (
-              <AccessDeniedPanel
-                description="Customer management is not available for your account permissions."
-                title="Customer tools locked"
-              />
-            )}
-            {canManageUsers ? (
-              <AdminUserManager />
-            ) : (
-              <AccessDeniedPanel
-                description="Admin user management is available only to admin accounts."
-                title="User list locked"
-              />
-            )}
-          </div>
+        ) : canManageUsers ? (
+          <AdminUserManager showViewAction={false} />
         ) : (
-          <></>
+          <AccessDeniedPanel
+            description="Admin user management is available only to admin accounts."
+            title="User list locked"
+          />
         )}
       </section>
     </div>

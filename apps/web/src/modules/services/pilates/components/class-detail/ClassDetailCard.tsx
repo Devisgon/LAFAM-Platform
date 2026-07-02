@@ -143,7 +143,7 @@ export function ClassDetailCard({
                 Edit class
               </button>
               <button
-                className="rounded-lg bg-button-primary px-5 py-2 text-xs font-bold text-white shadow-sm shadow-primary/20 disabled:opacity-50"
+                className="rounded-lg bg-button-primary px-5 py-2 text-xs font-bold text-txt-primary shadow-sm shadow-primary/20 disabled:opacity-50"
                 disabled={detail.status !== "active"}
                 onClick={onCreateSchedule}
                 type="button"

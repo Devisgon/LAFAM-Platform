@@ -82,6 +82,7 @@ import type { ListCustomersQueryDto } from '../dto/list-customers-query.dto';
 import type { LookupCustomerQueryDto } from '../dto/lookup-customer-query.dto';
 import type { UpdateCustomerDto } from '../dto/update-customer.dto';
 import { CustomerRepository } from '../repositories/customer.repository';
+import { CustomerInviteRepository } from '../repositories/customer-invite.repository';
 import type {
   CustomerCreateMode,
   CustomerDeleteResult,
@@ -92,7 +93,10 @@ import type {
   CustomerLookupResult,
   CustomerMutationResult,
   CustomerProfileWithUser,
+  CustomerInvitationWithCustomer,
   SafeCustomerProfile,
+  SafeCustomerInvitation,
+  SafeCustomerProfileListItem,
 } from '../types/customer.types';
 
 interface CustomerPasswordCreateFields {
@@ -315,6 +319,29 @@ function mapCustomerToSafeResponse(
   };
 }
 
+function mapInvitationToSafeResponse(
+  invitation: CustomerInvitationWithCustomer,
+): SafeCustomerInvitation {
+  return {
+    id: invitation.invitation.id,
+    app_user_id: invitation.invitation.app_user_id,
+    email: invitation.invitation.email,
+    status: invitation.invitation.status,
+    expires_at: invitation.invitation.expires_at,
+    accepted_at: invitation.invitation.accepted_at,
+    expired_at: invitation.invitation.expired_at,
+    revoked_at: invitation.invitation.revoked_at,
+    created_by_admin_id: invitation.invitation.invited_by_admin_id ?? '',
+    accepted_by_app_user_id:
+      invitation.invitation.status === 'accepted'
+        ? invitation.invitation.app_user_id
+        : null,
+    revoked_by_admin_id: invitation.invitation.revoked_by_admin_id,
+    created_at: invitation.invitation.created_at,
+    updated_at: invitation.invitation.updated_at,
+  };
+}
+
 function buildCustomerListQuery(dto: ListCustomersQueryDto): CustomerListQuery {
   return {
     ...(dto.search !== undefined ? { search: dto.search } : {}),
@@ -349,6 +376,7 @@ export class CustomerAdminService {
   constructor(
     private readonly customerRepository: CustomerRepository,
     private readonly customerInviteService: CustomerInviteService,
+    private readonly customerInviteRepository: CustomerInviteRepository,
     private readonly authUserRepository: AuthUserRepository,
     private readonly supabaseAuthRepository: SupabaseAuthRepository,
     private readonly authAuditRepository: AuthAuditRepository,
@@ -365,8 +393,26 @@ export class CustomerAdminService {
       buildCustomerListQuery(dto),
     );
 
+    const customers = await Promise.all(
+      result.customers.map(
+        async (customer): Promise<SafeCustomerProfileListItem> => {
+          const latestInvitation =
+            await this.customerInviteRepository.findLatestByAppUserId({
+              appUserId: customer.app_user.id,
+            });
+
+          return {
+            ...mapCustomerToSafeResponse(customer),
+            latest_invitation: latestInvitation
+              ? mapInvitationToSafeResponse(latestInvitation)
+              : null,
+          };
+        },
+      ),
+    );
+
     return {
-      customers: result.customers.map(mapCustomerToSafeResponse),
+      customers,
       total: result.total,
       limit: result.limit,
       offset: result.offset,

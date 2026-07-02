@@ -480,6 +480,7 @@ function canRoleAccessPath(
     isRouteMatch(path, "/bookings") ||
     isRouteMatch(path, "/calendar") ||
     isRouteMatch(path, "/payments") ||
+    isRouteMatch(path, "/promos") ||
     isRouteMatch(path, "/services/pilates") ||
     isRouteMatch(path, "/settings") ||
     isRouteMatch(path, "/staff") ||
