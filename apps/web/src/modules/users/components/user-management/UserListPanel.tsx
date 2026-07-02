@@ -25,9 +25,15 @@ import { label } from "../../utils/userFormatters";
 import { FilterSelect } from "./UserControls";
 import { UserRow } from "./UserTableRows";
 
-export function UserListPanel() {
+export function UserListPanel({
+  roleFilter,
+  showViewAction = true,
+}: {
+  roleFilter?: AdminUserRole;
+  showViewAction?: boolean;
+}) {
   const [search, setSearch] = useState("");
-  const [role, setRole] = useState<AdminUserRole | "">("");
+  const [role, setRole] = useState<AdminUserRole | "">(roleFilter ?? "");
   const [status, setStatus] = useState<AdminUserStatus | "">("");
   const [category, setCategory] = useState<"all" | "registered" | "guest">(
     "all",
@@ -40,7 +46,7 @@ export function UserListPanel() {
   const filters = useMemo<AdminUserFilters>(
     () => ({
       ...(search.trim() ? { search } : {}),
-      ...(role ? { role } : {}),
+      ...(roleFilter ? { role: roleFilter } : role ? { role } : {}),
       ...(status ? { status } : {}),
       ...(category === "guest"
         ? { is_guest: true }
@@ -48,7 +54,7 @@ export function UserListPanel() {
           ? { is_guest: false }
           : {}),
     }),
-    [category, role, search, status],
+    [category, role, roleFilter, search, status],
   );
 
   const {
@@ -63,8 +69,13 @@ export function UserListPanel() {
   } = useAdminUsers(filters);
 
   const visibleUsers = useMemo(
-    () => users.filter((user) => user.status !== "deleted"),
-    [users],
+    () =>
+      users.filter(
+        (user) =>
+          user.status !== "deleted" &&
+          (!roleFilter || user.role === roleFilter),
+      ),
+    [roleFilter, users],
   );
   const pageCount = Math.max(1, Math.ceil(visibleUsers.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, pageCount);
@@ -170,6 +181,7 @@ export function UserListPanel() {
                   value={category}
                 />
                 <FilterSelect
+                  disabled={Boolean(roleFilter)}
                   label="Role"
                   onChange={(value) => {
                     setRole(value as AdminUserRole | "");
@@ -215,7 +227,12 @@ export function UserListPanel() {
               wrapperClassName="overflow-x-auto px-5"
             >
               {pagedUsers.map((user) => (
-                <UserRow key={user.id} onAction={setAction} user={user} />
+                <UserRow
+                  key={user.id}
+                  onAction={setAction}
+                  showViewAction={showViewAction}
+                  user={user}
+                />
               ))}
             </DataTable>
 

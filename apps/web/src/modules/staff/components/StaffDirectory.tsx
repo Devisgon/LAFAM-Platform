@@ -29,6 +29,31 @@ type StaffDirectoryProps = {
   currentRole?: string | null;
 };
 
+function StaffStatusToggle({
+  checked,
+  label,
+}: {
+  checked: boolean;
+  label: string;
+}) {
+  return (
+    <span
+      aria-checked={checked}
+      aria-label={label}
+      className={`mx-auto inline-flex h-7 w-12 items-center rounded-full border border-background-secondary p-1 transition ${
+        checked ? "bg-primary" : "bg-card-bg-secondary"
+      }`}
+      role="switch"
+    >
+      <span
+        className={`size-5 rounded-full bg-card-bg-primary shadow-sm transition ${
+          checked ? "translate-x-5" : "translate-x-0"
+        }`}
+      />
+    </span>
+  );
+}
+
 export function StaffDirectory({ currentRole = null }: StaffDirectoryProps) {
   const {
     staff,
@@ -250,7 +275,7 @@ export function StaffDirectory({ currentRole = null }: StaffDirectoryProps) {
                   <button
                     type="button"
                     onClick={() => void loadStaff().catch(() => undefined)}
-                    className="mt-3 rounded-lg bg-button-primary px-4 py-2 text-xs font-bold text-white"
+                    className="mt-3 rounded-lg bg-button-primary px-4 py-2 text-xs font-bold text-txt-primary"
                   >
                     Try again
                   </button>
@@ -352,12 +377,9 @@ export function StaffDirectory({ currentRole = null }: StaffDirectoryProps) {
                         key={member.id}
                       >
                         <td className="border-r border-background-secondary px-1 py-3">
-                          <input
-                            aria-label={`${member.display_name} active status`}
+                          <StaffStatusToggle
                             checked={isActiveStaff(member)}
-                            className="size-8 rounded-md border-background-secondary accent-primary"
-                            readOnly
-                            type="checkbox"
+                            label={`${member.display_name} active status`}
                           />
                         </td>
                         <td className="border-r border-background-secondary px-1 py-3 font-medium">
@@ -397,7 +419,7 @@ export function StaffDirectory({ currentRole = null }: StaffDirectoryProps) {
                               {member.staff_status === "deactivated" ? (
                                 <button
                                   aria-label={`Activate ${member.display_name}`}
-                                  className="flex size-9 items-center justify-center rounded-full bg-success text-white transition hover:opacity-85"
+                                  className="flex size-9 items-center justify-center rounded-full border border-background-secondary bg-primary text-txt-primary transition hover:opacity-85"
                                   onClick={() =>
                                     setPendingAction({
                                       action: "reactivate",
@@ -416,7 +438,7 @@ export function StaffDirectory({ currentRole = null }: StaffDirectoryProps) {
                               ) : (
                                 <button
                                   aria-label={`Deactivate ${member.display_name}`}
-                                  className="flex size-9 items-center justify-center rounded-full bg-warning text-white transition hover:opacity-85"
+                                  className="flex size-9 items-center justify-center rounded-full border border-background-secondary bg-warning text-txt-primary transition hover:opacity-85"
                                   onClick={() =>
                                     setPendingAction({
                                       action: "deactivate",
@@ -435,7 +457,7 @@ export function StaffDirectory({ currentRole = null }: StaffDirectoryProps) {
                               )}
                               <button
                                 aria-label={`Delete ${member.display_name}`}
-                                className="flex size-9 items-center justify-center rounded-full bg-error text-white transition hover:opacity-85"
+                                className="flex size-9 items-center justify-center rounded-full border border-background-secondary bg-error text-txt-primary transition hover:opacity-85"
                                 onClick={() =>
                                   setPendingAction({ action: "delete", member })
                                 }
@@ -501,7 +523,7 @@ export function StaffDirectory({ currentRole = null }: StaffDirectoryProps) {
                       >
                         Previous
                       </button>
-                      <span className="flex min-h-11 min-w-11 items-center justify-center bg-button-primary px-4 font-medium text-white">
+                      <span className="flex min-h-11 min-w-11 items-center justify-center bg-button-primary px-4 font-medium text-txt-primary">
                         {safeCurrentPage}
                       </span>
                       <button

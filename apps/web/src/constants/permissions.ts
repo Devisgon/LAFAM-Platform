@@ -23,6 +23,7 @@ export type AdminRouteKey =
   | "/dashboard"
   | "/bookings"
   | "/calendar"
+  | "/promos"
   | "/services/pilates"
   | "/settings/customers"
   | "/settings"
@@ -52,6 +53,7 @@ export const OPERATIONAL_DASHBOARD_ROUTES = [
 
 export const ADMIN_ONLY_ROUTES = [
   ROUTES.PAYMENTS,
+  ROUTES.PROMOS,
   ROUTES.USERS,
   ROUTES.WALLET,
 ] as const;
@@ -106,6 +108,10 @@ export const ADMIN_ROUTE_ACCESS: Record<AdminRouteKey, AdminRouteAccess> = {
   "/payments": {
     anyPermissions: ["admin:access_dashboard"],
     lockedLabel: "Admin payment access required",
+  },
+  "/promos": {
+    anyPermissions: ["admin:access_dashboard"],
+    lockedLabel: "Admin promo-code access required",
   },
   "/wallet": {
     anyPermissions: ["admin:access_dashboard"],

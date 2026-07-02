@@ -131,6 +131,44 @@ export function useAdminCustomers(filters: CustomerFilters) {
     [reconcileCustomer],
   );
 
+  const deleteCustomer = useCallback(async (customerId: string) => {
+    setIsMutating(true);
+    setError(null);
+
+    try {
+      await adminCustomersClient.delete(customerId);
+      setCustomers((current) =>
+        current.filter((customer) => customer.id !== customerId),
+      );
+      setTotal((current) => Math.max(0, current - 1));
+    } catch (requestError: unknown) {
+      setError(getErrorMessage(requestError));
+      throw requestError;
+    } finally {
+      setIsMutating(false);
+    }
+  }, []);
+
+  const resendCustomerInvitation = useCallback(
+    async (invitationId: string) => {
+      setIsMutating(true);
+      setError(null);
+
+      try {
+        const updatedCustomer =
+          await adminCustomersClient.resendInvitation(invitationId);
+        reconcileCustomer(updatedCustomer);
+        return updatedCustomer;
+      } catch (requestError: unknown) {
+        setError(getErrorMessage(requestError));
+        throw requestError;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [reconcileCustomer],
+  );
+
   return {
     customers,
     total,
@@ -143,5 +181,7 @@ export function useAdminCustomers(filters: CustomerFilters) {
     updateCustomer,
     deactivateCustomer,
     reactivateCustomer,
+    deleteCustomer,
+    resendCustomerInvitation,
   };
 }

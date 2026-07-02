@@ -230,7 +230,7 @@ export function ProfileSettings() {
                 src={avatarUrl ?? undefined}
               />
               <label
-                className="absolute -bottom-0.5 -right-0.5 inline-flex size-8 cursor-pointer items-center justify-center rounded-full border-2 border-card-bg-primary bg-button-primary text-white shadow-md transition-opacity hover:opacity-90"
+                className="absolute -bottom-0.5 -right-0.5 inline-flex size-8 cursor-pointer items-center justify-center rounded-full border-2 border-card-bg-primary bg-button-primary text-txt-primary shadow-md transition-opacity hover:opacity-90"
                 title="Change profile photo"
               >
                 <Icon name="camera" />

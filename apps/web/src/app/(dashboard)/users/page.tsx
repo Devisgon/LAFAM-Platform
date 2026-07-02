@@ -1,10 +1,10 @@
 import { PermissionGuard } from "@/components/guards/PermissionGuard";
-import { AdminUserManager } from "@/modules/users";
+import { AdminCustomerManager } from "@/modules/customers";
 
 export default function UsersPage() {
   return (
     <PermissionGuard route="/users">
-      <AdminUserManager />
+      <AdminCustomerManager />
     </PermissionGuard>
   );
 }

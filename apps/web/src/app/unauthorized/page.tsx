@@ -13,7 +13,7 @@ export default function UnauthorizedPage() {
           assigned to your account.
         </p>
         <Link
-          className="mt-6 inline-flex min-h-11 items-center rounded-sm bg-button-primary px-5 text-sm font-semibold text-white transition hover:opacity-90"
+          className="mt-6 inline-flex min-h-11 items-center rounded-sm border border-background-secondary bg-button-primary px-5 text-sm font-semibold text-txt-primary transition hover:opacity-90"
           href="/"
         >
           Go to sign in

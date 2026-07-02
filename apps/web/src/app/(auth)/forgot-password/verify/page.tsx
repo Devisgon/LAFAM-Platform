@@ -92,7 +92,7 @@ export default function VerifyResetOtpPage() {
               <button
                 type="submit"
                 disabled={isVerifyingResetOtp}
-                className="flex w-full items-center justify-center gap-2 rounded bg-primary px-5 py-3.5 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex w-full items-center justify-center gap-2 rounded bg-primary px-5 py-3.5 text-[16px] font-semibold text-txt-primary transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isVerifyingResetOtp ? "Verifying..." : "Verify Reset Code"}
                 <ArrowRight size={18} />
@@ -116,7 +116,7 @@ export default function VerifyResetOtpPage() {
 
               <Link
                 href="/forgot-password"
-                className="block w-full rounded bg-primary px-5 py-3.5 text-center text-[16px] font-semibold text-white transition hover:bg-black"
+                className="block w-full rounded bg-primary px-5 py-3.5 text-center text-[16px] font-semibold text-txt-primary transition hover:bg-black hover:text-white"
               >
                 Request New Code
               </Link>

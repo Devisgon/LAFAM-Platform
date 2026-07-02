@@ -44,6 +44,7 @@ import { PromoCodesModule } from '../promo-codes/promo-codes.module';
 import { KnetPaymentProviderService } from './application/knet-payment-provider.service';
 import { MockPaymentProviderService } from './application/mock-payment-provider.service';
 import { PaymentAdminService } from './application/payment-admin.service';
+import { PromoCodeAdminService } from './application/promo-code-admin.service';
 import { PaymentCallbackService } from './application/payment-callback.service';
 import { PaymentCheckoutService } from './application/payment-checkout.service';
 import {
@@ -56,10 +57,12 @@ import { WalletService } from './application/wallet.service';
 import { PaymentAdminController } from './controllers/payment-admin.controller';
 import { PaymentCustomerController } from './controllers/payment-customer.controller';
 import { PaymentPublicController } from './controllers/payment-public.controller';
+import { PromoCodeAdminController } from './controllers/promo-code-admin.controller';
 import { WalletAdminController } from './controllers/wallet-admin.controller';
 import { WalletCustomerController } from './controllers/wallet-customer.controller';
 import { PaymentRateLimitGuard } from './guards/payment-rate-limit.guard';
 import { PaymentRepository } from './repositories/payment.repository';
+import { PromoCodeRepository } from './repositories/promo-code.repository';
 import { WalletRepository } from './repositories/wallet.repository';
 
 @Module({
@@ -73,11 +76,13 @@ import { WalletRepository } from './repositories/wallet.repository';
     PaymentCustomerController,
     PaymentPublicController,
     PaymentAdminController,
+    PromoCodeAdminController,
     WalletCustomerController,
     WalletAdminController,
   ],
   providers: [
     PaymentRepository,
+    PromoCodeRepository,
     WalletRepository,
     PaymentPricingService,
     PaymentGatewayService,
@@ -87,6 +92,7 @@ import { WalletRepository } from './repositories/wallet.repository';
     PaymentCallbackService,
     WalletService,
     PaymentAdminService,
+    PromoCodeAdminService,
     PaymentRateLimitGuard,
     {
       provide: PAYMENT_MOCK_GATEWAY_PROVIDER,
@@ -106,6 +112,7 @@ import { WalletRepository } from './repositories/wallet.repository';
     PaymentCallbackService,
     WalletService,
     PaymentAdminService,
+    PromoCodeAdminService,
     PAYMENT_MOCK_GATEWAY_PROVIDER,
     PAYMENT_KNET_GATEWAY_PROVIDER,
   ],

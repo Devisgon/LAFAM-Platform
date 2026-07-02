@@ -16,6 +16,9 @@ export function CustomerCreateForm({
 }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [createMode, setCreateMode] = useState<"password" | "invite">(
+    "password",
+  );
 
   return (
     <form
@@ -26,7 +29,7 @@ export function CustomerCreateForm({
         <div>
           <h2 className="text-2xl font-medium">Add Customer User</h2>
           <p className="mt-1 text-sm text-txt-secondary">
-            Admin-created customer users are active and verified immediately.
+            Create an active customer with a password or send an invitation.
           </p>
         </div>
         <button
@@ -41,6 +44,21 @@ export function CustomerCreateForm({
       </header>
 
       <div className="grid gap-5 px-5 py-5 md:grid-cols-2">
+        <label className="grid gap-1.5 text-xs font-bold md:col-span-2">
+          Creation type
+          <select
+            className="min-h-12 w-full rounded-sm border border-background-secondary bg-card-bg-primary px-4 py-2 text-base text-txt-primary outline-none transition focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isSaving}
+            name="create_mode"
+            onChange={(event) =>
+              setCreateMode(event.target.value as "password" | "invite")
+            }
+            value={createMode}
+          >
+            <option value="password">Create active customer</option>
+            <option value="invite">Invite customer</option>
+          </select>
+        </label>
         <FormInput
           autoComplete="name"
           disabled={isSaving}
@@ -76,28 +94,32 @@ export function CustomerCreateForm({
           placeholder="2990-1011-2345"
           required
         />
-        <PasswordInput
-          autoComplete="new-password"
-          disabled={isSaving}
-          label="Password"
-          maxLength={128}
-          minLength={8}
-          name="password"
-          onToggle={() => setShowPassword((value) => !value)}
-          required
-          showPassword={showPassword}
-        />
-        <PasswordInput
-          autoComplete="new-password"
-          disabled={isSaving}
-          label="Confirm password"
-          maxLength={128}
-          minLength={8}
-          name="confirm_password"
-          onToggle={() => setShowConfirmPassword((value) => !value)}
-          required
-          showPassword={showConfirmPassword}
-        />
+        {createMode === "password" ? (
+          <>
+            <PasswordInput
+              autoComplete="new-password"
+              disabled={isSaving}
+              label="Password"
+              maxLength={128}
+              minLength={8}
+              name="password"
+              onToggle={() => setShowPassword((value) => !value)}
+              required
+              showPassword={showPassword}
+            />
+            <PasswordInput
+              autoComplete="new-password"
+              disabled={isSaving}
+              label="Confirm password"
+              maxLength={128}
+              minLength={8}
+              name="confirm_password"
+              onToggle={() => setShowConfirmPassword((value) => !value)}
+              required
+              showPassword={showConfirmPassword}
+            />
+          </>
+        ) : null}
         <FormInput
           autoComplete="off"
           defaultValue="Asia/Kuwait"
@@ -115,7 +137,11 @@ export function CustomerCreateForm({
           disabled={isSaving}
           type="submit"
         >
-          {isSaving ? "Creating..." : "Create customer user"}
+          {isSaving
+            ? "Saving..."
+            : createMode === "password"
+              ? "Create customer user"
+              : "Send customer invite"}
         </button>
         <button
           className="min-h-11 rounded-sm border border-background-secondary px-4 py-3 text-xs font-bold text-txt-secondary transition hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-60"

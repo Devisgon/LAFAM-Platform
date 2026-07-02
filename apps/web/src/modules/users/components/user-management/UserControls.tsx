@@ -6,11 +6,13 @@ import { ChevronDown, Eye, Power, RotateCcw, Trash2 } from "lucide-react";
 import { fieldClass } from "../../constants/userUi.constants";
 
 export function FilterSelect({
+  disabled = false,
   label: filterLabel,
   options,
   value,
   onChange,
 }: {
+  disabled?: boolean;
   label: string;
   options: Array<[string, string]>;
   value: string;
@@ -22,6 +24,7 @@ export function FilterSelect({
       <select
         aria-label={filterLabel}
         className={`${fieldClass} appearance-none pr-10`}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         value={value}
       >
@@ -50,12 +53,37 @@ export function ViewCustomerLink({
   return (
     <Link
       aria-label={actionLabel}
-      className="flex size-9 items-center justify-center rounded-full bg-primary text-white shadow-sm transition hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      className="flex size-9 items-center justify-center rounded-full border border-background-secondary bg-primary text-txt-primary shadow-sm transition hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       href={href}
       title={actionLabel}
     >
       <Eye aria-hidden="true" size={17} strokeWidth={2.5} />
     </Link>
+  );
+}
+
+export function UserStatusToggle({
+  checked,
+  label,
+}: {
+  checked: boolean;
+  label: string;
+}) {
+  return (
+    <span
+      aria-checked={checked}
+      aria-label={label}
+      className={`inline-flex h-7 w-12 items-center rounded-full border border-background-secondary p-1 transition ${
+        checked ? "bg-primary" : "bg-card-bg-secondary"
+      }`}
+      role="switch"
+    >
+      <span
+        className={`size-5 rounded-full bg-card-bg-primary shadow-sm transition ${
+          checked ? "translate-x-5" : "translate-x-0"
+        }`}
+      />
+    </span>
   );
 }
 
@@ -81,7 +109,7 @@ export function ActionButton({
   return (
     <button
       aria-label={actionLabel}
-      className={`flex size-9 items-center justify-center rounded-full transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary shadow-sm ${tones[tone]}`}
+      className={`flex size-9 items-center justify-center rounded-full border border-background-secondary shadow-sm transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${tones[tone]}`}
       onClick={onClick}
       title={actionLabel}
       type="button"

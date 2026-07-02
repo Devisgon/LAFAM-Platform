@@ -64,6 +64,7 @@ function validatePassword(password: string, input: {
 }
 
 export function buildCreatePayload(formData: FormData): CreateCustomerPayload {
+  const createMode = normalizeText(formData.get("create_mode"));
   const password = String(formData.get("password") ?? "");
   const confirmPassword = String(formData.get("confirm_password") ?? "");
   const fullName = normalizeText(formData.get("full_name"));
@@ -71,9 +72,6 @@ export function buildCreatePayload(formData: FormData): CreateCustomerPayload {
   const phone = normalizePhone(formData.get("phone"));
   const civilId = normalizeCivilId(formData.get("civil_id"));
 
-  if (password !== confirmPassword) {
-    throw new Error("Password and confirmation do not match.");
-  }
   if (!fullName) {
     throw new Error("Full name is required.");
   }
@@ -87,15 +85,23 @@ export function buildCreatePayload(formData: FormData): CreateCustomerPayload {
     throw new Error("Civil ID must contain exactly 12 digits.");
   }
 
-  validatePassword(password, { email, fullName });
-
-  return {
+  const payload: CreateCustomerPayload = {
     full_name: fullName,
     email,
     phone,
     civil_id: civilId,
-    password,
-    confirm_password: confirmPassword,
     timezone: normalizeOptionalText(formData.get("timezone")),
   };
+
+  if (createMode !== "invite") {
+    if (password !== confirmPassword) {
+      throw new Error("Password and confirmation do not match.");
+    }
+
+    validatePassword(password, { email, fullName });
+    payload.password = password;
+    payload.confirm_password = confirmPassword;
+  }
+
+  return payload;
 }

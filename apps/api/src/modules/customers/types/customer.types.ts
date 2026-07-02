@@ -308,8 +308,12 @@ export interface SafeCustomerInvitation {
   readonly updated_at: string;
 }
 
+export interface SafeCustomerProfileListItem extends SafeCustomerProfile {
+  readonly latest_invitation: SafeCustomerInvitation | null;
+}
+
 export interface CustomerListResult {
-  readonly customers: readonly SafeCustomerProfile[];
+  readonly customers: readonly SafeCustomerProfileListItem[];
   readonly total: number;
   readonly limit: number;
   readonly offset: number;

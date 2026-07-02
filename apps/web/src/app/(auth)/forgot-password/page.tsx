@@ -88,7 +88,7 @@ export default function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={isRequestingPasswordReset}
-              className="flex w-full items-center justify-center gap-2 rounded bg-primary px-5 py-3.5 text-[16px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded bg-primary px-5 py-3.5 text-[16px] font-semibold text-txt-primary transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isRequestingPasswordReset ? "Sending..." : "Send Reset Code"}
               <ArrowRight size={18} />
