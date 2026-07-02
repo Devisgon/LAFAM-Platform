@@ -3,7 +3,7 @@
  * LAFAM Payment repository.
  *
  * Role:
- * - Owns Payment Module database access for payments, payment transactions, discounts, and promo codes.
+ * - Owns Payment Module database access for payments, payment transactions, and payment discounts.
  * - Wraps payment atomic RPC calls.
  * - Provides customer/admin payment lookup and list helpers.
  * - Converts provider/database failures into frontend-safe AppError instances.
@@ -12,7 +12,7 @@
  * - This repository does not perform authorization.
  * - This repository does not decide payment lifecycle rules.
  * - This repository does not verify KNET/provider signatures.
- * - This repository does not calculate trusted payment amounts.
+ * - This repository does not calculate trusted payment amounts or promo-code discounts.
  * - This repository does not mutate wallet balances directly.
  * - Services and domain policies remain the business-rule authority.
  */
@@ -58,7 +58,6 @@ import type {
   PaymentTransactionListQuery,
   PaymentTransactionRecord,
   PaymentUpdateRecord,
-  PromoCodeRecord,
   RefundPaymentAtomicResult,
 } from '../types/payment.types';
 
@@ -96,6 +95,7 @@ interface CreatePaymentIntentAtomicInput {
   readonly gateway_invoice_id: string | null;
   readonly expires_at: string | null;
   readonly idempotency_key: string | null;
+  readonly promo_code_redemption_id: string | null;
   readonly metadata: DatabaseJsonObject;
 }
 
@@ -216,6 +216,17 @@ function mapDatabaseError(error: unknown): AppError {
 
   if (
     error.code === '23505' &&
+    (message.includes('payment_discounts_promo_code_redemption') ||
+      message.includes('promo_code_redemption_id'))
+  ) {
+    return AppError.promoCodeRedemptionConflict(
+      'This promo-code redemption is already linked to a payment discount.',
+      details,
+    );
+  }
+
+  if (
+    error.code === '23505' &&
     (message.includes('payments_idempotency') ||
       message.includes('payments_idempotency_key') ||
       message.includes('payments_gateway_reference') ||
@@ -227,9 +238,20 @@ function mapDatabaseError(error: unknown): AppError {
     );
   }
 
+  if (
+    error.code === '23503' &&
+    (message.includes('payment_discounts_promo_code_redemption') ||
+      message.includes('promo_code_redemption_id'))
+  ) {
+    return AppError.promoCodeRedemptionNotFound(
+      'The related promo-code redemption was not found.',
+      details,
+    );
+  }
+
   if (error.code === '23503') {
     return AppError.invalidRequest(
-      'A related payment, booking, customer, promo, or admin record was not found.',
+      'A related payment, booking, customer, promo-code redemption, or admin record was not found.',
       details,
     );
   }
@@ -305,6 +327,17 @@ function firstRpcRow<TRecord>(
   throw AppError.databaseOperationFailed(new Error(fallbackMessage));
 }
 
+function buildPaymentIntentMetadata(
+  input: CreatePaymentIntentAtomicInput,
+): DatabaseJsonObject {
+  return {
+    ...input.metadata,
+    ...(hasText(input.promo_code_redemption_id)
+      ? { promo_code_redemption_id: input.promo_code_redemption_id }
+      : {}),
+  };
+}
+
 @Injectable()
 export class PaymentRepository {
   constructor(
@@ -351,7 +384,7 @@ export class PaymentRepository {
         p_gateway_invoice_id: input.gateway_invoice_id,
         p_expires_at: input.expires_at,
         p_idempotency_key: input.idempotency_key,
-        p_metadata: input.metadata,
+        p_metadata: buildPaymentIntentMetadata(input),
       },
     );
 
@@ -698,29 +731,6 @@ export class PaymentRepository {
     }
 
     return data ?? [];
-  }
-
-  async findActivePromoCodeByCode(
-    code: string,
-  ): Promise<PromoCodeRecord | null> {
-    const normalizedCode = code.trim().toUpperCase();
-
-    if (normalizedCode.length === 0) {
-      return null;
-    }
-
-    const { data, error } = await this.adminClient
-      .from('promo_codes')
-      .select('*')
-      .eq('code', normalizedCode)
-      .eq('status', 'active')
-      .maybeSingle();
-
-    if (error) {
-      throw mapDatabaseError(error);
-    }
-
-    return data;
   }
 
   async markPaymentPaidAtomic(

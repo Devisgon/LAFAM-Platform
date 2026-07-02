@@ -4,13 +4,13 @@ info:
   version: 0.1.0
   description:
     'LAFAM backend API contract for the single-tenant Pilates and ladies salon booking platform. The contract exposes
-    Core, Auth, Customers, Staff, Pilates Classes, Schedules, Bookings, Payment, Wallet, KNET callback/webhook, and Admin management
+    Core, Auth, Customers, Staff, Pilates Classes, Schedules, Bookings, Promo Codes, Payment, Wallet, KNET callback/webhook, and Admin management
     endpoints.
 
 
     Payment implementation uses a backend-owned hosted redirect flow for KNET/card, internal wallet debit for wallet payments,
-    server-side price calculation, payment confirmation after provider verification, and wallet ledger tracking. The backend
-    does not collect or store raw card data.
+    server-side price calculation, promo-code validation/reservation before payment creation, payment confirmation after provider
+    verification, and wallet ledger tracking. The backend does not collect or store raw card data.
 
 
     **OpenAPI JSON:** [openapi.json](/api/openapi.json)
@@ -50,6 +50,10 @@ tags:
     description: Protected customer Pilates booking, bulk booking order, private trainer booking, availability, and waitlist endpoints.
   - name: Bookings - Admin
     description: Protected operational booking endpoints. Admin, super_admin, staff, and trainer have full booking-management scope in the current access model.
+  - name: Promo Codes - Customer
+    description: Protected customer promo-code preview endpoint. Preview calculates backend-owned discount eligibility but does not reserve or consume promo-code usage.
+  - name: Promo Codes - Admin
+    description: Protected promo-code management and redemption-history endpoints for admin, super_admin, and limited staff workflows.
   - name: Payments - Customer
     description: Protected customer checkout, booking-order checkout, payment history, payment detail, transaction, and verification endpoints.
   - name: Payments - Public
@@ -3732,10 +3736,67 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /promo-codes/preview:
+    post:
+      summary: Preview customer promo code
+      description: Validates a promo code against a backend-resolved checkout target and returns the backend-calculated subtotal, discount, and final amount. Preview does not reserve, redeem, or consume promo-code usage. Checkout must revalidate and reserve the promo code again when payment is created.
+      operationId: promoCodeCustomerPreviewPromoCode
+      tags:
+        - Promo Codes - Customer
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromoCodePreviewRequest'
+            examples:
+              bookingPromoPreview:
+                summary: Booking promo preview
+                value:
+                  promo_code: INTRO10
+                  target_type: booking
+                  booking_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  payment_method: knet
+              privateBookingPromoPreview:
+                summary: Private booking promo preview
+                value:
+                  promo_code: PRIVATE10
+                  target_type: private_booking
+                  private_booking_id: 4fa85f64-5717-4562-b3fc-2c963f66afa7
+                  payment_method: card
+              bookingOrderPromoPreview:
+                summary: Booking-order promo preview
+                value:
+                  promo_code: BOOK5SAVE15
+                  target_type: booking_order
+                  booking_order_id: 5fa85f64-5717-4562-b3fc-2c963f66afa8
+                  payment_method: wallet
+      responses:
+        '200':
+          description: Promo code preview calculated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodePreviewSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   /payments/checkout:
     post:
       summary: Create customer checkout payment
-      description: Creates a backend-owned payment intent for booking, private trainer booking, booking order, or wallet top-up. KNET/card return a hosted redirect URL. Wallet payment uses internal wallet debit and never trusts frontend amount.
+      description: Creates a backend-owned payment intent for booking, private trainer booking, booking order, or wallet top-up. For booking, private_booking, and booking_order, an optional promo_code is revalidated and reserved before payment creation. KNET/card return a hosted redirect URL. Wallet payment uses internal wallet debit and never trusts frontend amount. Wallet top-up does not support promo codes.
       operationId: paymentCustomerCreateCheckout
       tags:
         - Payments - Customer
@@ -3755,6 +3816,14 @@ paths:
                   booking_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
                   payment_method: knet
                   idempotency_key: booking-checkout-001
+              knetBookingWithPromo:
+                summary: KNET booking payment with promo code
+                value:
+                  target_type: booking
+                  booking_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  payment_method: knet
+                  promo_code: INTRO10
+                  idempotency_key: booking-checkout-promo-001
               cardPrivateBooking:
                 summary: Card private booking payment
                 value:
@@ -4082,6 +4151,559 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '429':
           $ref: '#/components/responses/RateLimited'
+  /admin/promo-codes:
+    get:
+      summary: List promo codes
+      description: Returns promo-code rules for admin/super_admin review. Staff users are restricted by service policy to their permitted promo-code visibility.
+      operationId: promoCodeAdminListPromoCodes
+      tags:
+        - Promo Codes - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 160
+          description: Case-insensitive search over promo-code code/description.
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PromoCodeStatus'
+        - name: discount_type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PromoCodeDiscountType'
+        - name: target_type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PromoCodeTargetType'
+        - name: payment_method
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PromoCodePaymentMethod'
+        - name: created_by_admin_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: created_by_role
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PromoCodeCreatorRole'
+        - name: starts_from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: starts_to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: ends_from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: ends_to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: include_deleted
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PromoCodeSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentSortDirection'
+      responses:
+        '200':
+          description: Promo codes retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeListSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    post:
+      summary: Create promo code
+      description: Creates a controlled promo-code rule. Admin and super_admin can create broader campaigns; staff-created codes are restricted by domain policy.
+      operationId: promoCodeAdminCreatePromoCode
+      tags:
+        - Promo Codes - Admin
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePromoCodeRequest'
+            examples:
+              percentagePromo:
+                summary: Percentage promo
+                value:
+                  code: INTRO10
+                  description: 10% off first Pilates booking
+                  discount_type: percentage
+                  discount_value: 10
+                  max_discount_amount: 5
+                  starts_at: '2026-07-01T00:00:00.000Z'
+                  ends_at: '2026-07-31T23:59:59.000Z'
+                  max_redemptions: 100
+                  per_user_limit: 1
+                  status: draft
+                  currency: KWD
+                  minimum_order_amount: 0
+                  first_time_customer_only: true
+                  allowed_target_types:
+                    - booking
+                  allowed_payment_methods:
+                    - knet
+                    - card
+                    - wallet
+                  target_ids:
+                    class_ids: []
+                    schedule_ids: []
+                    trainer_staff_profile_ids: []
+                    customer_user_ids: []
+                  admin_notes: July acquisition campaign.
+                  metadata:
+                    campaign: july_first_booking
+              fixedBookingOrderPromo:
+                summary: Fixed amount booking-order promo
+                value:
+                  code: BOOK5SAVE5
+                  description: 5 KWD off selected booking orders
+                  discount_type: fixed_amount
+                  discount_value: 5
+                  max_discount_amount: null
+                  starts_at: '2026-07-01T00:00:00.000Z'
+                  ends_at: '2026-07-15T23:59:59.000Z'
+                  max_redemptions: 50
+                  per_user_limit: 1
+                  status: active
+                  currency: KWD
+                  minimum_order_amount: 30
+                  first_time_customer_only: false
+                  allowed_target_types:
+                    - booking_order
+                  allowed_payment_methods:
+                    - knet
+                    - card
+      responses:
+        '201':
+          description: Promo code created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/promo-codes/redemptions:
+    get:
+      summary: List promo-code redemptions
+      description: Returns promo-code redemption history across promo codes. Staff access is restricted by service policy.
+      operationId: promoCodeAdminListAllRedemptions
+      tags:
+        - Promo Codes - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: promo_code_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: payment_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PromoCodeRedemptionStatus'
+        - name: target_type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PromoCodeTargetType'
+        - name: booking_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: private_booking_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: booking_order_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: from_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PromoCodeRedemptionSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentSortDirection'
+      responses:
+        '200':
+          description: Promo-code redemptions retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeRedemptionListSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/promo-codes/{promoCodeId}:
+    get:
+      summary: Get promo code
+      operationId: promoCodeAdminGetPromoCodeById
+      tags:
+        - Promo Codes - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PromoCodeIdPathParam'
+      responses:
+        '200':
+          description: Promo code retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    patch:
+      summary: Update promo code
+      description: Updates editable promo-code fields. Unsafe discount/target edits are blocked after redemptions exist.
+      operationId: promoCodeAdminUpdatePromoCode
+      tags:
+        - Promo Codes - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PromoCodeIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePromoCodeRequest'
+      responses:
+        '200':
+          description: Promo code updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    delete:
+      summary: Soft-delete promo code
+      description: Soft-deletes a promo code. Redeemed promo-code history remains available for payment audit and receipt reconstruction.
+      operationId: promoCodeAdminDeletePromoCode
+      tags:
+        - Promo Codes - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PromoCodeIdPathParam'
+      responses:
+        '200':
+          description: Promo code deleted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/promo-codes/{promoCodeId}/activate:
+    post:
+      summary: Activate promo code
+      operationId: promoCodeAdminActivatePromoCode
+      tags:
+        - Promo Codes - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PromoCodeIdPathParam'
+      responses:
+        '200':
+          description: Promo code activated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/promo-codes/{promoCodeId}/pause:
+    post:
+      summary: Pause promo code
+      operationId: promoCodeAdminPausePromoCode
+      tags:
+        - Promo Codes - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PromoCodeIdPathParam'
+      responses:
+        '200':
+          description: Promo code paused successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/promo-codes/{promoCodeId}/redemptions:
+    get:
+      summary: List redemptions for one promo code
+      operationId: promoCodeAdminListPromoCodeRedemptions
+      tags:
+        - Promo Codes - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PromoCodeIdPathParam'
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: payment_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PromoCodeRedemptionStatus'
+        - name: target_type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PromoCodeTargetType'
+        - name: booking_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: private_booking_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: booking_order_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: from_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PromoCodeRedemptionSortField'
+        - name: sort_direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentSortDirection'
+      responses:
+        '200':
+          description: Promo-code redemptions retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeRedemptionListSuccessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /admin/payments:
     get:
@@ -4185,7 +4807,7 @@ paths:
   /admin/payments/expire-unpaid:
     post:
       summary: Expire unpaid payment intents
-      description: Expires unpaid payment intents and pending payment booking holds through backend-controlled logic.
+      description: Expires unpaid payment intents and pending payment booking holds through backend-controlled logic. Attached reserved promo-code redemptions are released so limited promo usage is not held forever by abandoned checkout attempts.
       operationId: paymentAdminExpireUnpaid
       tags:
         - Payments - Admin
@@ -4764,6 +5386,14 @@ paths:
           $ref: '#/components/responses/RateLimited'
 components:
   parameters:
+    PromoCodeIdPathParam:
+      name: promoCodeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Promo code id.
     PaymentIdPathParam:
       name: paymentId
       in: path
@@ -10558,7 +11188,690 @@ components:
       additionalProperties: true
       example:
         source: checkout_screen
+    PromoCodeDiscountType:
+      type: string
+      enum:
+        - percentage
+        - fixed_amount
+      example: percentage
 
+    PromoCodeStatus:
+      type: string
+      enum:
+        - draft
+        - active
+        - inactive
+        - paused
+        - expired
+        - exhausted
+        - deleted
+      example: active
+
+    PromoCodeRedemptionStatus:
+      type: string
+      enum:
+        - reserved
+        - redeemed
+        - released
+        - voided
+      example: redeemed
+
+    PromoCodeTargetType:
+      type: string
+      enum:
+        - booking
+        - private_booking
+        - booking_order
+      example: booking
+
+    PromoCodePaymentMethod:
+      type: string
+      enum:
+        - knet
+        - card
+        - wallet
+      example: knet
+
+    PromoCodeCreatorRole:
+      type: string
+      enum:
+        - super_admin
+        - admin
+        - staff
+        - system
+      example: admin
+
+    PromoCodeSortField:
+      type: string
+      enum:
+        - created_at
+        - updated_at
+        - code
+        - status
+        - starts_at
+        - ends_at
+        - redemption_count
+      default: created_at
+      example: created_at
+
+    PromoCodeRedemptionSortField:
+      type: string
+      enum:
+        - created_at
+        - reserved_at
+        - redeemed_at
+        - released_at
+        - expires_at
+      default: created_at
+      example: created_at
+
+    PromoCodeTargets:
+      type: object
+      required:
+        - class_ids
+        - schedule_ids
+        - trainer_staff_profile_ids
+        - customer_user_ids
+      properties:
+        class_ids:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        schedule_ids:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        trainer_staff_profile_ids:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        customer_user_ids:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+
+    CreatePromoCodeRequest:
+      type: object
+      required:
+        - code
+        - discount_type
+        - discount_value
+        - allowed_target_types
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 64
+          pattern: '^[A-Z0-9][A-Z0-9_-]*[A-Z0-9]$'
+          description: Promo code. Backend normalizes to uppercase.
+          example: INTRO10
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+          example: 10% off first Pilates booking.
+        discount_type:
+          $ref: '#/components/schemas/PromoCodeDiscountType'
+        discount_value:
+          type: number
+          minimum: 0.001
+          maximum: 100
+          example: 10
+        max_discount_amount:
+          type: number
+          minimum: 0.001
+          nullable: true
+          example: 5
+        starts_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2026-07-01T00:00:00.000Z'
+        ends_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2026-07-31T23:59:59.000Z'
+        max_redemptions:
+          type: integer
+          minimum: 1
+          nullable: true
+          example: 100
+        per_user_limit:
+          type: integer
+          minimum: 1
+          nullable: true
+          example: 1
+        status:
+          $ref: '#/components/schemas/PromoCodeStatus'
+        currency:
+          allOf:
+            - $ref: '#/components/schemas/PaymentCurrency'
+          nullable: true
+          description: KWD is currently the only supported promo-code currency.
+        minimum_order_amount:
+          type: number
+          minimum: 0
+          example: 0
+        first_time_customer_only:
+          type: boolean
+          default: false
+          example: true
+        allowed_target_types:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/PromoCodeTargetType'
+        allowed_payment_methods:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          nullable: true
+          items:
+            $ref: '#/components/schemas/PromoCodePaymentMethod'
+        target_ids:
+          allOf:
+            - $ref: '#/components/schemas/PromoCodeTargets'
+          nullable: true
+        admin_notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+          example: Campaign approved by management.
+        metadata:
+          $ref: '#/components/schemas/PaymentMetadata'
+      additionalProperties: false
+
+    UpdatePromoCodeRequest:
+      type: object
+      properties:
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+        discount_type:
+          $ref: '#/components/schemas/PromoCodeDiscountType'
+        discount_value:
+          type: number
+          minimum: 0.001
+          maximum: 100
+        max_discount_amount:
+          type: number
+          minimum: 0.001
+          nullable: true
+        starts_at:
+          type: string
+          format: date-time
+          nullable: true
+        ends_at:
+          type: string
+          format: date-time
+          nullable: true
+        max_redemptions:
+          type: integer
+          minimum: 1
+          nullable: true
+        per_user_limit:
+          type: integer
+          minimum: 1
+          nullable: true
+        status:
+          $ref: '#/components/schemas/PromoCodeStatus'
+        minimum_order_amount:
+          type: number
+          minimum: 0
+        first_time_customer_only:
+          type: boolean
+        allowed_target_types:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/PromoCodeTargetType'
+        allowed_payment_methods:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/PromoCodePaymentMethod'
+        target_ids:
+          $ref: '#/components/schemas/PromoCodeTargets'
+        admin_notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+        metadata:
+          $ref: '#/components/schemas/PaymentMetadata'
+      additionalProperties: false
+
+    PromoCodeUsageSummary:
+      type: object
+      required:
+        - redemption_count
+        - max_redemptions
+        - per_user_limit
+        - remaining_redemptions
+      properties:
+        redemption_count:
+          type: integer
+          minimum: 0
+          example: 8
+        max_redemptions:
+          type: integer
+          nullable: true
+          example: 100
+        per_user_limit:
+          type: integer
+          nullable: true
+          example: 1
+        remaining_redemptions:
+          type: integer
+          nullable: true
+          example: 92
+
+    PromoCode:
+      type: object
+      required:
+        - id
+        - code
+        - description
+        - discount_type
+        - discount_value
+        - max_discount_amount
+        - starts_at
+        - ends_at
+        - max_redemptions
+        - per_user_limit
+        - redemption_count
+        - status
+        - currency
+        - minimum_order_amount
+        - first_time_customer_only
+        - allowed_target_types
+        - allowed_payment_methods
+        - targets
+        - usage
+        - created_by_admin_id
+        - updated_by_admin_id
+        - created_by_role
+        - admin_notes
+        - metadata
+        - created_at
+        - updated_at
+        - deleted_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          example: INTRO10
+        description:
+          type: string
+          nullable: true
+        discount_type:
+          $ref: '#/components/schemas/PromoCodeDiscountType'
+        discount_value:
+          type: number
+          example: 10
+        max_discount_amount:
+          type: number
+          nullable: true
+          example: 5
+        starts_at:
+          type: string
+          format: date-time
+          nullable: true
+        ends_at:
+          type: string
+          format: date-time
+          nullable: true
+        max_redemptions:
+          type: integer
+          nullable: true
+        per_user_limit:
+          type: integer
+          nullable: true
+        redemption_count:
+          type: integer
+          minimum: 0
+        status:
+          $ref: '#/components/schemas/PromoCodeStatus'
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+        minimum_order_amount:
+          type: number
+          example: 0
+        first_time_customer_only:
+          type: boolean
+        allowed_target_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromoCodeTargetType'
+        allowed_payment_methods:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromoCodePaymentMethod'
+        targets:
+          $ref: '#/components/schemas/PromoCodeTargets'
+        usage:
+          $ref: '#/components/schemas/PromoCodeUsageSummary'
+        created_by_admin_id:
+          type: string
+          format: uuid
+          nullable: true
+        updated_by_admin_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_by_role:
+          allOf:
+            - $ref: '#/components/schemas/PromoCodeCreatorRole'
+          nullable: true
+        admin_notes:
+          type: string
+          nullable: true
+        metadata:
+          $ref: '#/components/schemas/PaymentMetadata'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    PromoCodeListResponse:
+      type: object
+      required:
+        - promo_codes
+        - total
+        - limit
+        - offset
+      properties:
+        promo_codes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromoCode'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+
+    PromoCodeSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PromoCode'
+
+    PromoCodeListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PromoCodeListResponse'
+
+    PromoCodeRedemption:
+      type: object
+      required:
+        - id
+        - promo_code_id
+        - user_id
+        - payment_id
+        - target_type
+        - booking_id
+        - private_booking_id
+        - booking_order_id
+        - payment_method
+        - idempotency_key
+        - status
+        - subtotal_amount
+        - discount_amount
+        - final_amount
+        - currency
+        - reserved_at
+        - redeemed_at
+        - released_at
+        - expires_at
+        - release_reason
+        - metadata
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        promo_code_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        payment_id:
+          type: string
+          format: uuid
+          nullable: true
+        target_type:
+          $ref: '#/components/schemas/PromoCodeTargetType'
+        booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+        booking_order_id:
+          type: string
+          format: uuid
+          nullable: true
+        payment_method:
+          $ref: '#/components/schemas/PromoCodePaymentMethod'
+        idempotency_key:
+          type: string
+          maxLength: 160
+        status:
+          $ref: '#/components/schemas/PromoCodeRedemptionStatus'
+        subtotal_amount:
+          type: number
+          example: 15
+        discount_amount:
+          type: number
+          example: 1.5
+        final_amount:
+          type: number
+          example: 13.5
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+        reserved_at:
+          type: string
+          format: date-time
+        redeemed_at:
+          type: string
+          format: date-time
+          nullable: true
+        released_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        release_reason:
+          type: string
+          nullable: true
+        metadata:
+          $ref: '#/components/schemas/PaymentMetadata'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PromoCodeRedemptionListResponse:
+      type: object
+      required:
+        - redemptions
+        - total
+        - limit
+        - offset
+      properties:
+        redemptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromoCodeRedemption'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+
+    PromoCodeRedemptionListSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PromoCodeRedemptionListResponse'
+
+    PromoCodePreviewRequest:
+      type: object
+      required:
+        - promo_code
+        - target_type
+      properties:
+        promo_code:
+          type: string
+          minLength: 2
+          maxLength: 64
+          pattern: '^[A-Z0-9][A-Z0-9_-]*[A-Z0-9]$'
+          description: Promo code to preview. Backend normalizes to uppercase.
+          example: INTRO10
+        target_type:
+          $ref: '#/components/schemas/PromoCodeTargetType'
+        booking_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Required only when target_type is booking.
+        private_booking_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Required only when target_type is private_booking.
+        booking_order_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Required only when target_type is booking_order.
+        payment_method:
+          allOf:
+            - $ref: '#/components/schemas/PromoCodePaymentMethod'
+          nullable: true
+          description: Optional payment method context for payment-method-restricted promo codes. Defaults to knet during preview if omitted.
+      additionalProperties: false
+
+    PromoCodePreviewSummary:
+      type: object
+      required:
+        - id
+        - code
+        - description
+        - discount_type
+        - discount_value
+        - max_discount_amount
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          example: INTRO10
+        description:
+          type: string
+          nullable: true
+        discount_type:
+          $ref: '#/components/schemas/PromoCodeDiscountType'
+        discount_value:
+          type: number
+          example: 10
+        max_discount_amount:
+          type: number
+          nullable: true
+          example: 5
+
+    PromoCodePricingPreview:
+      type: object
+      required:
+        - subtotal_amount
+        - discount_amount
+        - final_amount
+        - currency
+      properties:
+        subtotal_amount:
+          type: number
+          example: 15
+        discount_amount:
+          type: number
+          example: 1.5
+        final_amount:
+          type: number
+          example: 13.5
+        currency:
+          $ref: '#/components/schemas/PaymentCurrency'
+
+    PromoCodePreviewResponse:
+      type: object
+      required:
+        - promo_code
+        - pricing
+        - applies
+      properties:
+        promo_code:
+          $ref: '#/components/schemas/PromoCodePreviewSummary'
+        pricing:
+          $ref: '#/components/schemas/PromoCodePricingPreview'
+        applies:
+          type: boolean
+          example: true
+
+    PromoCodePreviewSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiSuccessBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PromoCodePreviewResponse'
     CreateCheckoutPaymentRequest:
       type: object
       required:
@@ -10600,7 +11913,9 @@ components:
           type: string
           minLength: 2
           maxLength: 64
+          pattern: '^[A-Z0-9][A-Z0-9_-]*[A-Z0-9]$'
           nullable: true
+          description: Optional promo code. Accepted only for booking, private_booking, and booking_order checkout. Wallet top-up rejects promo_code. The backend validates, reserves, and recalculates the discount server-side.
           example: INTRO10
         idempotency_key:
           type: string
@@ -10916,6 +12231,7 @@ components:
         - id
         - payment_id
         - promo_code_id
+        - promo_code_redemption_id
         - code
         - discount_amount
         - metadata
@@ -10931,6 +12247,11 @@ components:
           type: string
           format: uuid
           nullable: true
+        promo_code_redemption_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Linked promo-code redemption lifecycle record. Null for legacy/manual discount rows.
         code:
           type: string
           example: INTRO10
@@ -10942,7 +12263,6 @@ components:
         created_at:
           type: string
           format: date-time
-
     PaymentReceiptSummary:
       type: object
       required:

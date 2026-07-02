@@ -8,8 +8,8 @@
  * - Resolves payable booking-order targets for bulk Pilates bookings.
  * - Resolves payable private trainer booking targets.
  * - Validates wallet top-up amount boundaries.
- * - Applies basic promo-code discounts server-side.
- * - Returns a normalized price snapshot for checkout/payment intent creation.
+ * - Returns a normalized backend-owned subtotal snapshot for checkout/payment intent creation.
+ * - Leaves promo-code discount calculation to PromoCodeCustomerService.
  *
  * Important:
  * - Frontend amount is never trusted.
@@ -17,7 +17,7 @@
  * - Booking-order prices come from backend-created booking_order_items.
  * - Private booking prices come from the private booking row.
  * - Wallet top-up amount is customer-provided but strictly bounded.
- * - Promo code discount is recalculated by the backend.
+ * - Promo code discount is recalculated by the Promo Code module, not this service.
  * - Wallet top-ups cannot use promo codes because that would create discounted stored balance.
  */
 
@@ -29,7 +29,6 @@ import type {
   BookingOrderItemRow,
   BookingOrderRow,
   BookingRow,
-  DatabaseJsonObject,
   LAFAMSupabaseClient,
   PilatesClassRow,
   PilatesClassScheduleRow,
@@ -56,35 +55,22 @@ import {
   PAYMENT_TARGET_TYPE_BOOKING_ORDER,
   PAYMENT_TARGET_TYPE_PRIVATE_BOOKING,
   PAYMENT_TARGET_TYPE_WALLET_TOP_UP,
-  PROMO_CODE_PERCENTAGE_MAX,
-  PROMO_DISCOUNT_TYPE_FIXED_AMOUNT,
-  PROMO_DISCOUNT_TYPE_PERCENTAGE,
   WALLET_TOP_UP_AMOUNT_MAX,
   WALLET_TOP_UP_AMOUNT_MIN,
   isPaymentCurrency,
   type PaymentCurrency,
-  type PaymentTargetType,
 } from '../constants/payment.constants';
 import { PaymentSecurityPolicy } from '../domain/payment-security.policy';
-import { PaymentRepository } from '../repositories/payment.repository';
 import type {
   PaymentPriceResolutionInput,
   PaymentPriceResolutionResult,
   PaymentResolvedTargetReference,
-  PromoCodeRecord,
 } from '../types/payment.types';
 
 interface PaymentTargetAmountResolution {
   readonly target: PaymentResolvedTargetReference;
   readonly amount: number;
   readonly currency: PaymentCurrency;
-}
-
-interface PromoDiscountResolution {
-  readonly promo_code_id: string | null;
-  readonly promo_code: string | null;
-  readonly discount_amount: number;
-  readonly discount_metadata: DatabaseJsonObject;
 }
 
 interface BookingTargetPricingContext {
@@ -118,14 +104,26 @@ function normalizeOptionalPromoCode(
   return promoCode.trim().toUpperCase();
 }
 
-function parseIsoTime(value: string | null): number | null {
-  if (!hasText(value)) {
-    return null;
+function assertPromoCodeNotUsedForWalletTopUp(
+  input: PaymentPriceResolutionInput,
+): void {
+  const normalizedPromoCode = normalizeOptionalPromoCode(input.promo_code);
+
+  if (normalizedPromoCode === null) {
+    return;
   }
 
-  const parsed = Date.parse(value);
+  if (input.target_type !== PAYMENT_TARGET_TYPE_WALLET_TOP_UP) {
+    return;
+  }
 
-  return Number.isFinite(parsed) ? parsed : null;
+  throw AppError.promoCodeInvalid(
+    'Promo codes cannot be used for wallet top-ups.',
+    {
+      promo_code: normalizedPromoCode,
+      target_type: input.target_type,
+    },
+  );
 }
 
 function normalizeCurrency(
@@ -245,61 +243,6 @@ function assertSeatHoldStillValid(
   });
 }
 
-function calculateFixedPromoDiscount(
-  amount: number,
-  promoCode: PromoCodeRecord,
-): number {
-  return Math.min(amount, promoCode.discount_value);
-}
-
-function calculatePercentagePromoDiscount(
-  amount: number,
-  promoCode: PromoCodeRecord,
-): number {
-  if (
-    promoCode.discount_value <= 0 ||
-    promoCode.discount_value > PROMO_CODE_PERCENTAGE_MAX
-  ) {
-    throw AppError.promoCodeInvalid(
-      'Promo code percentage discount is invalid.',
-      {
-        promo_code_id: promoCode.id,
-        code: promoCode.code,
-        discount_value: promoCode.discount_value,
-      },
-    );
-  }
-
-  const percentageDiscount = roundPaymentAmount(
-    (amount * promoCode.discount_value) / 100,
-  );
-
-  if (typeof promoCode.max_discount_amount === 'number') {
-    return Math.min(percentageDiscount, promoCode.max_discount_amount);
-  }
-
-  return percentageDiscount;
-}
-
-function calculatePromoDiscount(
-  amount: number,
-  promoCode: PromoCodeRecord,
-): number {
-  if (promoCode.discount_type === PROMO_DISCOUNT_TYPE_FIXED_AMOUNT) {
-    return calculateFixedPromoDiscount(amount, promoCode);
-  }
-
-  if (promoCode.discount_type === PROMO_DISCOUNT_TYPE_PERCENTAGE) {
-    return calculatePercentagePromoDiscount(amount, promoCode);
-  }
-
-  throw AppError.promoCodeInvalid('Promo code discount type is unsupported.', {
-    promo_code_id: promoCode.id,
-    code: promoCode.code,
-    discount_type: promoCode.discount_type,
-  });
-}
-
 function sumBookingOrderItems(
   bookingOrder: BookingOrderRow,
   items: readonly BookingOrderItemRow[],
@@ -375,7 +318,6 @@ export class PaymentPricingService {
   constructor(
     @Inject(SUPABASE_ADMIN_CLIENT)
     private readonly adminClient: LAFAMSupabaseClient,
-    private readonly paymentRepository: PaymentRepository,
   ) {}
 
   async resolveCheckoutPricing(
@@ -387,36 +329,31 @@ export class PaymentPricingService {
   async resolvePrice(
     input: PaymentPriceResolutionInput,
   ): Promise<PaymentPriceResolutionResult> {
+    assertPromoCodeNotUsedForWalletTopUp(input);
+
     const targetAmount = await this.resolveTargetAmount(input);
 
     assertRequestedCurrencyMatches(input.currency, targetAmount.currency);
 
-    const promoDiscount = await this.resolvePromoDiscount({
-      user_id: input.user_id,
-      target_type: input.target_type,
-      promo_code: input.promo_code,
-      amount: targetAmount.amount,
-    });
-
-    const finalAmount = roundPaymentAmount(
-      targetAmount.amount - promoDiscount.discount_amount,
-    );
+    const discountAmount = 0;
+    const finalAmount = targetAmount.amount;
 
     PaymentSecurityPolicy.assertAmountIntegrity({
       amount: targetAmount.amount,
-      discount_amount: promoDiscount.discount_amount,
+      discount_amount: discountAmount,
       final_amount: finalAmount,
     });
 
     return {
       target: targetAmount.target,
       amount: targetAmount.amount,
-      discount_amount: promoDiscount.discount_amount,
+      discount_amount: discountAmount,
       final_amount: finalAmount,
       currency: targetAmount.currency,
-      promo_code_id: promoDiscount.promo_code_id,
-      promo_code: promoDiscount.promo_code,
-      discount_metadata: promoDiscount.discount_metadata,
+      promo_code_id: null,
+      promo_code: null,
+      promo_code_redemption_id: null,
+      discount_metadata: {},
     };
   }
 
@@ -1109,189 +1046,5 @@ export class PaymentPricingService {
         },
       );
     }
-  }
-
-  private async resolvePromoDiscount(input: {
-    readonly user_id: string;
-    readonly target_type: PaymentTargetType;
-    readonly promo_code?: string | null;
-    readonly amount: number;
-  }): Promise<PromoDiscountResolution> {
-    const normalizedPromoCode = normalizeOptionalPromoCode(input.promo_code);
-
-    if (normalizedPromoCode === null) {
-      return {
-        promo_code_id: null,
-        promo_code: null,
-        discount_amount: 0,
-        discount_metadata: {},
-      };
-    }
-
-    if (input.target_type === PAYMENT_TARGET_TYPE_WALLET_TOP_UP) {
-      throw AppError.promoCodeInvalid(
-        'Promo codes cannot be used for wallet top-ups.',
-        {
-          promo_code: normalizedPromoCode,
-          target_type: input.target_type,
-        },
-      );
-    }
-
-    const promoCode =
-      await this.paymentRepository.findActivePromoCodeByCode(
-        normalizedPromoCode,
-      );
-
-    if (!promoCode) {
-      throw AppError.promoCodeInvalid('Promo code was not found.', {
-        promo_code: normalizedPromoCode,
-      });
-    }
-
-    await this.assertPromoCodeUsable({
-      promo_code: promoCode,
-      user_id: input.user_id,
-    });
-
-    const discountAmount = roundPaymentAmount(
-      calculatePromoDiscount(input.amount, promoCode),
-    );
-
-    if (discountAmount <= 0) {
-      throw AppError.promoCodeInvalid(
-        'Promo code does not produce a valid discount.',
-        {
-          promo_code_id: promoCode.id,
-          code: promoCode.code,
-          discount_amount: discountAmount,
-        },
-      );
-    }
-
-    const boundedDiscountAmount = Math.min(discountAmount, input.amount);
-    const finalAmount = roundPaymentAmount(
-      input.amount - boundedDiscountAmount,
-    );
-
-    if (finalAmount < PAYMENT_AMOUNT_MIN) {
-      throw AppError.promoCodeInvalid(
-        'Promo code discount cannot reduce payment below the minimum payable amount.',
-        {
-          promo_code_id: promoCode.id,
-          code: promoCode.code,
-          amount: input.amount,
-          discount_amount: boundedDiscountAmount,
-          final_amount: finalAmount,
-          minimum_payable_amount: PAYMENT_AMOUNT_MIN,
-        },
-      );
-    }
-
-    return {
-      promo_code_id: promoCode.id,
-      promo_code: promoCode.code,
-      discount_amount: boundedDiscountAmount,
-      discount_metadata: {
-        promo_code_id: promoCode.id,
-        code: promoCode.code,
-        discount_type: promoCode.discount_type,
-        discount_value: promoCode.discount_value,
-        max_discount_amount: promoCode.max_discount_amount,
-        calculated_discount_amount: boundedDiscountAmount,
-      },
-    };
-  }
-
-  private async assertPromoCodeUsable(input: {
-    readonly promo_code: PromoCodeRecord;
-    readonly user_id: string;
-  }): Promise<void> {
-    const promoCode = input.promo_code;
-
-    if (promoCode.deleted_at !== null) {
-      throw AppError.promoCodeInvalid('Promo code was deleted.', {
-        promo_code_id: promoCode.id,
-        code: promoCode.code,
-      });
-    }
-
-    const startsAtMs = parseIsoTime(promoCode.starts_at);
-
-    if (startsAtMs !== null && startsAtMs > Date.now()) {
-      throw AppError.promoCodeInvalid('Promo code is not active yet.', {
-        promo_code_id: promoCode.id,
-        code: promoCode.code,
-        starts_at: promoCode.starts_at,
-      });
-    }
-
-    const endsAtMs = parseIsoTime(promoCode.ends_at);
-
-    if (endsAtMs !== null && endsAtMs < Date.now()) {
-      throw AppError.promoCodeExpired('Promo code has expired.', {
-        promo_code_id: promoCode.id,
-        code: promoCode.code,
-        ends_at: promoCode.ends_at,
-      });
-    }
-
-    if (
-      typeof promoCode.max_redemptions === 'number' &&
-      promoCode.redemption_count >= promoCode.max_redemptions
-    ) {
-      throw AppError.promoCodeInvalid(
-        'Promo code redemption limit has been reached.',
-        {
-          promo_code_id: promoCode.id,
-          code: promoCode.code,
-          redemption_count: promoCode.redemption_count,
-          max_redemptions: promoCode.max_redemptions,
-        },
-      );
-    }
-
-    if (
-      typeof promoCode.per_user_limit === 'number' &&
-      promoCode.per_user_limit > 0
-    ) {
-      const userRedemptionCount = await this.countPromoRedemptionsForUser({
-        promo_code_id: promoCode.id,
-        user_id: input.user_id,
-      });
-
-      if (userRedemptionCount >= promoCode.per_user_limit) {
-        throw AppError.promoCodeInvalid(
-          'Promo code user redemption limit has been reached.',
-          {
-            promo_code_id: promoCode.id,
-            code: promoCode.code,
-            user_id: input.user_id,
-            user_redemption_count: userRedemptionCount,
-            per_user_limit: promoCode.per_user_limit,
-          },
-        );
-      }
-    }
-  }
-
-  private async countPromoRedemptionsForUser(input: {
-    readonly promo_code_id: string;
-    readonly user_id: string;
-  }): Promise<number> {
-    const { count, error } = await this.adminClient
-      .from('payment_discounts')
-      .select('id, payments!inner(user_id)', {
-        count: 'exact',
-        head: true,
-      })
-      .eq('promo_code_id', input.promo_code_id)
-      .eq('payments.user_id', input.user_id);
-
-    if (error) {
-      throw AppError.databaseOperationFailed(error);
-    }
-
-    return typeof count === 'number' && Number.isFinite(count) ? count : 0;
   }
 }

@@ -227,10 +227,19 @@ export type DatabaseWalletLedgerEntryStatus =
 export type DatabasePromoDiscountType = 'fixed_amount' | 'percentage';
 
 export type DatabasePromoCodeStatus =
+  | 'draft'
   | 'active'
   | 'inactive'
+  | 'paused'
   | 'expired'
+  | 'exhausted'
   | 'deleted';
+
+export type DatabasePromoCodeRedemptionStatus =
+  | 'reserved'
+  | 'redeemed'
+  | 'released'
+  | 'voided';
 
 export type DatabaseCustomerInvitationStatus =
   | 'pending'
@@ -2553,6 +2562,15 @@ export interface Database {
           status: DatabasePromoCodeStatus;
           created_by_admin_id: string | null;
           updated_by_admin_id: string | null;
+          currency: string;
+          minimum_order_amount: number;
+          first_time_customer_only: boolean;
+          allowed_target_types: string[];
+          allowed_payment_methods: string[];
+          created_by_role: string | null;
+          staff_limit_metadata: DatabaseJsonObject;
+          admin_notes: string | null;
+          metadata: DatabaseJsonObject;
           created_at: string;
           updated_at: string;
           deleted_at: string | null;
@@ -2572,6 +2590,15 @@ export interface Database {
           status?: DatabasePromoCodeStatus;
           created_by_admin_id?: string | null;
           updated_by_admin_id?: string | null;
+          currency?: string;
+          minimum_order_amount?: number;
+          first_time_customer_only?: boolean;
+          allowed_target_types?: string[];
+          allowed_payment_methods?: string[];
+          created_by_role?: string | null;
+          staff_limit_metadata?: DatabaseJsonObject;
+          admin_notes?: string | null;
+          metadata?: DatabaseJsonObject;
           created_at?: string;
           updated_at?: string;
           deleted_at?: string | null;
@@ -2591,6 +2618,15 @@ export interface Database {
           status?: DatabasePromoCodeStatus;
           created_by_admin_id?: string | null;
           updated_by_admin_id?: string | null;
+          currency?: string;
+          minimum_order_amount?: number;
+          first_time_customer_only?: boolean;
+          allowed_target_types?: string[];
+          allowed_payment_methods?: string[];
+          created_by_role?: string | null;
+          staff_limit_metadata?: DatabaseJsonObject;
+          admin_notes?: string | null;
+          metadata?: DatabaseJsonObject;
           created_at?: string;
           updated_at?: string;
           deleted_at?: string | null;
@@ -2613,11 +2649,282 @@ export interface Database {
         ];
       };
 
+      promo_code_class_targets: {
+        Row: {
+          id: string;
+          promo_code_id: string;
+          class_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          promo_code_id: string;
+          class_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          promo_code_id?: string;
+          class_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'promo_code_class_targets_promo_code_id_fkey';
+            columns: ['promo_code_id'];
+            isOneToOne: false;
+            referencedRelation: 'promo_codes';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'promo_code_class_targets_class_id_fkey';
+            columns: ['class_id'];
+            isOneToOne: false;
+            referencedRelation: 'pilates_classes';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      promo_code_schedule_targets: {
+        Row: {
+          id: string;
+          promo_code_id: string;
+          schedule_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          promo_code_id: string;
+          schedule_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          promo_code_id?: string;
+          schedule_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'promo_code_schedule_targets_promo_code_id_fkey';
+            columns: ['promo_code_id'];
+            isOneToOne: false;
+            referencedRelation: 'promo_codes';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'promo_code_schedule_targets_schedule_id_fkey';
+            columns: ['schedule_id'];
+            isOneToOne: false;
+            referencedRelation: 'pilates_class_schedules';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      promo_code_trainer_targets: {
+        Row: {
+          id: string;
+          promo_code_id: string;
+          trainer_staff_profile_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          promo_code_id: string;
+          trainer_staff_profile_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          promo_code_id?: string;
+          trainer_staff_profile_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'promo_code_trainer_targets_promo_code_id_fkey';
+            columns: ['promo_code_id'];
+            isOneToOne: false;
+            referencedRelation: 'promo_codes';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'promo_code_trainer_targets_trainer_staff_profile_id_fkey';
+            columns: ['trainer_staff_profile_id'];
+            isOneToOne: false;
+            referencedRelation: 'staff_profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      promo_code_customer_targets: {
+        Row: {
+          id: string;
+          promo_code_id: string;
+          customer_user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          promo_code_id: string;
+          customer_user_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          promo_code_id?: string;
+          customer_user_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'promo_code_customer_targets_promo_code_id_fkey';
+            columns: ['promo_code_id'];
+            isOneToOne: false;
+            referencedRelation: 'promo_codes';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'promo_code_customer_targets_customer_user_id_fkey';
+            columns: ['customer_user_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      promo_code_redemptions: {
+        Row: {
+          id: string;
+          promo_code_id: string;
+          user_id: string;
+          payment_id: string | null;
+          target_type: DatabasePaymentTargetType;
+          booking_id: string | null;
+          private_booking_id: string | null;
+          booking_order_id: string | null;
+          payment_method: DatabasePaymentMethod;
+          idempotency_key: string;
+          status: DatabasePromoCodeRedemptionStatus;
+          subtotal_amount: number;
+          discount_amount: number;
+          final_amount: number;
+          currency: string;
+          reserved_at: string;
+          redeemed_at: string | null;
+          released_at: string | null;
+          expires_at: string | null;
+          release_reason: string | null;
+          metadata: DatabaseJsonObject;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          promo_code_id: string;
+          user_id: string;
+          payment_id?: string | null;
+          target_type: DatabasePaymentTargetType;
+          booking_id?: string | null;
+          private_booking_id?: string | null;
+          booking_order_id?: string | null;
+          payment_method: DatabasePaymentMethod;
+          idempotency_key: string;
+          status?: DatabasePromoCodeRedemptionStatus;
+          subtotal_amount: number;
+          discount_amount: number;
+          final_amount: number;
+          currency?: string;
+          reserved_at?: string;
+          redeemed_at?: string | null;
+          released_at?: string | null;
+          expires_at?: string | null;
+          release_reason?: string | null;
+          metadata?: DatabaseJsonObject;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          promo_code_id?: string;
+          user_id?: string;
+          payment_id?: string | null;
+          target_type?: DatabasePaymentTargetType;
+          booking_id?: string | null;
+          private_booking_id?: string | null;
+          booking_order_id?: string | null;
+          payment_method?: DatabasePaymentMethod;
+          idempotency_key?: string;
+          status?: DatabasePromoCodeRedemptionStatus;
+          subtotal_amount?: number;
+          discount_amount?: number;
+          final_amount?: number;
+          currency?: string;
+          reserved_at?: string;
+          redeemed_at?: string | null;
+          released_at?: string | null;
+          expires_at?: string | null;
+          release_reason?: string | null;
+          metadata?: DatabaseJsonObject;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'promo_code_redemptions_promo_code_id_fkey';
+            columns: ['promo_code_id'];
+            isOneToOne: false;
+            referencedRelation: 'promo_codes';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'promo_code_redemptions_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'app_users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'promo_code_redemptions_payment_id_fkey';
+            columns: ['payment_id'];
+            isOneToOne: false;
+            referencedRelation: 'payments';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'promo_code_redemptions_booking_id_fkey';
+            columns: ['booking_id'];
+            isOneToOne: false;
+            referencedRelation: 'bookings';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'promo_code_redemptions_private_booking_id_fkey';
+            columns: ['private_booking_id'];
+            isOneToOne: false;
+            referencedRelation: 'private_trainer_bookings';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'promo_code_redemptions_booking_order_id_fkey';
+            columns: ['booking_order_id'];
+            isOneToOne: false;
+            referencedRelation: 'booking_orders';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
       payment_discounts: {
         Row: {
           id: string;
           payment_id: string;
           promo_code_id: string | null;
+          promo_code_redemption_id: string | null;
           code: string;
           discount_amount: number;
           metadata: DatabaseJsonObject;
@@ -2627,6 +2934,7 @@ export interface Database {
           id?: string;
           payment_id: string;
           promo_code_id?: string | null;
+          promo_code_redemption_id?: string | null;
           code: string;
           discount_amount: number;
           metadata?: DatabaseJsonObject;
@@ -2636,6 +2944,7 @@ export interface Database {
           id?: string;
           payment_id?: string;
           promo_code_id?: string | null;
+          promo_code_redemption_id?: string | null;
           code?: string;
           discount_amount?: number;
           metadata?: DatabaseJsonObject;
@@ -2654,6 +2963,13 @@ export interface Database {
             columns: ['promo_code_id'];
             isOneToOne: false;
             referencedRelation: 'promo_codes';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'payment_discounts_promo_code_redemption_id_fkey';
+            columns: ['promo_code_redemption_id'];
+            isOneToOne: false;
+            referencedRelation: 'promo_code_redemptions';
             referencedColumns: ['id'];
           },
         ];
@@ -3093,6 +3409,113 @@ export interface Database {
           refunded_at: string | null;
         }[];
       };
+      reserve_promo_code_redemption_atomic: {
+        Args: {
+          p_promo_code_id: string;
+          p_user_id: string;
+          p_payment_method: DatabasePaymentMethod;
+          p_target_type: DatabasePaymentTargetType;
+          p_booking_id?: string | null;
+          p_private_booking_id?: string | null;
+          p_booking_order_id?: string | null;
+          p_idempotency_key?: string | null;
+          p_subtotal_amount?: number | null;
+          p_discount_amount?: number | null;
+          p_final_amount?: number | null;
+          p_currency?: string;
+          p_expires_at?: string | null;
+          p_metadata?: DatabaseJsonObject;
+        };
+        Returns: {
+          redemption_id: string;
+          promo_code_id: string;
+          user_id: string;
+          payment_id: string | null;
+          target_type: DatabasePaymentTargetType;
+          booking_id: string | null;
+          private_booking_id: string | null;
+          booking_order_id: string | null;
+          payment_method: DatabasePaymentMethod;
+          idempotency_key: string;
+          status: DatabasePromoCodeRedemptionStatus;
+          subtotal_amount: number;
+          discount_amount: number;
+          final_amount: number;
+          currency: string;
+          reserved_at: string;
+          redeemed_at: string | null;
+          released_at: string | null;
+          expires_at: string | null;
+        }[];
+      };
+
+      attach_promo_code_redemption_payment_atomic: {
+        Args: {
+          p_redemption_id: string;
+          p_payment_id: string;
+          p_metadata?: DatabaseJsonObject;
+        };
+        Returns: {
+          redemption_id: string;
+          promo_code_id: string;
+          user_id: string;
+          payment_id: string;
+          target_type: DatabasePaymentTargetType;
+          status: DatabasePromoCodeRedemptionStatus;
+          discount_amount: number;
+          final_amount: number;
+          currency: string;
+        }[];
+      };
+
+      mark_promo_code_redemption_redeemed_atomic: {
+        Args: {
+          p_redemption_id?: string | null;
+          p_payment_id?: string | null;
+          p_metadata?: DatabaseJsonObject;
+        };
+        Returns: {
+          redemption_id: string;
+          promo_code_id: string;
+          user_id: string;
+          payment_id: string;
+          target_type: DatabasePaymentTargetType;
+          status: DatabasePromoCodeRedemptionStatus;
+          discount_amount: number;
+          final_amount: number;
+          currency: string;
+        }[];
+      };
+
+      release_promo_code_redemption_atomic: {
+        Args: {
+          p_redemption_id?: string | null;
+          p_payment_id?: string | null;
+          p_release_reason?: string | null;
+          p_metadata?: DatabaseJsonObject;
+        };
+        Returns: {
+          redemption_id: string;
+          promo_code_id: string;
+          user_id: string;
+          payment_id: string | null;
+          target_type: DatabasePaymentTargetType;
+          status: DatabasePromoCodeRedemptionStatus;
+          discount_amount: number;
+          final_amount: number;
+          currency: string;
+        }[];
+      };
+
+      release_expired_promo_code_redemptions_atomic: {
+        Args: {
+          p_now?: string;
+          p_limit?: number;
+        };
+        Returns: {
+          released_count: number;
+        }[];
+      };
     };
     Enums: {
       staff_profile_status: DatabaseStaffProfileStatus;
@@ -3122,6 +3545,7 @@ export interface Database {
       wallet_ledger_entry_status: DatabaseWalletLedgerEntryStatus;
       promo_discount_type: DatabasePromoDiscountType;
       promo_code_status: DatabasePromoCodeStatus;
+      promo_code_redemption_status: DatabasePromoCodeRedemptionStatus;
       customer_invitation_status: DatabaseCustomerInvitationStatus;
       email_notification_status: DatabaseEmailNotificationStatus;
       email_delivery_attempt_status: DatabaseEmailDeliveryAttemptStatus;
@@ -3305,6 +3729,40 @@ export type PromoCodeInsert =
   Database['public']['Tables']['promo_codes']['Insert'];
 export type PromoCodeUpdate =
   Database['public']['Tables']['promo_codes']['Update'];
+export type PromoCodeClassTargetRow =
+  Database['public']['Tables']['promo_code_class_targets']['Row'];
+export type PromoCodeClassTargetInsert =
+  Database['public']['Tables']['promo_code_class_targets']['Insert'];
+export type PromoCodeClassTargetUpdate =
+  Database['public']['Tables']['promo_code_class_targets']['Update'];
+
+export type PromoCodeScheduleTargetRow =
+  Database['public']['Tables']['promo_code_schedule_targets']['Row'];
+export type PromoCodeScheduleTargetInsert =
+  Database['public']['Tables']['promo_code_schedule_targets']['Insert'];
+export type PromoCodeScheduleTargetUpdate =
+  Database['public']['Tables']['promo_code_schedule_targets']['Update'];
+
+export type PromoCodeTrainerTargetRow =
+  Database['public']['Tables']['promo_code_trainer_targets']['Row'];
+export type PromoCodeTrainerTargetInsert =
+  Database['public']['Tables']['promo_code_trainer_targets']['Insert'];
+export type PromoCodeTrainerTargetUpdate =
+  Database['public']['Tables']['promo_code_trainer_targets']['Update'];
+
+export type PromoCodeCustomerTargetRow =
+  Database['public']['Tables']['promo_code_customer_targets']['Row'];
+export type PromoCodeCustomerTargetInsert =
+  Database['public']['Tables']['promo_code_customer_targets']['Insert'];
+export type PromoCodeCustomerTargetUpdate =
+  Database['public']['Tables']['promo_code_customer_targets']['Update'];
+
+export type PromoCodeRedemptionRow =
+  Database['public']['Tables']['promo_code_redemptions']['Row'];
+export type PromoCodeRedemptionInsert =
+  Database['public']['Tables']['promo_code_redemptions']['Insert'];
+export type PromoCodeRedemptionUpdate =
+  Database['public']['Tables']['promo_code_redemptions']['Update'];
 
 export type PaymentDiscountRow =
   Database['public']['Tables']['payment_discounts']['Row'];
@@ -3369,6 +3827,20 @@ export type CreditWalletAtomicRpcRow =
 
 export type RefundPaymentAtomicRpcRow =
   Database['public']['Functions']['refund_payment_atomic']['Returns'][number];
+export type ReservePromoCodeRedemptionAtomicRpcRow =
+  Database['public']['Functions']['reserve_promo_code_redemption_atomic']['Returns'][number];
+
+export type AttachPromoCodeRedemptionPaymentAtomicRpcRow =
+  Database['public']['Functions']['attach_promo_code_redemption_payment_atomic']['Returns'][number];
+
+export type MarkPromoCodeRedemptionRedeemedAtomicRpcRow =
+  Database['public']['Functions']['mark_promo_code_redemption_redeemed_atomic']['Returns'][number];
+
+export type ReleasePromoCodeRedemptionAtomicRpcRow =
+  Database['public']['Functions']['release_promo_code_redemption_atomic']['Returns'][number];
+
+export type ReleaseExpiredPromoCodeRedemptionsAtomicRpcRow =
+  Database['public']['Functions']['release_expired_promo_code_redemptions_atomic']['Returns'][number];
 
 export type LAFAMSupabaseClient = SupabaseClient<Database>;
 
