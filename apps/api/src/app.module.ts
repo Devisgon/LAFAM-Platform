@@ -35,6 +35,7 @@ import { StaffModule } from './modules/staff/staff.module';
 import { ClassesModule } from './modules/classes/classes.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { PromoCodesModule } from './modules/promo-codes/promo-codes.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 
@@ -62,6 +63,7 @@ const DEFAULT_THROTTLE_LIMIT = 120;
     ClassesModule,
     BookingsModule,
     PaymentsModule,
+    PromoCodesModule,
     AnalyticsModule,
     NotificationsModule,
   ],

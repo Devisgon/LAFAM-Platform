@@ -200,8 +200,32 @@ export type AppErrorCode =
   | 'WALLET_NOT_ACTIVE'
   | 'WALLET_INSUFFICIENT_BALANCE'
   | 'WALLET_TRANSACTION_FAILED'
+  | 'PROMO_CODE_NOT_FOUND'
+  | 'PROMO_CODE_ALREADY_EXISTS'
   | 'PROMO_CODE_INVALID'
+  | 'PROMO_CODE_EMPTY_UPDATE'
+  | 'PROMO_CODE_INVALID_STATUS'
+  | 'PROMO_CODE_NOT_ACTIVE'
+  | 'PROMO_CODE_NOT_STARTED'
   | 'PROMO_CODE_EXPIRED'
+  | 'PROMO_CODE_EXHAUSTED'
+  | 'PROMO_CODE_ALREADY_DELETED'
+  | 'PROMO_CODE_DELETE_BLOCKED'
+  | 'PROMO_CODE_DISCOUNT_INVALID'
+  | 'PROMO_CODE_TARGET_INVALID'
+  | 'PROMO_CODE_TARGET_NOT_ALLOWED'
+  | 'PROMO_CODE_PAYMENT_METHOD_NOT_ALLOWED'
+  | 'PROMO_CODE_MINIMUM_ORDER_NOT_MET'
+  | 'PROMO_CODE_CUSTOMER_NOT_ELIGIBLE'
+  | 'PROMO_CODE_FIRST_TIME_CUSTOMER_REQUIRED'
+  | 'PROMO_CODE_PER_USER_LIMIT_REACHED'
+  | 'PROMO_CODE_GLOBAL_LIMIT_REACHED'
+  | 'PROMO_CODE_STAFF_LIMIT_EXCEEDED'
+  | 'PROMO_CODE_REDEMPTION_NOT_FOUND'
+  | 'PROMO_CODE_REDEMPTION_CONFLICT'
+  | 'PROMO_CODE_REDEMPTION_FAILED'
+  | 'PROMO_CODE_REDEMPTION_RELEASE_FAILED'
+  | 'PROMO_CODE_REDEMPTION_ALREADY_REDEEMED'
   | 'REFUND_NOT_ALLOWED'
   | 'REFUND_FAILED';
 
@@ -2138,6 +2162,28 @@ export class AppError extends Error {
     });
   }
 
+  static promoCodeNotFound(
+    publicMessage = 'The requested promo code was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'PROMO_CODE_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeAlreadyExists(
+    publicMessage = 'A promo code with this code already exists.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PROMO_CODE_ALREADY_EXISTS',
+      publicMessage,
+      details,
+    );
+  }
+
   static promoCodeInvalid(
     publicMessage = 'The promo code is invalid.',
     details?: AppErrorDetails,
@@ -2149,15 +2195,255 @@ export class AppError extends Error {
     );
   }
 
+  static promoCodeEmptyUpdate(
+    publicMessage = 'At least one promo-code field must be provided for update.',
+  ): AppError {
+    return AppError.createValidationError(
+      'PROMO_CODE_EMPTY_UPDATE',
+      publicMessage,
+    );
+  }
+
+  static promoCodeInvalidStatus(
+    publicMessage = 'The promo-code status is invalid for this operation.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PROMO_CODE_INVALID_STATUS',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeNotActive(
+    publicMessage = 'This promo code is not active.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PROMO_CODE_NOT_ACTIVE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeNotStarted(
+    publicMessage = 'This promo code has not started yet.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PROMO_CODE_NOT_STARTED',
+      publicMessage,
+      details,
+    );
+  }
+
   static promoCodeExpired(
     publicMessage = 'The promo code has expired.',
     details?: AppErrorDetails,
   ): AppError {
-    return AppError.createConflictError(
+    return AppError.createGoneError(
       'PROMO_CODE_EXPIRED',
       publicMessage,
       details,
     );
+  }
+
+  static promoCodeExhausted(
+    publicMessage = 'This promo code has reached its redemption limit.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PROMO_CODE_EXHAUSTED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeAlreadyDeleted(
+    publicMessage = 'This promo code is already deleted.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PROMO_CODE_ALREADY_DELETED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeDeleteBlocked(
+    publicMessage = 'This promo code cannot be deleted because related redemption records depend on it.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PROMO_CODE_DELETE_BLOCKED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeDiscountInvalid(
+    publicMessage = 'The promo-code discount is invalid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PROMO_CODE_DISCOUNT_INVALID',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeTargetInvalid(
+    publicMessage = 'The promo-code checkout target is invalid.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createValidationError(
+      'PROMO_CODE_TARGET_INVALID',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeTargetNotAllowed(
+    publicMessage = 'This promo code cannot be used for the selected checkout target.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PROMO_CODE_TARGET_NOT_ALLOWED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodePaymentMethodNotAllowed(
+    publicMessage = 'This promo code cannot be used with the selected payment method.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PROMO_CODE_PAYMENT_METHOD_NOT_ALLOWED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeMinimumOrderNotMet(
+    publicMessage = 'The checkout amount does not meet the promo-code minimum order amount.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PROMO_CODE_MINIMUM_ORDER_NOT_MET',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeCustomerNotEligible(
+    publicMessage = 'This customer is not eligible to use this promo code.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createAuthorizationError(
+      'PROMO_CODE_CUSTOMER_NOT_ELIGIBLE',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeFirstTimeCustomerRequired(
+    publicMessage = 'This promo code is only available for first-time customers.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PROMO_CODE_FIRST_TIME_CUSTOMER_REQUIRED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodePerUserLimitReached(
+    publicMessage = 'You have already used this promo code the maximum allowed number of times.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PROMO_CODE_PER_USER_LIMIT_REACHED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeGlobalLimitReached(
+    publicMessage = 'This promo code has reached its total redemption limit.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PROMO_CODE_GLOBAL_LIMIT_REACHED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeStaffLimitExceeded(
+    publicMessage = 'Staff-created promo codes must stay within the allowed discount and usage limits.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createAuthorizationError(
+      'PROMO_CODE_STAFF_LIMIT_EXCEEDED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeRedemptionNotFound(
+    publicMessage = 'The requested promo-code redemption was not found.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createNotFoundError(
+      'PROMO_CODE_REDEMPTION_NOT_FOUND',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeRedemptionConflict(
+    publicMessage = 'The promo-code redemption conflicts with the current payment or checkout state.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PROMO_CODE_REDEMPTION_CONFLICT',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeRedemptionAlreadyRedeemed(
+    publicMessage = 'This promo-code redemption has already been finalized.',
+    details?: AppErrorDetails,
+  ): AppError {
+    return AppError.createConflictError(
+      'PROMO_CODE_REDEMPTION_ALREADY_REDEEMED',
+      publicMessage,
+      details,
+    );
+  }
+
+  static promoCodeRedemptionFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'PROMO_CODE_REDEMPTION_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage:
+        'Promo-code redemption could not be processed. Please try again later.',
+      cause,
+    });
+  }
+
+  static promoCodeRedemptionReleaseFailed(cause?: unknown): AppError {
+    return new AppError({
+      code: 'PROMO_CODE_REDEMPTION_RELEASE_FAILED',
+      category: 'internal',
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      publicMessage:
+        'Promo-code reservation could not be released. Please try again later.',
+      cause,
+    });
   }
 
   static refundNotAllowed(

@@ -35,7 +35,11 @@ import {
   MaxLength,
   Min,
   MinLength,
+  Validate,
   ValidateIf,
+  type ValidationArguments,
+  ValidatorConstraint,
+  type ValidatorConstraintInterface,
 } from 'class-validator';
 
 import {
@@ -53,13 +57,14 @@ import {
   PAYMENT_TARGET_TYPE_PRIVATE_BOOKING,
   PAYMENT_TARGET_TYPE_WALLET_TOP_UP,
   PAYMENT_TARGET_TYPES,
-  PROMO_CODE_MAX_LENGTH,
-  PROMO_CODE_MIN_LENGTH,
   WALLET_TOP_UP_AMOUNT_MAX,
   WALLET_TOP_UP_AMOUNT_MIN,
 } from '../constants/payment.constants';
-
-const PROMO_CODE_PATTERN = /^[A-Z0-9_-]+$/u;
+import {
+  PROMO_CODE_CODE_MAX_LENGTH,
+  PROMO_CODE_CODE_MIN_LENGTH,
+  PROMO_CODE_PATTERN,
+} from '../../promo-codes/constants/promo-code.constants';
 
 function requiredTrimmedString({ value }: TransformFnParams): unknown {
   if (typeof value !== 'string') {
@@ -143,6 +148,26 @@ function isWalletTopUpTarget(dto: CreateCheckoutPaymentDto): boolean {
 
 function isNotWalletTopUpTarget(dto: CreateCheckoutPaymentDto): boolean {
   return dto.target_type !== PAYMENT_TARGET_TYPE_WALLET_TOP_UP;
+}
+
+@ValidatorConstraint({
+  name: 'promoCodeAllowedForCheckoutTarget',
+  async: false,
+})
+class PromoCodeAllowedForCheckoutTargetConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown, args: ValidationArguments): boolean {
+    const dto = args.object as CreateCheckoutPaymentDto;
+
+    if (dto.target_type !== PAYMENT_TARGET_TYPE_WALLET_TOP_UP) {
+      return true;
+    }
+
+    return value === undefined || value === null || value === '';
+  }
+
+  defaultMessage(): string {
+    return 'promo_code is not supported when target_type is wallet_top_up.';
+  }
 }
 
 export class CreateCheckoutPaymentDto {
@@ -291,25 +316,26 @@ export class CreateCheckoutPaymentDto {
 
   @ApiPropertyOptional({
     description:
-      'Optional promo code. The backend validates and recalculates the discount server-side.',
+      'Optional promo code. Accepted only for booking, private_booking, and booking_order checkout. Wallet top-up does not support promo codes. The backend validates, reserves, and recalculates the discount server-side through the Promo Code module.',
     example: 'WELCOME10',
-    minLength: PROMO_CODE_MIN_LENGTH,
-    maxLength: PROMO_CODE_MAX_LENGTH,
+    minLength: PROMO_CODE_CODE_MIN_LENGTH,
+    maxLength: PROMO_CODE_CODE_MAX_LENGTH,
   })
+  @Validate(PromoCodeAllowedForCheckoutTargetConstraint)
   @Transform(optionalUppercaseTrimmedString)
   @IsOptional()
   @IsString({
     message: 'promo_code must be a string.',
   })
-  @MinLength(PROMO_CODE_MIN_LENGTH, {
-    message: `promo_code must be at least ${PROMO_CODE_MIN_LENGTH} characters long.`,
+  @MinLength(PROMO_CODE_CODE_MIN_LENGTH, {
+    message: `promo_code must be at least ${PROMO_CODE_CODE_MIN_LENGTH} characters long.`,
   })
-  @MaxLength(PROMO_CODE_MAX_LENGTH, {
-    message: `promo_code must not exceed ${PROMO_CODE_MAX_LENGTH} characters.`,
+  @MaxLength(PROMO_CODE_CODE_MAX_LENGTH, {
+    message: `promo_code must not exceed ${PROMO_CODE_CODE_MAX_LENGTH} characters.`,
   })
   @Matches(PROMO_CODE_PATTERN, {
     message:
-      'promo_code may only contain uppercase letters, numbers, underscores, and hyphens.',
+      'promo_code may contain only uppercase letters, numbers, underscores, and hyphens, and must start and end with a letter or number.',
   })
   readonly promo_code?: string;
 

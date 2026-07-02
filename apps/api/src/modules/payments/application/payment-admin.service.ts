@@ -22,13 +22,14 @@
  * - Partial refunds are rejected until the atomic refund RPC and database contract explicitly support them.
  */
 
-import { Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 
 import { AppError } from '../../../common/errors/app-error';
 import type { DatabaseJsonObject } from '../../../database/database.types';
 import { AuthUserRepository } from '../../auth/repositories/auth-user.repository';
 import type { AuthUserInternalProfile } from '../../auth/types/auth-user.types';
 import { EmailNotificationService } from '../../notifications/application/email-notification.service';
+import { PromoCodeCustomerService } from '../../promo-codes/application/promo-code-customer.service';
 import {
   EMAIL_NOTIFICATION_ENTITY_TYPE_PAYMENT,
   EMAIL_NOTIFICATION_EVENT_PAYMENT_REFUND_FAILED_OR_MANUAL_REVIEW_REQUIRED,
@@ -232,6 +233,7 @@ function mapPaymentDiscountToSummary(
     id: discount.id,
     payment_id: discount.payment_id,
     promo_code_id: discount.promo_code_id,
+    promo_code_redemption_id: discount.promo_code_redemption_id,
     code: discount.code,
     discount_amount: discount.discount_amount,
     metadata: discount.metadata,
@@ -508,6 +510,8 @@ export class PaymentAdminService {
     private readonly paymentGatewayService: PaymentGatewayService,
     private readonly authUserRepository: AuthUserRepository,
     private readonly emailNotificationService: EmailNotificationService,
+    @Inject(forwardRef(() => PromoCodeCustomerService))
+    private readonly promoCodeCustomerService: PromoCodeCustomerService,
   ) {}
 
   async listAdminPayments(
@@ -678,11 +682,37 @@ export class PaymentAdminService {
       );
 
       if (payment) {
+        await this.releasePromoCodeRedemptionForExpiredPayment(payment);
         summaries.push(mapPaymentToSummary(payment));
       }
     }
 
     return summaries;
+  }
+
+  private async releasePromoCodeRedemptionForExpiredPayment(
+    payment: PaymentRecord,
+  ): Promise<void> {
+    try {
+      await this.promoCodeCustomerService.releasePromoCodeRedemptionForPayment({
+        payment_id: payment.id,
+        release_reason: 'unpaid_payment_expired',
+        metadata: {
+          source: 'payment_admin_expire_unpaid',
+          payment_id: payment.id,
+          payment_number: payment.payment_number,
+          target_type: payment.target_type,
+          booking_id: payment.booking_id,
+          private_booking_id: payment.private_booking_id,
+          booking_order_id: payment.booking_order_id,
+          status: payment.status,
+          expired_at: payment.expired_at,
+          expires_at: payment.expires_at,
+        },
+      });
+    } catch {
+      // Promo-code reservation cleanup must not hide the committed payment expiry state.
+    }
   }
 
   private async refundWalletPayment(input: {

@@ -60,8 +60,6 @@ import type {
   PaymentTransactionStatus,
   PaymentTransactionType,
   PaymentWebhookEvent,
-  PromoCodeStatus,
-  PromoDiscountType,
   WalletAccountStatus,
   WalletCreditEntryType,
   WalletDebitEntryType,
@@ -176,9 +174,26 @@ export interface PaymentPriceResolutionResult {
   readonly currency: PaymentCurrency;
   readonly promo_code_id: string | null;
   readonly promo_code: string | null;
+  readonly promo_code_redemption_id: string | null;
   readonly discount_metadata: DatabaseJsonObject;
 }
 
+export interface PaymentPromoCodeReservationSnapshot {
+  readonly promo_code_id: string;
+  readonly promo_code: string;
+  readonly promo_code_redemption_id: string;
+  readonly subtotal_amount: number;
+  readonly discount_amount: number;
+  readonly final_amount: number;
+  readonly currency: PaymentCurrency;
+  readonly expires_at: string | null;
+  readonly metadata: DatabaseJsonObject;
+}
+
+export interface PaymentPromoCodeCheckoutContext {
+  readonly promo_code: string | null;
+  readonly reservation: PaymentPromoCodeReservationSnapshot | null;
+}
 /* -------------------------------------------------------------------------- */
 /* Checkout contracts                                                          */
 /* -------------------------------------------------------------------------- */
@@ -212,6 +227,7 @@ export interface CreateCheckoutPaymentCommand {
   readonly gateway_payment_id: string | null;
   readonly gateway_invoice_id: string | null;
   readonly expires_at: string;
+  readonly promo_code_redemption_id: string | null;
   readonly metadata: DatabaseJsonObject;
 }
 
@@ -551,6 +567,7 @@ export interface PaymentDiscountSummary {
   readonly id: string;
   readonly payment_id: string;
   readonly promo_code_id: string | null;
+  readonly promo_code_redemption_id: string | null;
   readonly code: string;
   readonly discount_amount: number;
   readonly metadata: DatabaseJsonObject;
@@ -652,39 +669,20 @@ export interface AdminWalletAdjustmentInput {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Promo contracts                                                             */
+/* Promo-code payment integration contracts                                    */
 /* -------------------------------------------------------------------------- */
 
-export interface PromoCodeSummary {
-  readonly id: string;
-  readonly code: string;
-  readonly description: string | null;
-  readonly discount_type: PromoDiscountType;
-  readonly discount_value: number;
-  readonly max_discount_amount: number | null;
-  readonly starts_at: string | null;
-  readonly ends_at: string | null;
-  readonly max_redemptions: number | null;
-  readonly per_user_limit: number | null;
-  readonly redemption_count: number;
-  readonly status: PromoCodeStatus;
-  readonly created_at: string;
-  readonly updated_at: string;
+export interface PaymentPromoCodeSettlementInput {
+  readonly payment_id: string;
+  readonly promo_code_redemption_id?: string | null;
+  readonly metadata?: DatabaseJsonObject;
 }
 
-export interface PromoCodeValidationInput {
-  readonly user_id: string;
-  readonly code: string;
-  readonly amount: number;
-  readonly currency: PaymentCurrency;
-}
-
-export interface PromoCodeValidationResult {
-  readonly valid: boolean;
-  readonly promo_code: PromoCodeRecord | null;
-  readonly discount_amount: number;
-  readonly failure_reason: string | null;
-  readonly metadata: DatabaseJsonObject;
+export interface PaymentPromoCodeReleaseInput {
+  readonly payment_id: string;
+  readonly promo_code_redemption_id?: string | null;
+  readonly release_reason: string;
+  readonly metadata?: DatabaseJsonObject;
 }
 
 /* -------------------------------------------------------------------------- */

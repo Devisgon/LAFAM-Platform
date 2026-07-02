@@ -35,11 +35,12 @@
  * - Atomic database RPCs own final payment/wallet mutation.
  */
 
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 
 import { DatabaseModule } from '../../database/database.module';
 import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PromoCodesModule } from '../promo-codes/promo-codes.module';
 import { KnetPaymentProviderService } from './application/knet-payment-provider.service';
 import { MockPaymentProviderService } from './application/mock-payment-provider.service';
 import { PaymentAdminService } from './application/payment-admin.service';
@@ -62,7 +63,12 @@ import { PaymentRepository } from './repositories/payment.repository';
 import { WalletRepository } from './repositories/wallet.repository';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, NotificationsModule],
+  imports: [
+    DatabaseModule,
+    AuthModule,
+    NotificationsModule,
+    forwardRef(() => PromoCodesModule),
+  ],
   controllers: [
     PaymentCustomerController,
     PaymentPublicController,

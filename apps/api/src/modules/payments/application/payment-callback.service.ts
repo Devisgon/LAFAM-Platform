@@ -19,15 +19,18 @@
  * - This service does not calculate prices.
  * - This service does not debit/credit wallet directly.
  * - mark_payment_paid_atomic handles booking confirmation, booking-order confirmation, and wallet top-up credit.
+ * - Hosted payment success marks attached promo-code redemption as redeemed.
+ * - Hosted payment failure/cancellation releases attached promo-code redemption reservations.
  */
 
-import { Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 
 import { currentPaymentConfig } from '../../../common/config';
 import { AppError } from '../../../common/errors/app-error';
 import type { DatabaseJsonObject } from '../../../database/database.types';
 import { AuthUserRepository } from '../../auth/repositories/auth-user.repository';
 import type { AuthUserInternalProfile } from '../../auth/types/auth-user.types';
+import { PromoCodeCustomerService } from '../../promo-codes/application/promo-code-customer.service';
 import { EmailNotificationService } from '../../notifications/application/email-notification.service';
 import {
   EMAIL_NOTIFICATION_ENTITY_TYPE_PAYMENT,
@@ -481,6 +484,8 @@ export class PaymentCallbackService {
     private readonly paymentRepository: PaymentRepository,
     private readonly authUserRepository: AuthUserRepository,
     private readonly emailNotificationService: EmailNotificationService,
+    @Inject(forwardRef(() => PromoCodeCustomerService))
+    private readonly promoCodeCustomerService: PromoCodeCustomerService,
   ) {}
 
   async handleCallback(
@@ -774,6 +779,60 @@ export class PaymentCallbackService {
     });
   }
 
+  private async markPromoCodeRedemptionRedeemedForPayment(input: {
+    readonly payment: PaymentRecord;
+    readonly source: PaymentVerificationApplicationInput['source'];
+    readonly verification: PaymentGatewayVerifyPaymentResult;
+  }): Promise<void> {
+    try {
+      await this.promoCodeCustomerService.markPromoCodeRedemptionRedeemedForPayment(
+        {
+          payment_id: input.payment.id,
+          metadata: {
+            source: input.source,
+            payment_id: input.payment.id,
+            payment_number: input.payment.payment_number,
+            provider: input.verification.provider,
+            provider_reference: input.verification.provider_reference,
+            gateway_payment_id: input.verification.gateway_payment_id,
+            gateway_invoice_id: input.verification.gateway_invoice_id,
+            provider_status: input.verification.status,
+          },
+        },
+      );
+    } catch {
+      // Promo-code settlement cleanup must not hide verified payment truth.
+    }
+  }
+
+  private async releasePromoCodeRedemptionForPayment(input: {
+    readonly payment: PaymentRecord;
+    readonly source: PaymentVerificationApplicationInput['source'];
+    readonly verification: PaymentGatewayVerifyPaymentResult;
+    readonly releaseReason: string;
+  }): Promise<void> {
+    try {
+      await this.promoCodeCustomerService.releasePromoCodeRedemptionForPayment({
+        payment_id: input.payment.id,
+        release_reason: input.releaseReason,
+        metadata: {
+          source: input.source,
+          payment_id: input.payment.id,
+          payment_number: input.payment.payment_number,
+          provider: input.verification.provider,
+          provider_reference: input.verification.provider_reference,
+          gateway_payment_id: input.verification.gateway_payment_id,
+          gateway_invoice_id: input.verification.gateway_invoice_id,
+          provider_status: input.verification.status,
+          failure_code: input.verification.failure_code,
+          failure_message: input.verification.failure_message,
+        },
+      });
+    } catch {
+      // Promo-code reservation cleanup must not hide verified payment truth.
+    }
+  }
+
   private async handleIgnoredRefundWebhook(
     event: PaymentWebhookParsedEvent,
   ): Promise<PaymentWebhookHandlingResult> {
@@ -1034,6 +1093,12 @@ export class PaymentCallbackService {
         source: input.source,
       });
 
+      await this.markPromoCodeRedemptionRedeemedForPayment({
+        payment: updatedPayment,
+        source: input.source,
+        verification: input.verification,
+      });
+
       await this.notifyPaymentSuccessReceipt(updatedPayment);
 
       return updatedPayment;
@@ -1062,6 +1127,13 @@ export class PaymentCallbackService {
         next_status: PAYMENT_STATUS_FAILED,
         verification: input.verification,
         source: input.source,
+      });
+
+      await this.releasePromoCodeRedemptionForPayment({
+        payment: updatedPayment,
+        source: input.source,
+        verification: input.verification,
+        releaseReason: 'hosted_payment_failed',
       });
 
       await this.notifyPaymentFailed(updatedPayment);
@@ -1094,6 +1166,13 @@ export class PaymentCallbackService {
         next_status: PAYMENT_STATUS_CANCELLED,
         verification: input.verification,
         source: input.source,
+      });
+
+      await this.releasePromoCodeRedemptionForPayment({
+        payment: updatedPayment,
+        source: input.source,
+        verification: input.verification,
+        releaseReason: 'hosted_payment_cancelled',
       });
 
       await this.notifyPaymentCancelled(updatedPayment);
